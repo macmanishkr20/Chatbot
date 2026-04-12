@@ -1,3 +1,5 @@
+import json
+
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
 
@@ -160,7 +162,6 @@ async def generate_node(state: RAGState) -> dict:
 
     # Extract content — for tool calls, get the arguments JSON
     if response.tool_calls:
-        import json
         ai_content = json.dumps(response.tool_calls[0]["args"])
     else:
         ai_content = response.content or ""

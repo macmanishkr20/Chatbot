@@ -1,14 +1,15 @@
 """
-Embed node — generate embeddings for the rewritten query.
-Ported from service_logic.py (AzOpenAIService.embed + generate_embeddings).
+Embed node — generate vector embeddings for the rewritten query.
 """
+import asyncio
+
+from config import AZURE_OPENAI_EMBED_API_KEY, AZURE_OPENAI_EMBED_ENDPOINT
 from graph.state import RAGState
 from services.openai_client import (
     create_sync_client,
     get_embedding_model,
     retry_with_embedding_backoff,
 )
-from config import AZURE_OPENAI_EMBED_ENDPOINT, AZURE_OPENAI_EMBED_API_KEY
 
 
 @retry_with_embedding_backoff()
@@ -29,8 +30,6 @@ async def embed_node(state: RAGState) -> dict:
         azure_key=AZURE_OPENAI_EMBED_API_KEY,
         llm_model=embedding_model,
     )
-
-    import asyncio
 
     embedded_query = await asyncio.to_thread(
         _generate_embeddings, rewritten_query["query"], client, embedding_model=embedding_model

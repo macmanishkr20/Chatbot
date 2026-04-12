@@ -2,63 +2,68 @@
 MenaBot Application Entry Point.
 FastAPI with LangGraph RAG pipeline.
 
-Endpoints: /health, /rag, /feedback, /conversations
+Endpoints: /health, /chat, /feedback, /conversations
 """
 
+import json
+import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-import os
-from typing import Any, Dict
+from typing import Any
 
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import BackgroundTasks, FastAPI, Header, HTTPException
-from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
-import json
+from fastapi import FastAPI, Header, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
-from langfuse.langchain import CallbackHandler
-from graph.nodes.supervisor import get_graph
-from graph.state import RAGState
 
 load_dotenv()
 
-from models.chat_models import (
-    FeedbackRequest,
-    UserChatQuery,
-)
+from graph.nodes.supervisor import get_graph
+from graph.state import RAGState
+from models.chat_models import FeedbackRequest, UserChatQuery
 from services.sql_client import SQLChatClient
 
-# Employee data cache 
-employee_cache: Dict[str, Dict[str, Any]] = {}
+logger = logging.getLogger(__name__)
 
-initial_state_cache: Dict[str, RAGState] = {}
+# ── Optional Langfuse observability ──
+try:
+    from langfuse.langchain import CallbackHandler as LangfuseCallbackHandler
+    _langfuse_available = True
+except ImportError:
+    _langfuse_available = False
+    LangfuseCallbackHandler = None
 
-# Global graph instance
+callback_handler = (
+    LangfuseCallbackHandler()
+    if os.getenv("ENABLE_LANGFUSE") == "true" and _langfuse_available
+    else None
+)
+
+# Global compiled graph instance (initialised once at startup)
 graph = None
 
-if os.getenv("ENABLE_LANGFUSE") == "true":
-    callback_handler = CallbackHandler()
-else:
-    callback_handler = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
-    # Startup
-    await init_graph()
+    await _init_graph()
     yield
-    # Shutdown (if needed)
 
 
-# ------------------- FastAPI App -------------------
+# ── FastAPI App ──
 
 app = FastAPI(
     lifespan=lifespan,
     title="MenaBot RAG Service - M365 Agents SDK + LangGraph",
-    description="Backend service for MenaBot using LangGraph for RAG orchestration. Endpoints: /health, /chat, /feedback, /conversations.",
+    description=(
+        "Backend service for MenaBot using LangGraph for RAG orchestration. "
+        "Endpoints: /health, /chat, /feedback, /conversations."
+    ),
     version="1.0.0",
     docs_url="/docs",
-    redoc_url="/redoc"
+    redoc_url="/redoc",
 )
 
 app.add_middleware(
@@ -69,11 +74,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ------------------- Helper -------------------
 
-async def _build_initial_state(query: UserChatQuery) -> RAGState:
+# ── Helpers ──
+
+async def _build_initial_state(query: UserChatQuery) -> dict:
     """Convert a UserChatQuery into the initial RAGState dict."""
-    state = {
+    return {
         "messages": [HumanMessage(content=query.user_input)],
         "input_type": query.input_type.value,
         "user_input": query.user_input,
@@ -86,60 +92,28 @@ async def _build_initial_state(query: UserChatQuery) -> RAGState:
         "source_url": query.source_url,
         "start_date": query.start_date,
         "end_date": query.end_date,
-        "preferred_language": query.preferred_language
+        "preferred_language": query.preferred_language,
     }
-    return RAGState(state)
+
 
 def _has_gds_domain(user_id: str) -> bool:
     """Validate that the incoming user ID belongs to the GDS domain."""
     return user_id.strip().lower().endswith("@gds.ey.com")
 
-def _build_frontend_query_payload(state: RAGState) -> dict[str, Any]:
-    """Return only the fields frontend needs from RAGState."""
-    message_id = state.get("message_id")
-    chat_id = state.get("chat_id")
-    print(f"[LOG] message_id (from top-level state): {message_id}")
-    print(f"[LOG] chat_id (from top-level state): {chat_id}")
-    allowed_keys = (
-        "user_input",
-        "is_free_form",
-        "user_id",
-        "chat_id",
-        "message_id",
-        "ai_content",
-        "source_prompt",
-        "function",
-        "sub_function",
-        "source_url",
-    )
 
-    payload: dict[str, Any] = {}
-    for key in allowed_keys:
-        if key in state and state[key] is not None:
-            payload[key] = state[key]
+def sse_format(payload: dict) -> str:
+    return f"data: {json.dumps(payload)}\n\n"
 
-    print(f"[LOG] Payload for frontend: {payload}")
-    response = state.get("response") or {}
-    if payload.get("chat_id") is None and response.get("chat_id") is not None:
-        payload["chat_id"] = response.get("chat_id")
-    if payload.get("message_id") is None and response.get("message_id") is not None:
-        payload["message_id"] = response.get("message_id")
-    
-    print(f"[LOG] Final Payload for frontend after adding from response: {payload}")
-    return payload
 
-#---------------------Methods-------------------------
-
-async def init_graph():
-    """Initialize the graph on startup."""
+async def _init_graph():
+    """Initialise the compiled graph (idempotent)."""
     global graph
     if graph is None:
         graph = await get_graph()
     return graph
 
-def sse_format(payload):
-    return f"data: {json.dumps(payload)}\n\n"
-# ------------------- REST Endpoints -------------------
+
+# ── REST Endpoints ──
 
 @app.get("/health")
 async def health():
@@ -149,7 +123,6 @@ async def health():
 @app.post("/chat")
 async def chat_api(
     query: UserChatQuery,
-    background_tasks: BackgroundTasks,
     xcorrelationid: str = Header(None),
 ):
     """Main RAG endpoint — streams the graph response via SSE."""
@@ -157,19 +130,19 @@ async def chat_api(
         raise HTTPException(status_code=400, detail="UserId is not provided")
     if not _has_gds_domain(query.user_id):
         raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
-    
-    await init_graph()
+
+    await _init_graph()
 
     user_input = query.user_input.strip()
-    user_id = query.user_id.strip()
-    chat_id = query.chat_id or "new"
     chat_session_id = query.chat_session_id or "new"
     thread_id = f"{query.user_id}_{chat_session_id}"
-    config = query.config or {}
+
+    config: dict = query.config or {}
     config.setdefault("configurable", {})
     config["configurable"]["thread_id"] = thread_id
-    config['callbacks'] = [callback_handler] if callback_handler else []
+    config["callbacks"] = [callback_handler] if callback_handler else []
 
+    # Attempt to restore existing checkpoint state
     current_state = None
     try:
         checkpoint = await graph.checkpointer.aget(config)
@@ -178,13 +151,11 @@ async def chat_api(
     except Exception:
         pass
 
-    # Create or update state
+    # Build or update state for this turn
     if current_state and current_state.get("messages"):
-        from langchain_core.messages import HumanMessage
         if len(current_state["messages"]) > 5:
             current_state["messages"] = current_state["messages"][-5:]
         current_state["messages"].append(HumanMessage(content=user_input))
-        # Update input fields from the new request
         current_state["user_input"] = query.user_input
         current_state["function"] = query.function
         current_state["sub_function"] = query.sub_function
@@ -203,29 +174,20 @@ async def chat_api(
     else:
         state = await _build_initial_state(query)
 
-    print("***existing_messages***",state["messages"])
-    # Build the LangGraph thread_id for checkpoint persistence.
-    # Format: "{user_id}_{chat_id}" — each user+conversation gets its own thread.
-    async def stream_generator():
-        buffer = ""
-        final_result: dict[str, Any] = {}
-        streamed_content = True
+    logger.debug("Existing messages: %s", state.get("messages"))
 
+    async def stream_generator():
         async for chunk in graph.astream(
             state,
             config=config,
             stream_mode="messages",
-            subgraphs=True
+            subgraphs=True,
         ):
             namespace, (chunk_msg, metadata) = chunk
             node = metadata.get("langgraph_node")
-            print(f"Streaming chunk from node: {node} with content: {chunk_msg.content}")
+            logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
             if chunk_msg.content:
-                if '{"next":"RESPOND","response":"' in buffer:
-                    cleaned_chunk = chunk_msg.content.replace('":"',"").replace('"}',"").replace('"',"")
-                    yield sse_format({"content": cleaned_chunk, "node": node})
-                else:
-                    yield sse_format({"content": chunk_msg.content, "node": node})
+                yield sse_format({"content": chunk_msg.content, "node": node})
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
@@ -242,8 +204,7 @@ async def save_feedback(payload: FeedbackRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ------------------- Chat History Endpoints -------------------
-
+# ── Chat History Endpoints ──
 
 @app.get("/conversations/{user_id}")
 async def get_conversations(user_id: str):
@@ -261,7 +222,6 @@ async def get_conversations(user_id: str):
         await scc.connect()
         conversations = await scc.get_conversations_by_user(user_id)
 
-        # Serialise datetimes to ISO strings for JSON
         for conv in conversations:
             for key in ("CreatedAt", "ModifiedAt"):
                 if isinstance(conv.get(key), datetime):
@@ -289,17 +249,14 @@ async def get_conversation_messages(user_id: str, chat_id: int):
         messages = await scc.get_messages_by_conversation(chat_id, user_id)
 
         for msg in messages:
-            for key in ("CreatedAt",):
-                if isinstance(msg.get(key), datetime):
-                    msg[key] = msg[key].isoformat()
+            if isinstance(msg.get("CreatedAt"), datetime):
+                msg["CreatedAt"] = msg["CreatedAt"].isoformat()
 
         return {"data": messages}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
-

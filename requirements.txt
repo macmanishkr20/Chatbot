@@ -23,29 +23,20 @@ openai>=1.0.0
 azure-identity
 azure-search-documents>=11.4.0
 azure-core
+azure-keyvault-secrets
 tiktoken
 
 # ── Database ──
 pyodbc
+sqlalchemy
+aioodbc
+aiosqlite
 
 # ── Utilities ──
 tenacity
 aiohttp
 
 # ── Optional: Observability ──
+# langfuse
 # microsoft-agents-a365-observability-extensions-langchain
 # azure-monitor-opentelemetry
-
-
-#
-fastapi
-uvicorn[standard]
-python-dotenv
-openai
-tenacity
-azure-search-documents
-azure-core
-pyodbc
-azure-identity
-azure-keyvault-secrets
-aiohttp

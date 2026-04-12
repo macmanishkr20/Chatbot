@@ -1,4 +1,4 @@
-﻿"""
+"""
 Domain models for MenaBot chat system."Cleaned-up Pydantic models with all required fields.
 """
 import enum

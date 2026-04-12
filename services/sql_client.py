@@ -1,6 +1,5 @@
 """
 SQL Server persistence layer for conversations and messages.
-Ported from infrastructure/repositories/chats.py + sqldb_service.py.
 """
 import asyncio
 import json
@@ -13,10 +12,10 @@ import pyodbc
 from config import AZURE_SQL_CHECKPOINT_TABLE, MSSQL_CONNECTION_STRING
 from models.chat_models import (
     ApplicationChatQuery,
-    ConversationType,
     ConversationChatMessage,
-    InputType,
+    ConversationType,
     FeedbackRequest,
+    InputType,
 )
 
 USER_ACTOR = 0
@@ -38,34 +37,8 @@ class SQLChatClient:
         self.checkpoint_table = AZURE_SQL_CHECKPOINT_TABLE
 
     def get_connection_string(self) -> str:
-        """Get the Azure SQL connection string."""
-        if self.connection_string:
-            return self.connection_string
-        
-        if not self.server or not self.database:
-            raise ValueError("Azure SQL server and database must be configured")
-        
-        if self.use_azure_auth:
-            return (
-                f"Driver={{{self.driver}}};"
-                f"Server={self.server};"
-                f"Database={self.database};"
-                f"Trusted_Connection=yes;"
-                f"Encrypt=yes;"
-                f"TrustServerCertificate=no;"
-            )
-        else:
-            if not self.username or not self.password:
-                raise ValueError("Username and password required when not using Azure auth")
-            return (
-                f"Driver={{{self.driver}}};"
-                f"Server={self.server};"
-                f"Database={self.database};"
-                f"UID={self.username};"
-                f"PWD={self.password};"
-                f"Encrypt=yes;"
-                f"TrustServerCertificate=no;"
-            )
+        """Return the configured Azure SQL connection string."""
+        return self.connection_string
 
     def _get_connection(self) -> pyodbc.Connection:
         return pyodbc.connect(self.connection_string)
@@ -104,32 +77,30 @@ class SQLChatClient:
                     """
                     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ChatMessages' AND xtype='U')
                     CREATE TABLE ChatMessages (
-                        Id               INT IDENTITY(1,1) PRIMARY KEY,
-                        ConversationSessionId   INT NOT NULL,
-                        MessageId        NVARCHAR(256) NULL,
-                        UserId           NVARCHAR(256) NULL,
-                        UserPrompt          NVARCHAR(MAX) NULL,
-                        SourcePrompt        NVARCHAR(MAX) NULL,
-                        ConversationType NVARCHAR(50) NULL,
-                        AiContentFreeForm NVARCHAR(MAX) NULL,
-                        SummarizedContent NVARCHAR(MAX) NULL,
-                        IsActive         BIT NOT NULL DEFAULT 1,
-                        IsDeleted        BIT NOT NULL DEFAULT 0,
-                        CreatedAt        DATETIME2 NOT NULL,
-                        CreatedBy        NVARCHAR(256) NULL,
-                        ModifiedAt       DATETIME2 NOT NULL,
-                        ModifiedBy       NVARCHAR(256) NULL
+                        Id                    INT IDENTITY(1,1) PRIMARY KEY,
+                        ConversationSessionId INT NOT NULL,
+                        MessageId             NVARCHAR(256) NULL,
+                        UserId                NVARCHAR(256) NULL,
+                        UserPrompt            NVARCHAR(MAX) NULL,
+                        SourcePrompt          NVARCHAR(MAX) NULL,
+                        ConversationType      NVARCHAR(50) NULL,
+                        AiContentFreeForm     NVARCHAR(MAX) NULL,
+                        SummarizedContent     NVARCHAR(MAX) NULL,
+                        IsActive              BIT NOT NULL DEFAULT 1,
+                        IsDeleted             BIT NOT NULL DEFAULT 0,
+                        CreatedAt             DATETIME2 NOT NULL,
+                        CreatedBy             NVARCHAR(256) NULL,
+                        ModifiedAt            DATETIME2 NOT NULL,
+                        ModifiedBy            NVARCHAR(256) NULL
                     )
                     """
                 )
-                
                 cursor.execute(
                     """
                     IF COL_LENGTH('ChatMessages', 'SourcePrompt') IS NULL
                         ALTER TABLE ChatMessages ADD SourcePrompt NVARCHAR(MAX) NULL
                     """
                 )
-
                 conn.commit()
             finally:
                 cursor.close()
@@ -137,7 +108,7 @@ class SQLChatClient:
 
         await asyncio.to_thread(_run)
 
-    # ───────────────── Conversation CRUD ─────────────────
+    # ── Conversation CRUD ──
 
     async def create_conversation(self, query: ApplicationChatQuery) -> dict:
         def _run():
@@ -156,7 +127,7 @@ class SQLChatClient:
                     query.user_id,
                     query.user_input,
                     0,
-                    str(query.conversation_type.value),  #it should be like "lms", "claims"
+                    str(query.conversation_type.value),
                     now,
                     query.user_id,
                     now,
@@ -198,13 +169,11 @@ class SQLChatClient:
         return await asyncio.to_thread(_run)
 
     async def get_or_create_chat(self, query: ApplicationChatQuery) -> Tuple[bool, dict]:
-        created = False
         if query.chat_id:
             def _run():
                 conn = self._get_connection()
                 cursor = conn.cursor()
                 try:
-                    #print(f"[DEBUG]----{query.chat_id}, {query.user_id}")
                     cursor.execute(
                         "SELECT * FROM Conversations WHERE Id = ? AND UserId = ? AND IsDeleted = 0",
                         query.chat_id,
@@ -220,12 +189,12 @@ class SQLChatClient:
             conversation = await asyncio.to_thread(_run)
             if not conversation:
                 raise ValueError("Conversation not found")
-            return created, conversation
+            return False, conversation
         else:
             conversation = await self.create_conversation(query)
             return True, conversation
 
-    # ───────────────── Message CRUD ─────────────────
+    # ── Message CRUD ──
 
     async def message_create(self, query: ApplicationChatQuery) -> ConversationChatMessage:
         created_chat, chat = await self.get_or_create_chat(query)
@@ -240,9 +209,9 @@ class SQLChatClient:
             try:
                 cursor.execute(
                     """
-
                     INSERT INTO ChatMessages
-                        (ConversationSessionId, MessageId, UserId, UserPrompt, SourcePrompt, ConversationType, AiContentFreeForm, SummarizedContent,
+                        (ConversationSessionId, MessageId, UserId, UserPrompt, SourcePrompt,
+                         ConversationType, AiContentFreeForm, SummarizedContent,
                          IsActive, IsDeleted, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy)
                     OUTPUT INSERTED.*
                     VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, 1, 0, ?, ?, ?, ?)
@@ -251,7 +220,7 @@ class SQLChatClient:
                     message_id,
                     query.user_id,
                     query.user_input,
-                    str(query.conversation_type.value),  #it should be like "lms", "claims"
+                    str(query.conversation_type.value),
                     now,
                     query.user_id,
                     now,
@@ -287,7 +256,6 @@ class SQLChatClient:
                         query.chat_id,
                         conv_type,
                     )
-                
                 else:
                     raise NotImplementedError(f"Input type {query.input_type} not implemented")
 
@@ -303,40 +271,8 @@ class SQLChatClient:
     async def message_list_update(
         self, query: ApplicationChatQuery, history: List[ConversationChatMessage]
     ) -> Tuple[ConversationChatMessage, List[ConversationChatMessage]]:
-        ####
-        # if query.message_id and query.input_type in (InputType.EDIT, InputType.REGENERATE):
-        #     def _delete():
-        #         conn = self._get_connection()
-        #         cursor = conn.cursor()
-        #         try:
-        #             cursor.execute(
-        #                 """
-        #                 UPDATE ChatMessages
-        #                 SET IsDeleted = 1
-        #                 WHERE ConversationSessionId = ? AND IsDeleted = 0
-        #                   AND CreatedAt >= (
-        #                       SELECT CreatedAt FROM ChatMessages WHERE Id = ? AND IsDeleted = 0
-        #                   )
-        #                 """,
-        #                 query.chat_id,
-        #                 query.message_id,
-        #             )
-        #             conn.commit()
-        #         finally:
-        #             cursor.close()
-        #             conn.close()
-
-        #     await asyncio.to_thread(_delete)
-
-
         new_msg = await self.message_create(query)
         return new_msg, [new_msg] + history
-    
-    async def message_list_empty_response(self, query: ApplicationChatQuery) -> List[ConversationChatMessage]:
-        empty_message = ConversationChatMessage(**query.dict())
-        empty_message.timestamp = int(datetime.now(tz=timezone.utc).timestamp())
-        empty_message.id = str(uuid.uuid4())
-        return [empty_message]
 
     async def save_ai_content(self, app_query: ApplicationChatQuery):
         def _run():
@@ -377,7 +313,7 @@ class SQLChatClient:
                     """
                     UPDATE ChatMessages
                     SET AiContentFreeForm = ?,
-                        SourcePrompt     = ?
+                        SourcePrompt      = ?
                     WHERE Id = ?
                     """,
                     json.dumps(app_query.ai_content_free_form),
@@ -393,7 +329,7 @@ class SQLChatClient:
 
         await asyncio.to_thread(_run)
 
-    # ───────────────── Simple insert (for /conversations/ingest) ─────────────
+    # ── History APIs ──
 
     async def get_conversations_by_user(self, user_id: str) -> list[dict]:
         """Return all active conversations for a given user, newest first."""
@@ -476,7 +412,6 @@ class SQLChatClient:
                     )
                     """
                 )
-
                 cursor.execute(
                     """
                     INSERT INTO dbo.MessageFeedback
@@ -507,8 +442,9 @@ class SQLChatClient:
 
         await asyncio.to_thread(_run)
 
+
 def _row_to_message_dict(row: dict, query=None) -> dict:
-    """Map a SQL row to the fields expected by EventChatMessage."""
+    """Map a SQL row to the fields expected by ConversationChatMessage."""
     return {
         "id": str(row.get("Id") or ""),
         "chat_id": str(row.get("ConversationSessionId", "")),
@@ -522,55 +458,4 @@ def _row_to_message_dict(row: dict, query=None) -> dict:
         "source_prompt": row.get("SourcePrompt") or "",
         "ai_content_free_form": row.get("AiContentFreeForm") or "",
         "message_id": row.get("MessageId") or "",
-}
-
-
-def _map_event_to_db(event) -> dict:
-    if isinstance(event, dict):
-        return event
-    return {
-        "id": event.id,
-        "eventType": event.eventType,
-        "event_": event.event_,
-        "eventTitle": event.eventTitle,
-        "sectors": event.sectors,
-        "firstAppear": event.firstAppear,
-        "lastAppear": event.lastAppear,
-        "membersVolume": event.membersVolume,
-        "membersfirstApperList": event.membersfirstApperList,
-        "newsSourceList": event.newsSourceList,
-        "secondaryTriggers": event.secondaryTriggers,
-        "alertId": event.alertId,
-        "datasource": event.datasource,
-        "score": event.score,
-        "event_state": event.event_state.value if hasattr(event.event_state, "value") else event.event_state,
-        "sub_function": event.sub_function,
-        "source_url": event.source_url,
     }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
