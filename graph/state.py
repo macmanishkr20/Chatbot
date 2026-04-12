@@ -1,0 +1,60 @@
+"""
+LangGraph state definition.
+This TypedDict flows through every node in the RAG StateGraph.
+
+Uses LangGraph's ``messages`` pattern with ``add_messages`` reducer
+so that conversation history is managed automatically by the
+checkpoint system.
+"""
+from typing import Annotated, TypedDict
+from langgraph.graph.message import add_messages, BaseMessage
+
+
+class RAGState(TypedDict, total=False):
+    # ── LangGraph managed conversation messages ──
+    # Automatically accumulated by add_messages reducer across checkpoints.
+    messages: Annotated[list[BaseMessage], add_messages]
+
+    # ── Conversation summary (for token-efficient memory) ──
+    summary: str
+
+    # ── Input (from client request) ──
+    input_type: str
+    user_input: str
+    is_free_form: bool
+    user_id: str
+    chat_id: str | None
+    message_id: str | None
+    function: list[str]
+    sub_function: list[str]
+    source_url: list[str]
+    start_date: str
+    end_date: str
+    preferred_language: str | None
+
+    # ── Validation ──
+    is_greeting: bool
+    validation_error: str | None
+
+    # ── Query processing ──
+    rewritten_query: dict | None   # {"query": str, "filter": str | None}
+    embedded_query: list | None
+    functions_found: list[str]
+    is_ambiguous: bool
+    pending_ambiguous_query: dict | None  # Original query context saved during ambiguity
+
+    # ── Search results ──
+    events: list
+
+    # ── Generation ──
+    ai_content: str | None
+    prompt_used: str | None
+
+    # ── Long-term memory (from LangGraph Store — cross-session) ──
+    user_memories: list[str]
+    current_context: str  # Track conversation context (applying, checking, asking)
+    next: str
+
+    # ── Output ──
+    response: dict | None
+    error_info: dict | None

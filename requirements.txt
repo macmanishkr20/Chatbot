@@ -1,0 +1,51 @@
+# MenaBot — M365 Agents SDK + LangGraph RAG Pipeline
+# Dependencies
+
+# ── Core Framework ──
+fastapi
+uvicorn[standard]
+python-dotenv
+pydantic>=2.0
+
+# ── LangGraph / LangChain ──
+langgraph>=0.2.28
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+langgraph-checkpoint>=2.0.0
+
+# ── M365 Agents SDK ──
+# Note: microsoft-agents-core, microsoft-agents-builder, microsoft-agents-authorization,
+# and microsoft-agents-connector do not exist on PyPI. The hosting package includes all needed modules.
+microsoft-agents-hosting-aiohttp>=0.8.0
+
+# ── Azure AI / OpenAI ──
+openai>=1.0.0
+azure-identity
+azure-search-documents>=11.4.0
+azure-core
+tiktoken
+
+# ── Database ──
+pyodbc
+
+# ── Utilities ──
+tenacity
+aiohttp
+
+# ── Optional: Observability ──
+# microsoft-agents-a365-observability-extensions-langchain
+# azure-monitor-opentelemetry
+
+
+#
+fastapi
+uvicorn[standard]
+python-dotenv
+openai
+tenacity
+azure-search-documents
+azure-core
+pyodbc
+azure-identity
+azure-keyvault-secrets
+aiohttp
