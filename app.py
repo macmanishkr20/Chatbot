@@ -50,10 +50,13 @@ callback_handler = (
 graph = None
 
 # ── Nodes whose token output is meaningful prose for the end user ──
-# Supervisor emits prose only when it responds directly (RESPOND path).
-# All other nodes (rewrite, embed, search, persist, save_memory) produce
-# internal JSON / tool calls — their tokens must never reach the UI.
-_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor"})
+# - generate    : RAG answer tokens (primary streaming output)
+# - Supervisor  : direct RESPOND prose (greetings, clarifications, etc.)
+# - search      : ambiguity message — when multiple functions are found and
+#                 the score ratio is below the threshold, search returns an
+#                 AIMessage asking the user to pick a specific function.
+#                 That message must reach the UI exactly like any other reply.
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor", "search"})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
