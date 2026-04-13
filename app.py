@@ -236,7 +236,7 @@ async def chat_api(
             stream_mode=["messages", "updates"],
             subgraphs=True,
         ):
-            namespace, (mode, data) = chunk
+            namespace, mode, data = chunk
 
             if mode == "updates":
                 # data = {"node_name": {...}} — fires when the node completes.
