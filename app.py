@@ -49,6 +49,15 @@ callback_handler = (
 # Global compiled graph instance (initialised once at startup)
 graph = None
 
+# ── Nodes whose token output is meaningful prose for the end user ──
+# - generate    : RAG answer tokens (primary streaming output)
+# - Supervisor  : direct RESPOND prose (greetings, clarifications, etc.)
+# - search      : ambiguity message — when multiple functions are found and
+#                 the score ratio is below the threshold, search returns an
+#                 AIMessage asking the user to pick a specific function.
+#                 That message must reach the UI exactly like any other reply.
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor", "search"})
+
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
 _NODE_THOUGHT: dict[str, str] = {
@@ -195,6 +204,7 @@ async def chat_api(
         current_state["ai_content"] = None
         current_state["prompt_used"] = None
         current_state["response"] = None
+        current_state["suggestive_actions"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -223,7 +233,10 @@ async def chat_api(
                 yield sse_format({"type": "thought", "node": node, "message": thought_msg})
 
             # ── Stream LLM tokens as "content" events ──
-            if chunk_msg.content:
+            # Only forward tokens from nodes that produce user-facing prose.
+            # Supervisor produces structured JSON when routing — skip those
+            # fragments; only its direct RESPOND prose should reach the UI.
+            if chunk_msg.content and node in _STREAMABLE_NODES:
                 yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
 
         # ── Final event: fetch persisted chat_id / message_id from checkpoint ──
@@ -231,11 +244,18 @@ async def chat_api(
             final_checkpoint = await graph.checkpointer.aget(config)
             if final_checkpoint:
                 final_state = final_checkpoint.get("channel_values", {})
+                # Serialise suggestive_actions — Pydantic models → plain dicts
+                raw_actions = final_state.get("suggestive_actions") or []
+                actions = [
+                    a.model_dump() if hasattr(a, "model_dump") else dict(a)
+                    for a in raw_actions
+                ]
                 yield sse_format({
                     "type": "final",
                     "chat_id": final_state.get("chat_id"),
                     "message_id": final_state.get("message_id"),
                     "ai_content": final_state.get("ai_content", []),
+                    "suggestive_actions": actions,
                 })
         except Exception:
             pass

@@ -28,6 +28,8 @@ from config import (
 )
 from graph.rag_graph import build_rag_graph
 from graph.state import RAGState
+from graph.nodes.persist_node import persist_node
+from graph.nodes.memory_node import save_memory_node
 from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
 from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
 
@@ -116,6 +118,10 @@ class SupervisorGraph:
         if result.next == "RESPOND" and result.response:
             return {
                 "messages": [AIMessage(content=result.response)],
+                # Set ai_content + is_free_form so persist_node can save the
+                # greeting/direct reply to SQL (chat history).
+                "ai_content": result.response,
+                "is_free_form": True,
                 "suggestive_actions": result.suggestive_actions,
                 "next": result.next,
             }
@@ -131,18 +137,35 @@ class SupervisorGraph:
         return state["next"]
 
     def _build_workflow(self) -> StateGraph:
-        """Build and configure the supervisor workflow graph."""
+        """Build and configure the supervisor workflow graph.
+
+        RESPOND path: Supervisor → persist → save_memory → END
+          Ensures greetings and direct replies are saved to SQL so they
+          appear in the user's chat history (/conversations endpoint).
+
+        rag_graph path: Supervisor → rag_graph → END
+          rag_graph internally runs: load_memory → rewrite → embed →
+          search → generate → persist → save_memory → END
+        """
         rag_graph = build_rag_graph(memory_store=self._memory_store)
         workflow = StateGraph(RAGState)
         workflow.add_node("rag_graph", rag_graph)
         workflow.add_node("Supervisor", self.supervisor_agent)
 
+        # persist + save_memory are shared by both paths so greetings and
+        # direct RESPOND replies are stored in SQL chat history.
+        workflow.add_node("persist", persist_node)
+        workflow.add_node("save_memory", save_memory_node)
+
+        # RESPOND routes to persist (not END) so the reply is persisted.
         conditional_map = {member: member for member in MEMBERS}
-        conditional_map["RESPOND"] = END
+        conditional_map["RESPOND"] = "persist"
 
         workflow.add_conditional_edges("Supervisor", self._get_next, conditional_map)
         workflow.add_edge(START, "Supervisor")
         workflow.add_edge("rag_graph", END)
+        workflow.add_edge("persist", "save_memory")
+        workflow.add_edge("save_memory", END)
 
         return workflow
 
