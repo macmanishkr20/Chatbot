@@ -143,5 +143,5 @@ Example 7:
 User: "What Finance policies changed last month?"
 Decision: rag_graph
 Reasoning: Time-sensitive policy query — requires knowledge base search.
-Note: resolve "last month" using today's date ({current_date}) before routing.
+Note: resolve "last month" using today's date ({{current_date}}) before routing.
 """
