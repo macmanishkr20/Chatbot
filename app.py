@@ -212,44 +212,79 @@ async def chat_api(
     logger.debug("Existing messages: %s", state.get("messages"))
 
     async def stream_generator():
-        # Track which nodes have already emitted their thought event so we
-        # only emit once per node per request (not once per token).
+        # Track which nodes have already emitted a thought event so we fire
+        # exactly once per node per request regardless of how many chunks it
+        # produces.
         seen_nodes: set[str] = set()
 
+        # ── stream_mode=["messages","updates"] explained ──
+        # "messages" : fires one chunk per LLM token — used for content streaming.
+        #              Only LLM-backed nodes (Supervisor, generate) produce these.
+        # "updates"  : fires once per node when it COMPLETES — fires for ALL
+        #              nodes including non-LLM ones (load_memory, rewrite, embed,
+        #              search, persist, save_memory). Used to emit thought events
+        #              for nodes that never produce "messages" chunks.
+        #
+        # With subgraphs=True the chunk format is:
+        #   (namespace, (mode, data))
+        # where:
+        #   mode="messages" → data = (AIMessageChunk, metadata_dict)
+        #   mode="updates"  → data = {"node_name": state_update_dict}
         async for chunk in graph.astream(
             state,
             config=config,
-            stream_mode="messages",
+            stream_mode=["messages", "updates"],
             subgraphs=True,
         ):
-            namespace, (chunk_msg, metadata) = chunk
-            node = metadata.get("langgraph_node")
-            logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
+            namespace, mode, data = chunk
 
-            # ── Chain-of-thought: emit one "thought" event per node ──
-            if node and node not in seen_nodes:
-                seen_nodes.add(node)
-                thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
-                yield sse_format({"type": "thought", "node": node, "message": thought_msg})
+            if mode == "updates":
+                # data = {"node_name": {...}} — fires when the node completes.
+                # Emit thought for any node we haven't seen yet (covers all
+                # non-LLM nodes that never produce "messages" chunks).
+                for node in data.keys():
+                    if node and node not in seen_nodes:
+                        seen_nodes.add(node)
+                        thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
+                        logger.debug("thought (updates) node=%s", node)
+                        yield sse_format({"type": "thought", "node": node, "message": thought_msg})
 
-            # ── Stream LLM tokens as "content" events ──
-            # Only forward tokens from nodes that produce user-facing prose.
-            # Supervisor produces structured JSON when routing — skip those
-            # fragments; only its direct RESPOND prose should reach the UI.
-            if chunk_msg.content and node in _STREAMABLE_NODES:
-                yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+            elif mode == "messages":
+                chunk_msg, metadata = data
+                node = metadata.get("langgraph_node")
+                logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
 
-        # ── Final event: fetch persisted chat_id / message_id from checkpoint ──
+                # Emit thought on the FIRST token of an LLM node — this fires
+                # before "updates" so the spinner appears while the node streams.
+                if node and node not in seen_nodes:
+                    seen_nodes.add(node)
+                    thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
+                    yield sse_format({"type": "thought", "node": node, "message": thought_msg})
+
+                # ── Stream LLM tokens as "content" events ──
+                # Only forward tokens from nodes that produce user-facing prose.
+                # Supervisor produces structured JSON when routing — skip those
+                # fragments; only its direct RESPOND prose should reach the UI.
+                if chunk_msg.content and node in _STREAMABLE_NODES:
+                    yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+
+        # ── Final event: emit chat_id / message_id / suggestive_actions ──
+        # Use graph.aget_state() — the high-level LangGraph API — instead of
+        # the low-level checkpointer.aget() which may not exist on custom savers.
         try:
-            final_checkpoint = await graph.checkpointer.aget(config)
-            if final_checkpoint:
-                final_state = final_checkpoint.get("channel_values", {})
-                # Serialise suggestive_actions — Pydantic models → plain dicts
+            state_snapshot = await graph.aget_state(config)
+            if state_snapshot:
+                final_state = state_snapshot.values
+                # Serialise suggestive_actions — may be Pydantic models or plain dicts
                 raw_actions = final_state.get("suggestive_actions") or []
-                actions = [
-                    a.model_dump() if hasattr(a, "model_dump") else dict(a)
-                    for a in raw_actions
-                ]
+                actions = []
+                for a in raw_actions:
+                    if hasattr(a, "model_dump"):
+                        actions.append(a.model_dump())
+                    elif isinstance(a, dict):
+                        actions.append(a)
+                    else:
+                        actions.append({"short_title": str(a)})
                 yield sse_format({
                     "type": "final",
                     "chat_id": final_state.get("chat_id"),
@@ -257,8 +292,8 @@ async def chat_api(
                     "ai_content": final_state.get("ai_content", []),
                     "suggestive_actions": actions,
                 })
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
