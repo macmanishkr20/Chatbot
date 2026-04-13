@@ -30,7 +30,11 @@ AZURE_SEARCH_VECTOR_FIELD = os.getenv("AZURE_SEARCH_VECTOR_FIELD", "content_vect
 AZURE_SEARCH_TOP_K = int(os.getenv("AZURE_SEARCH_TOP_K", "3"))
 AZURE_SEARCH_VECTOR_COLUMNS = os.getenv("AZURE_SEARCH_VECTOR_COLUMNS", "content_vector")
 AZURE_SEARCH_CONTENT_COLUMNS = os.getenv("AZURE_SEARCH_CONTENT_COLUMNS", "content")
-AZURE_SEARCH_SCORE_THRESHOLD = float(os.getenv("AZURE_SEARCH_SCORE_THRESHOLD", "0.5"))
+# Score threshold for search results.
+# When semantic reranker is enabled, scores are on a 0–4 scale; 1.5 is a
+# reasonable floor for "clearly relevant" results.
+# When semantic reranker is disabled, scores are cosine/BM25 (0–1); 0.5 works.
+AZURE_SEARCH_SCORE_THRESHOLD = float(os.getenv("AZURE_SEARCH_SCORE_THRESHOLD", "1.5"))
 AZURE_SEARCH_API_VERSION = os.getenv("AZURE_SEARCH_API_VERSION", "2023-11-01")
 
 SELECT_FIELDS = os.getenv(
