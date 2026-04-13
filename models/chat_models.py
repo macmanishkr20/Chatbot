@@ -57,6 +57,7 @@ class UserChatQuery(BaseModel):
     source_url: List[str] = []
     start_date: str = ""
     end_date: str = ""
+    current_date: str = ""
     preferred_language: Optional[str] = None
 
 class BusinessExceptionResponse(BaseModel):
