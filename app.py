@@ -49,6 +49,12 @@ callback_handler = (
 # Global compiled graph instance (initialised once at startup)
 graph = None
 
+# ── Nodes whose token output is meaningful prose for the end user ──
+# Supervisor emits prose only when it responds directly (RESPOND path).
+# All other nodes (rewrite, embed, search, persist, save_memory) produce
+# internal JSON / tool calls — their tokens must never reach the UI.
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor"})
+
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
 _NODE_THOUGHT: dict[str, str] = {
@@ -223,7 +229,10 @@ async def chat_api(
                 yield sse_format({"type": "thought", "node": node, "message": thought_msg})
 
             # ── Stream LLM tokens as "content" events ──
-            if chunk_msg.content:
+            # Only forward tokens from nodes that produce user-facing prose.
+            # Supervisor produces structured JSON when routing — skip those
+            # fragments; only its direct RESPOND prose should reach the UI.
+            if chunk_msg.content and node in _STREAMABLE_NODES:
                 yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
 
         # ── Final event: fetch persisted chat_id / message_id from checkpoint ──
