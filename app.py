@@ -3,6 +3,11 @@ MenaBot Application Entry Point.
 FastAPI with LangGraph RAG pipeline.
 
 Endpoints: /health, /chat, /feedback, /conversations
+
+SSE event types emitted by /chat:
+  {"type": "thought",  "node": "<node>",  "message": "<step description>"}
+  {"type": "content",  "node": "<node>",  "content": "<token>"}
+  {"type": "final",    "chat_id": ...,    "message_id": ..., "ai_content": [...]}
 """
 
 import json
@@ -43,6 +48,19 @@ callback_handler = (
 
 # Global compiled graph instance (initialised once at startup)
 graph = None
+
+# ── Chain-of-thought step labels shown in the UI ──
+# Emitted as {"type": "thought"} SSE events when each node first starts.
+_NODE_THOUGHT: dict[str, str] = {
+    "Supervisor":   "Analysing your request...",
+    "load_memory":  "Loading your conversation history...",
+    "rewrite":      "Optimising your query for search...",
+    "embed":        "Generating semantic embeddings...",
+    "search":       "Searching the knowledge base...",
+    "generate":     "Composing your answer from retrieved documents...",
+    "persist":      "Saving conversation to history...",
+    "save_memory":  "Updating long-term memory...",
+}
 
 
 @asynccontextmanager
@@ -125,7 +143,14 @@ async def chat_api(
     query: UserChatQuery,
     xcorrelationid: str = Header(None),
 ):
-    """Main RAG endpoint — streams the graph response via SSE."""
+    """Main RAG endpoint — streams graph execution via SSE.
+
+    Three event types are emitted in order:
+      1. thought  — one per pipeline node; shows the UI what step is running.
+      2. content  — token-by-token LLM output from the active node.
+      3. final    — sent once after the stream ends; carries chat_id,
+                    message_id, and the consolidated ai_content payload.
+    """
     if not query.user_id:
         raise HTTPException(status_code=400, detail="UserId is not provided")
     if not _has_gds_domain(query.user_id):
@@ -177,6 +202,10 @@ async def chat_api(
     logger.debug("Existing messages: %s", state.get("messages"))
 
     async def stream_generator():
+        # Track which nodes have already emitted their thought event so we
+        # only emit once per node per request (not once per token).
+        seen_nodes: set[str] = set()
+
         async for chunk in graph.astream(
             state,
             config=config,
@@ -186,59 +215,30 @@ async def chat_api(
             namespace, (chunk_msg, metadata) = chunk
             node = metadata.get("langgraph_node")
             logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
+
+            # ── Chain-of-thought: emit one "thought" event per node ──
+            if node and node not in seen_nodes:
+                seen_nodes.add(node)
+                thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
+                yield sse_format({"type": "thought", "node": node, "message": thought_msg})
+
+            # ── Stream LLM tokens as "content" events ──
             if chunk_msg.content:
-                yield sse_format({"content": chunk_msg.content, "node": node})
+                yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
 
-            try:
-                checkpoint = await graph.checkpointer.aget(config)
-                if checkpoint:
-                    final_state = checkpoint.get("channel_values", {})
-                    yield sse_format({
-                        "type": "final", 
-                        "chat_id": final_state.get("chat_id"),
-                        "message_id": final_state.get("message_id"),
-                        "ai_content": final_state.get("ai_content", [])
-                        })
-            except Exception:
-                pass
-
-    # Build or update state for this turn
-    if current_state and current_state.get("messages"):
-        if len(current_state["messages"]) > 5:
-            current_state["messages"] = current_state["messages"][-5:]
-        current_state["messages"].append(HumanMessage(content=user_input))
-        current_state["user_input"] = query.user_input
-        current_state["function"] = query.function
-        current_state["sub_function"] = query.sub_function
-        current_state["source_url"] = query.source_url
-        current_state["start_date"] = query.start_date
-        current_state["end_date"] = query.end_date
-        current_state["is_free_form"] = query.is_free_form
-        current_state["input_type"] = query.input_type.value
-        # Reset per-turn transient fields (preserve ambiguity state for resolution)
-        current_state["events"] = []
-        current_state["error_info"] = None
-        current_state["ai_content"] = None
-        current_state["prompt_used"] = None
-        current_state["response"] = None
-        state = current_state
-    else:
-        state = await _build_initial_state(query)
-
-    logger.debug("Existing messages: %s", state.get("messages"))
-
-    async def stream_generator():
-        async for chunk in graph.astream(
-            state,
-            config=config,
-            stream_mode="messages",
-            subgraphs=True,
-        ):
-            namespace, (chunk_msg, metadata) = chunk
-            node = metadata.get("langgraph_node")
-            logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
-            if chunk_msg.content:
-                yield sse_format({"content": chunk_msg.content, "node": node})
+        # ── Final event: fetch persisted chat_id / message_id from checkpoint ──
+        try:
+            final_checkpoint = await graph.checkpointer.aget(config)
+            if final_checkpoint:
+                final_state = final_checkpoint.get("channel_values", {})
+                yield sse_format({
+                    "type": "final",
+                    "chat_id": final_state.get("chat_id"),
+                    "message_id": final_state.get("message_id"),
+                    "ai_content": final_state.get("ai_content", []),
+                })
+        except Exception:
+            pass
 
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
