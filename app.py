@@ -189,6 +189,57 @@ async def chat_api(
             if chunk_msg.content:
                 yield sse_format({"content": chunk_msg.content, "node": node})
 
+            try:
+                checkpoint = await graph.checkpointer.aget(config)
+                if checkpoint:
+                    final_state = checkpoint.get("channel_values", {})
+                    yield sse_format({
+                        "type": "final", 
+                        "chat_id": final_state.get("chat_id"),
+                        "message_id": final_state.get("message_id"),
+                        "ai_content": final_state.get("ai_content", [])
+                        })
+            except Exception:
+                pass
+
+    # Build or update state for this turn
+    if current_state and current_state.get("messages"):
+        if len(current_state["messages"]) > 5:
+            current_state["messages"] = current_state["messages"][-5:]
+        current_state["messages"].append(HumanMessage(content=user_input))
+        current_state["user_input"] = query.user_input
+        current_state["function"] = query.function
+        current_state["sub_function"] = query.sub_function
+        current_state["source_url"] = query.source_url
+        current_state["start_date"] = query.start_date
+        current_state["end_date"] = query.end_date
+        current_state["is_free_form"] = query.is_free_form
+        current_state["input_type"] = query.input_type.value
+        # Reset per-turn transient fields (preserve ambiguity state for resolution)
+        current_state["events"] = []
+        current_state["error_info"] = None
+        current_state["ai_content"] = None
+        current_state["prompt_used"] = None
+        current_state["response"] = None
+        state = current_state
+    else:
+        state = await _build_initial_state(query)
+
+    logger.debug("Existing messages: %s", state.get("messages"))
+
+    async def stream_generator():
+        async for chunk in graph.astream(
+            state,
+            config=config,
+            stream_mode="messages",
+            subgraphs=True,
+        ):
+            namespace, (chunk_msg, metadata) = chunk
+            node = metadata.get("langgraph_node")
+            logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
+            if chunk_msg.content:
+                yield sse_format({"content": chunk_msg.content, "node": node})
+
     return StreamingResponse(stream_generator(), media_type="text/event-stream")
 
 
