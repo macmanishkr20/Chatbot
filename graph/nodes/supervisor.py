@@ -22,8 +22,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from config import (
-    AZURE_OPENAI_CHAT_API_VERSION,
-    AZURE_OPENAI_CHAT_DEPLOYMENT,
+    AZURE_OPENAI_API_VERSION,
     AZURE_OPENAI_KEY,
 )
 from graph.rag_graph import build_rag_graph
@@ -32,6 +31,7 @@ from graph.nodes.persist_node import persist_node
 from graph.nodes.memory_node import save_memory_node
 from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
 from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
+from services.openai_client import  get_llm_model
 
 logger = logging.getLogger(__name__)
 
@@ -89,9 +89,9 @@ class SupervisorGraph:
         self._checkpoint_saver = None
         self._memory_store = None
         self.llm = AzureChatOpenAI(
-            azure_deployment=AZURE_OPENAI_CHAT_DEPLOYMENT,
+            azure_deployment=get_llm_model("events"),
             api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_CHAT_API_VERSION,
+            api_version=AZURE_OPENAI_API_VERSION,
             temperature=0.3,
             max_tokens=None,
             timeout=None,
