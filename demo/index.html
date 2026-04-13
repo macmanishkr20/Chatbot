@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MenaBot — Chain-of-Thought Demo</title>
+  <style>
+    /* ── Reset & Base ── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f0f2f5;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* ── Shell ── */
+    .shell {
+      width: 820px;
+      height: 92vh;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 8px 40px rgba(0,0,0,.12);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #ffe600 0%, #ffd000 100%);
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid rgba(0,0,0,.06);
+    }
+    .header-logo {
+      width: 36px; height: 36px;
+      background: #1a1a1a;
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; color: #ffe600; font-size: 15px; letter-spacing: -1px;
+    }
+    .header-title { font-size: 17px; font-weight: 700; color: #1a1a1a; }
+    .header-sub   { font-size: 12px; color: #555; margin-top: 1px; }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: #22c55e; margin-left: auto;
+      box-shadow: 0 0 0 3px rgba(34,197,94,.2);
+    }
+
+    /* ── Messages ── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      scroll-behavior: smooth;
+    }
+
+    /* ── User bubble ── */
+    .user-row {
+      display: flex;
+      justify-content: flex-end;
+    }
+    .user-bubble {
+      background: #1a1a1a;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 18px 18px 4px 18px;
+      max-width: 68%;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    /* ── Bot row ── */
+    .bot-row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .bot-avatar {
+      width: 34px; height: 34px; flex-shrink: 0;
+      background: #ffe600;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 900; font-size: 13px; color: #1a1a1a;
+      margin-top: 2px;
+    }
+    .bot-body { flex: 1; display: flex; flex-direction: column; gap: 8px; }
+
+    /* ── Thinking panel ── */
+    .thinking-panel {
+      border: 1px solid #e8e8e8;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #fafafa;
+    }
+    .thinking-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 14px;
+      cursor: pointer;
+      user-select: none;
+      background: #f4f4f4;
+      border-bottom: 1px solid #e8e8e8;
+      font-size: 12.5px;
+      font-weight: 600;
+      color: #555;
+      transition: background .15s;
+    }
+    .thinking-header:hover { background: #eeeeee; }
+    .thinking-header .chevron {
+      margin-left: auto;
+      transition: transform .25s;
+      font-size: 10px;
+      color: #999;
+    }
+    .thinking-header.open .chevron { transform: rotate(180deg); }
+
+    .thinking-steps {
+      padding: 10px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .thinking-steps.collapsed { display: none; }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #444;
+      padding: 5px 0;
+    }
+    .step-icon {
+      width: 22px; height: 22px; flex-shrink: 0;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px;
+    }
+    .step.pending   .step-icon { background:#e9e9e9; color:#999; }
+    .step.running   .step-icon { background:#fff7cc; color:#d4a000; }
+    .step.done      .step-icon { background:#dcfce7; color:#16a34a; }
+
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spinner { display:inline-block; animation: spin .7s linear infinite; }
+
+    .step-label { flex: 1; }
+    .step.done   .step-label { color: #333; }
+    .step.running .step-label { color: #222; font-weight: 500; }
+
+    /* ── Answer bubble ── */
+    .answer-bubble {
+      background: #f7f7f7;
+      border: 1px solid #e8e8e8;
+      border-radius: 4px 18px 18px 18px;
+      padding: 14px 16px;
+      font-size: 14px;
+      line-height: 1.7;
+      color: #1a1a1a;
+      min-height: 20px;
+    }
+    .answer-bubble .cursor {
+      display: inline-block;
+      width: 2px; height: 14px;
+      background: #555;
+      margin-left: 1px;
+      vertical-align: middle;
+      animation: blink 1s step-end infinite;
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    /* ── Inline references [1][2][3] ── */
+    .ref {
+      color: #38bdf8;       /* sky blue */
+      font-style: italic;
+      font-weight: 500;
+    }
+
+    /* ── Citations accordion ── */
+    .citations-accordion {
+      margin-top: 10px;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 13px;
+    }
+    .citations-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 7px 12px;
+      background: #f0f9ff;
+      cursor: pointer;
+      font-weight: 600;
+      color: #0369a1;
+      user-select: none;
+      transition: background .15s;
+    }
+    .citations-header:hover { background: #e0f2fe; }
+    .citations-caret {
+      font-size: 10px;
+      color: #38bdf8;
+      transition: transform .22s;
+    }
+    .citations-accordion.open .citations-caret { transform: rotate(90deg); }
+    .citations-body {
+      display: none;
+      padding: 9px 13px;
+      line-height: 2;
+      background: #fff;
+      border-top: 1px solid #bae6fd;
+    }
+    .citations-accordion.open .citations-body { display: block; }
+
+    /* Citation reference labels e.g. [1][2] */
+    .cite-ref {
+      color: #38bdf8;
+      font-style: italic;
+      font-weight: 600;
+    }
+    /* Citation URL */
+    .cite-url {
+      color: #38bdf8;
+      font-style: italic;
+    }
+
+    /* ── Meta row ── */
+    .meta-row {
+      display: flex;
+      gap: 10px;
+      font-size: 11px;
+      color: #aaa;
+      margin-top: 2px;
+    }
+
+    /* ── Input bar ── */
+    .input-bar {
+      border-top: 1px solid #e8e8e8;
+      padding: 14px 18px;
+      display: flex;
+      gap: 10px;
+      background: #fff;
+    }
+    .input-bar textarea {
+      flex: 1;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 14px;
+      resize: none;
+      outline: none;
+      font-family: inherit;
+      line-height: 1.5;
+      transition: border-color .2s;
+    }
+    .input-bar textarea:focus { border-color: #ffe600; }
+    .send-btn {
+      width: 42px; height: 42px;
+      background: #ffe600;
+      border: none; border-radius: 10px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background .15s, transform .1s;
+      font-size: 18px;
+      align-self: flex-end;
+    }
+    .send-btn:hover { background: #ffd000; transform: scale(1.04); }
+    .send-btn:disabled { background: #f0f0f0; cursor: not-allowed; transform: none; }
+
+    /* ── Suggestive actions ── */
+    .suggestions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+    .suggestion-chip {
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #333;
+      transition: background .15s, border-color .15s;
+    }
+    .suggestion-chip:hover { background: #fffde6; border-color: #ffe600; }
+
+    /* ── Scrollbar ── */
+    .messages::-webkit-scrollbar { width: 4px; }
+    .messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+<div class="shell">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-logo">EY</div>
+    <div>
+      <div class="header-title">MENA Assistant</div>
+      <div class="header-sub">Powered by LangGraph · Azure AI Search</div>
+    </div>
+    <div class="status-dot"></div>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages" id="messages">
+
+    <!-- Welcome message -->
+    <div class="bot-row">
+      <div class="bot-avatar">M</div>
+      <div class="bot-body">
+        <div class="answer-bubble">
+          👋 Hello! I'm your <strong>MENA Assistant</strong>. Ask me anything about EY MENA internal functions, policies, and procedures.
+        </div>
+        <div class="suggestions">
+          <span class="suggestion-chip" onclick="sendDemo('What are the Finance function policies?')">Finance policies</span>
+          <span class="suggestion-chip" onclick="sendDemo('Tell me about Talent guidelines')">Talent guidelines</span>
+          <span class="suggestion-chip" onclick="sendDemo('What are the AWS function procedures?')">AWS procedures</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Input bar -->
+  <div class="input-bar">
+    <textarea id="input" rows="1" placeholder="Ask about MENA functions, policies, procedures…"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();triggerDemo()}"
+    ></textarea>
+    <button class="send-btn" id="sendBtn" onclick="triggerDemo()">&#10148;</button>
+  </div>
+</div>
+
+<script>
+// ── Simulated SSE events from /chat ──────────────────────────────────────
+const DEMO_STREAMS = {
+  default: [
+    // thoughts
+    {type:"thought", node:"Supervisor",   message:"Analysing your request..."},
+    {type:"thought", node:"load_memory",  message:"Loading your conversation history..."},
+    {type:"thought", node:"rewrite",      message:"Optimising your query for search..."},
+    {type:"thought", node:"embed",        message:"Generating semantic embeddings..."},
+    {type:"thought", node:"search",       message:"Searching the knowledge base..."},
+    {type:"thought", node:"generate",     message:"Composing your answer from retrieved documents..."},
+    // content tokens
+    {type:"content", node:"generate", content:"Invoice submissions must be completed "},
+    {type:"content", node:"generate", content:"within **30 days** of the service date [1]. "},
+    {type:"content", node:"generate", content:"Late submissions require written manager approval "},
+    {type:"content", node:"generate", content:"and a valid reason code [2].\n\n"},
+    {type:"content", node:"generate", content:"Recurring late submissions may be escalated "},
+    {type:"content", node:"generate", content:"to the Finance Compliance team [1][2].\n\n"},
+    {type:"content", node:"generate", content:"Citations:\n"},
+    {type:"content", node:"generate", content:"[1] https://ey.com/mena/finance/invoice-policy\n"},
+    {type:"content", node:"generate", content:"[2] https://ey.com/mena/finance/approval-guidelines"},
+    // persist & save_memory
+    {type:"thought", node:"persist",      message:"Saving conversation to history..."},
+    {type:"thought", node:"save_memory",  message:"Updating long-term memory..."},
+    // final
+    {type:"final",   chat_id:42, message_id:"msg-7f3a9c", ai_content:[]},
+  ]
+};
+
+const NODE_ICONS = {
+  Supervisor:   "🔍",
+  load_memory:  "🧠",
+  rewrite:      "✏️",
+  embed:        "🔢",
+  search:       "🔎",
+  generate:     "💡",
+  persist:      "💾",
+  save_memory:  "📚",
+};
+
+let isStreaming = false;
+
+function sendDemo(text) {
+  document.getElementById("input").value = text;
+  triggerDemo();
+}
+
+async function triggerDemo() {
+  if (isStreaming) return;
+  const input = document.getElementById("input");
+  const text = input.value.trim();
+  if (!text) return;
+
+  isStreaming = true;
+  document.getElementById("sendBtn").disabled = true;
+  input.value = "";
+
+  const msgs = document.getElementById("messages");
+
+  // ── User bubble ──
+  const userRow = document.createElement("div");
+  userRow.className = "user-row";
+  userRow.innerHTML = `<div class="user-bubble">${escHtml(text)}</div>`;
+  msgs.appendChild(userRow);
+  scrollBottom();
+
+  // ── Bot row shell ──
+  const botRow = document.createElement("div");
+  botRow.className = "bot-row";
+  botRow.innerHTML = `
+    <div class="bot-avatar">M</div>
+    <div class="bot-body" id="botBody">
+      <div class="thinking-panel" id="thinkingPanel">
+        <div class="thinking-header open" id="thinkingHeader" onclick="toggleThinking()">
+          <span>⚙️</span>
+          <span id="thinkingLabel">Thinking…</span>
+          <span class="chevron">▼</span>
+        </div>
+        <div class="thinking-steps" id="thinkingSteps"></div>
+      </div>
+    </div>`;
+  msgs.appendChild(botRow);
+  scrollBottom();
+
+  const thinkingSteps = document.getElementById("thinkingSteps");
+  const thinkingLabel = document.getElementById("thinkingLabel");
+  const thinkingHeader = document.getElementById("thinkingHeader");
+
+  let answerEl = null;
+  let answerText = "";
+  let stepMap = {};
+  let activeNode = null;
+
+  const events = DEMO_STREAMS.default;
+
+  for (let i = 0; i < events.length; i++) {
+    const ev = events[i];
+    await sleep(ev.type === "thought" ? 420 : 28);
+
+    if (ev.type === "thought") {
+      // Mark previous active step done (next step has started → previous is finished)
+      if (activeNode && stepMap[activeNode]) {
+        setStepState(stepMap[activeNode], "done");
+      }
+      activeNode = ev.node;
+
+      const stepEl = makeStep(ev.node, ev.message, "running");
+      thinkingSteps.appendChild(stepEl);
+      stepMap[ev.node] = stepEl;
+      thinkingLabel.textContent = ev.message;
+      scrollBottom();
+
+    } else if (ev.type === "content") {
+      // Create answer bubble on first content token
+      if (!answerEl) {
+        const botBody = document.getElementById("botBody");
+        answerEl = document.createElement("div");
+        answerEl.className = "answer-bubble";
+        botBody.appendChild(answerEl);
+      }
+
+      answerText += ev.content;
+      answerEl.innerHTML = renderAnswer(answerText) + '<span class="cursor"></span>';
+      scrollBottom();
+
+    } else if (ev.type === "final") {
+      // Mark last active step done
+      if (activeNode && stepMap[activeNode]) {
+        setStepState(stepMap[activeNode], "done");
+      }
+
+      // Remove blinking cursor; do final render (no cursor)
+      if (answerEl) {
+        answerEl.innerHTML = renderAnswer(answerText);
+      }
+
+      // Collapse thinking panel
+      thinkingHeader.classList.remove("open");
+      document.getElementById("thinkingSteps").classList.add("collapsed");
+      thinkingLabel.textContent = `${Object.keys(stepMap).length} steps completed`;
+
+      // Meta row
+      const botBody = document.getElementById("botBody");
+      const meta = document.createElement("div");
+      meta.className = "meta-row";
+      meta.innerHTML =
+        `<span>chat #${ev.chat_id}</span><span>·</span>` +
+        `<span>msg ${ev.message_id}</span><span>·</span>` +
+        `<span>${new Date().toLocaleTimeString()}</span>`;
+      botBody.appendChild(meta);
+
+      // Suggestions
+      const sug = document.createElement("div");
+      sug.className = "suggestions";
+      ["Invoice rejection criteria", "Approval workflow", "Compliance deadlines"].forEach(s => {
+        const chip = document.createElement("span");
+        chip.className = "suggestion-chip";
+        chip.textContent = s;
+        chip.onclick = () => sendDemo(s);
+        sug.appendChild(chip);
+      });
+      botBody.appendChild(sug);
+
+      scrollBottom();
+    }
+  }
+
+  isStreaming = false;
+  document.getElementById("sendBtn").disabled = false;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Render the full answer text:
+ *  - inline [1], [2][3] refs → italic sky-blue
+ *  - splits off "Citations:\n…" block → collapsible accordion
+ *    with italic sky-blue ref labels and URLs
+ */
+function renderAnswer(text) {
+  // Detect citations block
+  const citMarker = /\nCitations:\n|^Citations:\n/;
+  const splitIdx = text.search(citMarker);
+
+  let mainText, citationsRaw;
+  if (splitIdx !== -1) {
+    // Find the actual marker length to slice correctly
+    const match = text.match(citMarker);
+    mainText     = text.slice(0, splitIdx);
+    citationsRaw = text.slice(splitIdx + match[0].length);
+  } else {
+    mainText     = text;
+    citationsRaw = null;
+  }
+
+  let html = renderMainText(mainText);
+
+  if (citationsRaw !== null) {
+    html += buildCitationsAccordion(citationsRaw);
+  }
+
+  return html;
+}
+
+/** Render main prose: bold + inline [n] refs styled */
+function renderMainText(text) {
+  return escHtml(text)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    // One or more consecutive [n] groups → italic sky blue
+    .replace(/(\[\d+\])+/g, m => `<em class="ref">${m}</em>`)
+    .replace(/\n/g, "<br>");
+}
+
+/** Build a closed collapsible citations accordion */
+function buildCitationsAccordion(raw) {
+  const lines = raw.trim().split("\n").filter(l => l.trim());
+
+  const citationLines = lines.map(line => {
+    // Match pattern: [1] url  OR  [1][2] url  OR  [1][2][3] url
+    const m = line.match(/^((?:\[\d+\])+)\s+(https?:\/\/\S+)$/);
+    if (m) {
+      return `<span class="cite-ref">${escHtml(m[1])}</span>&nbsp;<em class="cite-url">${escHtml(m[2])}</em>`;
+    }
+    // Fallback: render as-is with ref styling for any [n] patterns
+    return escHtml(line).replace(/(\[\d+\])+/g, m => `<em class="cite-ref">${m}</em>`);
+  }).join("<br>");
+
+  return `
+    <div class="citations-accordion">
+      <div class="citations-header" onclick="this.closest('.citations-accordion').classList.toggle('open')">
+        <span>📎 Citations</span>
+        <span class="citations-caret">▶</span>
+      </div>
+      <div class="citations-body">${citationLines}</div>
+    </div>`;
+}
+
+function makeStep(node, label, state) {
+  const el = document.createElement("div");
+  el.className = `step ${state}`;
+  const icon = NODE_ICONS[node] || "⚙️";
+  el.innerHTML = `
+    <div class="step-icon">${state === "running" ? '<span class="spinner">⟳</span>' : icon}</div>
+    <span class="step-label">${escHtml(label)}</span>`;
+  return el;
+}
+
+function setStepState(el, state) {
+  el.className = `step ${state}`;
+  el.querySelector(".step-icon").innerHTML =
+    state === "done" ? "✓" : `<span class="spinner">⟳</span>`;
+}
+
+function toggleThinking() {
+  const header = document.getElementById("thinkingHeader");
+  const steps  = document.getElementById("thinkingSteps");
+  header.classList.toggle("open");
+  steps.classList.toggle("collapsed");
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+function scrollBottom() {
+  const msgs = document.getElementById("messages");
+  msgs.scrollTop = msgs.scrollHeight;
+}
+</script>
+</body>
+</html>
