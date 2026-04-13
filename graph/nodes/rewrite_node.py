@@ -122,11 +122,13 @@ def filter_to_vector(filter_string: str) -> dict:
 
         comp, attr, val = m.groups()
 
-        # Handle IN comparator (arrays)
+        # Handle IN comparator (arrays).
+        # Use search.in() directly — /any() lambda is only valid on Collection fields.
         if comp == "in":
-            values = val.strip("[] ")
-            values = values.replace('"', '').replace("'", "")
-            return f"{attr}/any(x: search.in(x, '{values}'))"
+            raw = val.strip("[] ").replace('"', '').replace("'", "")
+            # Normalise to comma-separated values with no surrounding spaces
+            values = ",".join(v.strip() for v in raw.split(",") if v.strip())
+            return f"search.in({attr}, '{values}', ',')"
 
         # Handle date & scalar comparisons
         if comp in ("eq", "ne", "gt", "ge", "lt", "le"):
