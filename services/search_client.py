@@ -21,6 +21,11 @@ from azure.search.documents.models import (
     QueryType,
     VectorizedQuery,
 )
+from azure.core.exceptions import (
+    HttpResponseError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from config import (
@@ -48,7 +53,7 @@ class SearchService:
         reraise=True,
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=0.5),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type((HttpResponseError, ServiceRequestError, ServiceResponseError)),
     )
     async def _safe_search(self, client: AsyncSearchClient, **kwargs) -> list:
         results = []
@@ -106,8 +111,10 @@ class SearchService:
 
         enriched = []
         for r in raw_results:
-            # Prefer semantic reranker score (0–4); fall back to BM25/vector score
-            score = r.get("@search.reranker_score") or r.get("@search.score", 0.0)
+            # Prefer semantic reranker score (0–4); fall back to BM25/vector score.
+            # Use `is not None` — a reranker score of 0.0 is valid, not missing.
+            reranker = r.get("@search.reranker_score")
+            score = reranker if reranker is not None else r.get("@search.score", 0.0)
 
             # Drop low-confidence results — keeps only high-relevance chunks
             if score < AZURE_SEARCH_SCORE_THRESHOLD:

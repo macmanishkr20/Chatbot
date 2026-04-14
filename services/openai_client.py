@@ -26,9 +26,9 @@ from config import (
 
 ERROR_CODES_TO_RETRY = [429, 500, 503]
 
-# Parse comma-separated deployment lists from environment
-_CHAT_DEPLOYMENTS = [d.strip() for d in AZURE_OPENAI_CHAT_DEPLOYMENT.split(",") if d.strip()]
-_EMBED_DEPLOYMENTS = [d.strip() for d in AZURE_OPENAI_EMBEDDING_DEPLOYMENT.split(",") if d.strip()]
+# Parse comma-separated deployment lists from environment (guard against None)
+_CHAT_DEPLOYMENTS = [d.strip() for d in (AZURE_OPENAI_CHAT_DEPLOYMENT or "").split(",") if d.strip()]
+_EMBED_DEPLOYMENTS = [d.strip() for d in (AZURE_OPENAI_EMBEDDING_DEPLOYMENT or "").split(",") if d.strip()]
 
 _DEFAULT_HEADERS = {"x-ms-useragent": USER_AGENT}
 

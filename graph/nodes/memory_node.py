@@ -20,11 +20,14 @@ save_memory_node
     Writes the current conversation's summary + metadata into the
     Store so it is available in future conversations.
 """
+import logging
 from datetime import datetime, timezone
 
 from langgraph.store.base import BaseStore
 
 from graph.state import RAGState
+
+logger = logging.getLogger(__name__)
 
 # Maximum number of past session summaries to load as context
 _MAX_MEMORY_ITEMS = 5
@@ -40,27 +43,32 @@ async def load_memory_node(state: RAGState, *, store: BaseStore) -> dict:
     if not user_id:
         return {}
 
-    # Fetch the most recent session summaries for this user
-    namespace = ("user", user_id, "sessions")
-    memories = await store.asearch(namespace, limit=_MAX_MEMORY_ITEMS)
+    try:
+        # Fetch the most recent session summaries for this user
+        namespace = ("user", user_id, "sessions")
+        memories = await store.asearch(namespace, limit=_MAX_MEMORY_ITEMS)
 
-    # Also load user profile if it exists
-    profile_namespace = ("user", user_id, "profile")
-    profile_item = await store.aget(profile_namespace, "preferences")
+        # Also load user profile if it exists
+        profile_namespace = ("user", user_id, "profile")
+        profile_item = await store.aget(profile_namespace, "preferences")
 
-    user_memories: list[str] = []
+        user_memories: list[str] = []
 
-    if profile_item and profile_item.value:
-        prefs = profile_item.value
-        user_memories.append(f"User profile: {prefs}")
+        if profile_item and profile_item.value:
+            prefs = profile_item.value
+            user_memories.append(f"User profile: {prefs}")
 
-    for item in memories:
-        summary_text = item.value.get("summary", "")
-        ts = item.value.get("timestamp", "")
-        if summary_text:
-            user_memories.append(f"[{ts}] {summary_text}")
+        for item in memories:
+            val = item.value if item.value else {}
+            summary_text = val.get("summary", "")
+            ts = val.get("timestamp", "")
+            if summary_text:
+                user_memories.append(f"[{ts}] {summary_text}")
 
-    return {"user_memories": user_memories}
+        return {"user_memories": user_memories}
+    except Exception as e:
+        logger.error("load_memory_node failed: %s", e, exc_info=True)
+        return {"user_memories": []}
 
 
 async def save_memory_node(state: RAGState, *, store: BaseStore) -> dict:
@@ -85,36 +93,50 @@ async def save_memory_node(state: RAGState, *, store: BaseStore) -> dict:
     if not summary and not ai_content:
         return {}
 
-    now = datetime.now(timezone.utc)
-    ts_str = now.isoformat()
+    try:
+        now = datetime.now(timezone.utc)
+        ts_str = now.isoformat()
 
-    # ── Save session summary ──
-    session_namespace = ("user", user_id, "sessions")
-    session_key = f"session_{chat_id}_{now.strftime('%Y%m%d%H%M%S')}"
+        # ── Save session summary ──
+        # Key includes chat_id so each conversation gets one entry.
+        # Using chat_id (not timestamp) prevents duplicates when multiple
+        # messages arrive within the same second.
+        session_namespace = ("user", user_id, "sessions")
+        session_key = f"session_{chat_id}"
 
-    memory_value = {
-        "chat_id": chat_id,
-        "summary": summary or ai_content[:500],
-        "user_query": user_input,
-        "timestamp": ts_str,
-    }
+        memory_value = {
+            "chat_id": chat_id,
+            "summary": summary or ai_content[:500],
+            "user_query": user_input,
+            "timestamp": ts_str,
+        }
 
-    await store.aput(session_namespace, session_key, memory_value)
+        await store.aput(session_namespace, session_key, memory_value)
 
-    # ── Update user profile with topic tracking ──
-    profile_namespace = ("user", user_id, "profile")
-    profile_item = await store.aget(profile_namespace, "preferences")
-    profile = profile_item.value if profile_item else {}
+        # ── Update user profile with topic tracking ──
+        profile_namespace = ("user", user_id, "profile")
+        profile_item = await store.aget(profile_namespace, "preferences")
+        profile = (profile_item.value if profile_item and profile_item.value else {})
 
-    # Track recent topics (keep last 10)
-    recent_topics: list[str] = profile.get("recent_topics", [])
-    if user_input:
-        recent_topics.insert(0, user_input[:200])
-        recent_topics = recent_topics[:10]
-    profile["recent_topics"] = recent_topics
-    profile["last_active"] = ts_str
-    profile["total_sessions"] = profile.get("total_sessions", 0) + 1
+        # Track recent topics (keep last 10)
+        recent_topics: list[str] = profile.get("recent_topics", [])
+        if user_input:
+            recent_topics.insert(0, user_input[:200])
+            recent_topics = recent_topics[:10]
+        profile["recent_topics"] = recent_topics
+        profile["last_active"] = ts_str
 
-    await store.aput(profile_namespace, "preferences", profile)
+        # Increment total_sessions only for NEW conversations (not every message).
+        # Check if this chat_id was already counted by looking at seen_sessions set.
+        seen_sessions: list[str] = profile.get("seen_sessions", [])
+        if str(chat_id) not in seen_sessions:
+            profile["total_sessions"] = profile.get("total_sessions", 0) + 1
+            seen_sessions.append(str(chat_id))
+            # Keep only last 50 session IDs to bound storage
+            profile["seen_sessions"] = seen_sessions[-50:]
+
+        await store.aput(profile_namespace, "preferences", profile)
+    except Exception as e:
+        logger.error("save_memory_node failed: %s", e, exc_info=True)
 
     return {}

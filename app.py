@@ -15,7 +15,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
@@ -93,10 +92,16 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+# CORS: use explicit origins from env when credentials are enabled.
+# Wildcard "*" + allow_credentials=True is invalid per the CORS spec —
+# browsers silently reject credentialed requests.
+_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+_ALLOW_CREDENTIALS = _ALLOWED_ORIGINS != ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=_ALLOW_CREDENTIALS,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -307,7 +312,8 @@ async def save_feedback(payload: FeedbackRequest):
         await scc.save_feedback(payload)
         return {"status": "feedback stored"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("save_feedback failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to store feedback")
 
 
 # ── Chat History Endpoints ──
@@ -335,7 +341,8 @@ async def get_conversations(user_id: str):
 
         return {"data": conversations}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("get_conversations failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch conversations")
 
 
 @app.get("/conversations/{user_id}/{chat_id}/messages")
@@ -360,7 +367,8 @@ async def get_conversation_messages(user_id: str, chat_id: int):
 
         return {"data": messages}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("get_conversation_messages failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch messages")
 
 
 if __name__ == "__main__":
