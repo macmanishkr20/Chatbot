@@ -31,6 +31,7 @@ from graph.nodes.persist_node import persist_node
 from graph.nodes.memory_node import save_memory_node
 from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
 from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
+from graph.context_manager import prepare_supervisor_messages
 from services.openai_client import get_llm_model
 
 logger = logging.getLogger(__name__)
@@ -121,9 +122,24 @@ class SupervisorGraph:
         return prompt | self.llm.with_structured_output(RouteResponse)
 
     async def supervisor_agent(self, state: RAGState) -> Dict[str, Any]:
-        """Route requests and provide direct responses when appropriate."""
-        supervisor_chain = self._create_supervisor_chain(state)
-        result = await supervisor_chain.ainvoke(state)
+        """Route requests and provide direct responses when appropriate.
+
+        Before invoking the LLM, messages are trimmed to fit within the
+        token budget via context_manager.prepare_supervisor_messages().
+        Older messages are condensed into a summary so the LLM retains
+        context without exceeding the context window.
+        """
+        # ── Token-aware message trimming ──
+        raw_messages = state.get("messages", [])
+        existing_summary = state.get("summary", "")
+        trimmed_messages, updated_summary = prepare_supervisor_messages(
+            raw_messages, existing_summary
+        )
+        # Replace messages in state copy for this LLM call only
+        trimmed_state = {**state, "messages": trimmed_messages, "summary": updated_summary}
+
+        supervisor_chain = self._create_supervisor_chain(trimmed_state)
+        result = await supervisor_chain.ainvoke(trimmed_state)
 
         if result.next == "RESPOND" and result.response:
             return {
@@ -133,6 +149,7 @@ class SupervisorGraph:
                 "ai_content": result.response,
                 "is_free_form": True,
                 "suggestive_actions": result.suggestive_actions,
+                "summary": updated_summary,
                 "next": result.next,
             }
 
@@ -140,6 +157,7 @@ class SupervisorGraph:
             "messages": [AIMessage(content=result.response or "")],
             "next": result.next,
             "suggestive_actions": result.suggestive_actions,
+            "summary": updated_summary,
         }
 
     @staticmethod

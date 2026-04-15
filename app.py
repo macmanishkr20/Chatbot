@@ -24,6 +24,7 @@ from langchain_core.messages import HumanMessage
 
 load_dotenv()
 
+from graph.context_manager import trim_messages_to_budget
 from graph.nodes.supervisor import get_graph
 from graph.state import RAGState
 from models.chat_models import FeedbackRequest, UserChatQuery
@@ -192,8 +193,12 @@ async def chat_api(
 
     # Build or update state for this turn
     if current_state and current_state.get("messages"):
-        if len(current_state["messages"]) > 5:
-            current_state["messages"] = current_state["messages"][-5:]
+        # Token-aware trimming instead of naive [-5:] slice.
+        # Keeps as many recent messages as fit within the token budget;
+        # the supervisor will further summarise older ones if needed.
+        current_state["messages"] = trim_messages_to_budget(
+            current_state["messages"]
+        )
         current_state["messages"].append(HumanMessage(content=user_input))
         current_state["user_input"] = query.user_input
         current_state["function"] = query.function

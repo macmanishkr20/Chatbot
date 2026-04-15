@@ -111,3 +111,10 @@ AZURE_OPENAI_CHAT_API_VERSION = os.getenv("AZURE_OPENAI_CHAT_API_VERSION", "2024
 AMBIGUITY_SCORE_RATIO = float(os.getenv("AMBIGUITY_SCORE_RATIO", "0.6"))
 AZURE_SEARCH_SEMANTIC_CONFIG = os.getenv("AZURE_SEARCH_SEMANTIC_CONFIG", "")
 DISCOVERY_TOP_K = int(os.getenv("DISCOVERY_TOP_K", "10"))
+
+# ── Context window management ──
+# Max recent messages to keep in full before summarising older ones.
+# Older messages are condensed into a summary to stay within token limits.
+MAX_RECENT_MESSAGES = int(os.getenv("MAX_RECENT_MESSAGES", "6"))
+# Max tokens to allocate for conversation history in the supervisor prompt.
+SUPERVISOR_HISTORY_TOKEN_BUDGET = int(os.getenv("SUPERVISOR_HISTORY_TOKEN_BUDGET", "3000"))
