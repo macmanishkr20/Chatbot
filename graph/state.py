@@ -59,6 +59,14 @@ class RAGState(TypedDict, total=False):
     # Each item: {"short_title": str, "description": str}
     suggestive_actions: list | None
 
+    # ── Conversation title (auto-generated from first exchange) ──
+    conversation_title: str | None
+
+    # ── Multi-turn citation tracking ──
+    # Maps citation number → {url, content_snippet} so follow-up questions
+    # can resolve "tell me more about [2]" to the original source.
+    citation_map: dict | None
+
     # ── Output ──
     response: dict | None
     error_info: dict | None

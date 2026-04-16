@@ -76,13 +76,35 @@ class ApplicationChatQuery(UserChatQuery):
     error_info: BusinessExceptionResponse | None = None
     conversation_type: ConversationType = ConversationType.EVENTS
 
+
 class EventchatMessage(ApplicationChatQuery):
     """A stored chat message with persistence metadata."""
     id: str = ""
     timestamp: int = 0
 
+
 # Backward-compatible alias used by persistence layer imports.
 ConversationChatMessage = EventchatMessage
+
+
+# ── New request models (Claude-parity features) ──
+
+class RegenerateRequest(BaseModel):
+    """Request body for POST /chat/regenerate — re-run the last turn."""
+    user_id: str
+    chat_id: str
+    chat_session_id: str
+
+
+class RenameConversationRequest(BaseModel):
+    """Request body for PATCH /conversations/{user_id}/{chat_id}/rename."""
+    title: str = Field(..., max_length=200)
+
+
+class CancelRequest(BaseModel):
+    """Request body for POST /chat/cancel — stop an in-flight generation."""
+    user_id: str
+    chat_session_id: str
 
 
 

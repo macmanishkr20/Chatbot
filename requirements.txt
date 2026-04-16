@@ -35,6 +35,7 @@ aiosqlite
 # ── Utilities ──
 tenacity
 aiohttp
+slowapi
 
 # ── Optional: Observability ──
 # langfuse

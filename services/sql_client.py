@@ -3,11 +3,14 @@ SQL Server persistence layer for conversations and messages.
 """
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
 from typing import List, Tuple
 import uuid
 
 import pyodbc
+
+logger = logging.getLogger(__name__)
 
 from config import AZURE_SQL_CHECKPOINT_TABLE, MSSQL_CONNECTION_STRING
 from models.chat_models import (
@@ -297,7 +300,7 @@ class SQLChatClient:
                 )
                 conn.commit()
             except Exception as e:
-                print(f"Error saving AI content: {e}")
+                logger.error("Error saving AI content: %s", e, exc_info=True)
             finally:
                 cursor.close()
                 conn.close()
@@ -322,7 +325,7 @@ class SQLChatClient:
                 )
                 conn.commit()
             except Exception as e:
-                print(f"Error saving free-form content: {e}")
+                logger.error("Error saving free-form content: %s", e, exc_info=True)
             finally:
                 cursor.close()
                 conn.close()
@@ -376,6 +379,107 @@ class SQLChatClient:
                 )
                 columns = [col[0] for col in cursor.description]
                 return [dict(zip(columns, r)) for r in cursor.fetchall()]
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    # ── Conversation Management (Claude-parity features) ──
+
+    async def soft_delete_conversation(self, conversation_id: int, user_id: str) -> bool:
+        """Soft-delete a conversation (sets IsDeleted=1). Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET IsDeleted = 1, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0
+                    """,
+                    now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def rename_conversation(self, conversation_id: int, user_id: str, new_title: str) -> bool:
+        """Rename a conversation. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET Title = ?, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0
+                    """,
+                    new_title, now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def soft_delete_message(self, message_id: str, user_id: str) -> bool:
+        """Soft-delete a single message. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE ChatMessages
+                    SET IsDeleted = 1, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE MessageId = ? AND UserId = ?
+                    """,
+                    now, user_id, message_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def get_last_user_message(self, conversation_id: int, user_id: str) -> dict | None:
+        """Return the most recent user message in a conversation (for regeneration)."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    SELECT TOP 1 cm.Id, cm.ConversationSessionId, cm.MessageId,
+                           cm.UserId, cm.UserPrompt, cm.CreatedAt
+                    FROM ChatMessages cm
+                    INNER JOIN Conversations c ON c.Id = cm.ConversationSessionId
+                    WHERE cm.ConversationSessionId = ? AND c.UserId = ?
+                      AND cm.IsDeleted = 0 AND c.IsDeleted = 0
+                    ORDER BY cm.CreatedAt DESC
+                    """,
+                    conversation_id, user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                row = cursor.fetchone()
+                return dict(zip(columns, row)) if row else None
             finally:
                 cursor.close()
                 conn.close()

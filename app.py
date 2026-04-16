@@ -1,8 +1,9 @@
-﻿"""
+"""
 MenaBot Application Entry Point.
 FastAPI with LangGraph RAG pipeline.
 
-Endpoints: /health, /chat, /feedback, /conversations
+Endpoints: /health, /chat, /chat/cancel, /chat/regenerate,
+           /feedback, /conversations (CRUD)
 
 SSE event types emitted by /chat:
   {"type": "thought",  "node": "<node>",  "message": "<step description>"}
@@ -16,20 +17,39 @@ import os
 from contextlib import asynccontextmanager
 from datetime import datetime
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import HumanMessage
 
 load_dotenv()
 
+from config import MAX_INPUT_LENGTH, RATE_LIMIT_PER_MINUTE
 from graph.context_manager import trim_messages_to_budget
 from graph.nodes.supervisor import get_graph
 from graph.state import RAGState
-from models.chat_models import FeedbackRequest, UserChatQuery
+from models.chat_models import (
+    CancelRequest,
+    FeedbackRequest,
+    RegenerateRequest,
+    RenameConversationRequest,
+    UserChatQuery,
+)
 from services.sql_client import SQLChatClient
 
 logger = logging.getLogger(__name__)
+
+# ── Optional rate limiting (graceful if slowapi not installed) ──
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+    from slowapi.util import get_remote_address
+
+    limiter = Limiter(key_func=get_remote_address)
+    _rate_limiting_available = True
+except ImportError:
+    limiter = None
+    _rate_limiting_available = False
 
 # ── Optional Langfuse observability ──
 try:
@@ -48,18 +68,19 @@ callback_handler = (
 # Global compiled graph instance (initialised once at startup)
 graph = None
 
-# ── Nodes whose token output is meaningful prose for the end user ──
-# - generate    : RAG answer tokens (primary streaming output)
-# - Supervisor  : direct RESPOND prose (greetings, clarifications, etc.)
-# - search      : ambiguity message — when multiple functions are found and
-#                 the score ratio is below the threshold, search returns an
-#                 AIMessage asking the user to pick a specific function.
-#                 That message must reach the UI exactly like any other reply.
-_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor", "search"})
+# ── In-memory cancel signals (keyed by thread_id) ──
+# For multi-worker deployments, replace with Redis.
+_cancel_signals: dict[str, bool] = {}
+
+# ── Nodes whose LLM token output is meaningful prose for the end user ──
+# NOTE: "Supervisor" is intentionally excluded. Its LLM uses
+# with_structured_output(RouteResponse) which streams JSON fragments,
+# not user-facing prose. Supervisor's RESPOND content is delivered via
+# the "updates" mode instead (see stream_generator).
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
-
 
 _NODE_THOUGHT: dict[str, dict[str, str]] = {
     "Supervisor": {
@@ -120,6 +141,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Register rate limiter if available
+if _rate_limiting_available and limiter:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 
 # ── Helpers ──
 
@@ -144,7 +170,28 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
 
 def _has_gds_domain(user_id: str) -> bool:
     """Validate that the incoming user ID belongs to the GDS domain."""
-    return user_id.strip().lower().endswith("@gds.ey.com") or user_id.strip().lower().endswith("@ey.com")
+    return (
+        user_id.strip().lower().endswith("@gds.ey.com")
+        or user_id.strip().lower().endswith("@ey.com")
+    )
+
+
+def _validate_user(user_id: str) -> None:
+    """Common user validation — raises HTTPException on failure."""
+    if not user_id:
+        raise HTTPException(status_code=400, detail="UserId is not provided")
+    if not _has_gds_domain(user_id):
+        raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
+
+
+def _sanitize_input(text: str) -> str:
+    """Sanitize user input — strip null bytes, validate length."""
+    cleaned = text.replace("\x00", "").strip()
+    if len(cleaned) > MAX_INPUT_LENGTH:
+        raise HTTPException(status_code=400, detail="Input too long")
+    if not cleaned:
+        raise HTTPException(status_code=400, detail="Empty input")
+    return cleaned
 
 
 def sse_format(payload: dict) -> str:
@@ -159,6 +206,105 @@ async def _init_graph():
     return graph
 
 
+def _build_stream_config(user_id: str, chat_session_id: str) -> tuple[str, dict]:
+    """Build LangGraph config for streaming. Returns (thread_id, config)."""
+    thread_id = f"{user_id}_{chat_session_id}"
+    config: dict = {"configurable": {"thread_id": thread_id}}
+    config["callbacks"] = [callback_handler] if callback_handler else []
+    return thread_id, config
+
+
+async def _stream_graph(state: dict, config: dict, thread_id: str):
+    """Core streaming generator shared by /chat and /chat/regenerate.
+
+    Yields SSE events: thought → content → final.
+    Supports cancellation via _cancel_signals[thread_id].
+    """
+    seen_nodes: set[str] = set()
+
+    async for chunk in graph.astream(
+        state,
+        config=config,
+        stream_mode=["messages", "updates"],
+        subgraphs=True,
+    ):
+        # ── Check cancellation ──
+        if _cancel_signals.pop(thread_id, False):
+            yield sse_format({"type": "final", "cancelled": True})
+            return
+
+        namespace, mode, data = chunk
+
+        if mode == "updates":
+            for node in data.keys():
+                if node and node not in seen_nodes:
+                    seen_nodes.add(node)
+                    thought_entry = _NODE_THOUGHT.get(node)
+                    if thought_entry:
+                        display_name, message = next(iter(thought_entry.items()))
+                    else:
+                        display_name, message = node, f"Processing {node}..."
+                    logger.debug("thought (updates) node=%s", node)
+                    yield sse_format({"type": "thought", "node": display_name, "message": message})
+
+                    # ── Supervisor RESPOND prose delivery ──
+                    # Supervisor uses with_structured_output so its LLM tokens
+                    # are JSON fragments (not prose). When next==RESPOND, the
+                    # completed update contains ai_content with the actual reply.
+                    # Deliver it as a single content event via "updates" mode.
+                    if node == "Supervisor":
+                        node_data = data.get("Supervisor", {})
+                        respond_content = node_data.get("ai_content")
+                        if respond_content:
+                            yield sse_format({
+                                "type": "content",
+                                "content": respond_content,
+                                "node": "Supervisor",
+                            })
+
+        elif mode == "messages":
+            chunk_msg, metadata = data
+            node = metadata.get("langgraph_node")
+            logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
+
+            if node and node not in seen_nodes:
+                seen_nodes.add(node)
+                thought_entry = _NODE_THOUGHT.get(node)
+                if thought_entry:
+                    display_name, message = next(iter(thought_entry.items()))
+                else:
+                    display_name, message = node, f"Processing {node}..."
+                yield sse_format({"type": "thought", "node": display_name, "message": message})
+
+            if chunk_msg.content and node in _STREAMABLE_NODES:
+                yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+
+    # ── Final event ──
+    try:
+        state_snapshot = await graph.aget_state(config)
+        if state_snapshot:
+            final_state = state_snapshot.values
+            raw_actions = final_state.get("suggestive_actions") or []
+            actions = []
+            for a in raw_actions:
+                if hasattr(a, "model_dump"):
+                    actions.append(a.model_dump())
+                elif isinstance(a, dict):
+                    actions.append(a)
+                else:
+                    actions.append({"short_title": str(a)})
+            yield sse_format({
+                "type": "final",
+                "chat_id": final_state.get("chat_id"),
+                "message_id": final_state.get("message_id"),
+                "ai_content": final_state.get("ai_content", []),
+                "suggestive_actions": actions,
+                "conversation_title": final_state.get("conversation_title"),
+            })
+    except Exception as exc:
+        logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
+
+
 # ── REST Endpoints ──
 
 @app.get("/health")
@@ -168,6 +314,7 @@ async def health():
 
 @app.post("/chat")
 async def chat_api(
+    request: Request,
     query: UserChatQuery,
     xcorrelationid: str = Header(None),
 ):
@@ -179,21 +326,18 @@ async def chat_api(
       3. final    — sent once after the stream ends; carries chat_id,
                     message_id, and the consolidated ai_content payload.
     """
-    if not query.user_id:
-        raise HTTPException(status_code=400, detail="UserId is not provided")
-    if not _has_gds_domain(query.user_id):
-        raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
+    _validate_user(query.user_id)
+    user_input = _sanitize_input(query.user_input)
 
     await _init_graph()
 
-    user_input = query.user_input.strip()
     chat_session_id = query.chat_session_id or "new"
-    thread_id = f"{query.user_id}_{chat_session_id}"
+    thread_id, config = _build_stream_config(query.user_id, chat_session_id)
 
-    config: dict = query.config or {}
-    config.setdefault("configurable", {})
+    # Merge any client-provided config
+    if query.config and query.config.get("configurable"):
+        config["configurable"].update(query.config["configurable"])
     config["configurable"]["thread_id"] = thread_id
-    config["callbacks"] = [callback_handler] if callback_handler else []
 
     # Attempt to restore existing checkpoint state
     current_state = None
@@ -221,112 +365,106 @@ async def chat_api(
         current_state["end_date"] = query.end_date
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
-        # Reset per-turn transient fields (preserve ambiguity state for resolution)
+        # Reset per-turn transient fields (preserve citation_map for multi-turn)
         current_state["events"] = []
         current_state["error_info"] = None
         current_state["ai_content"] = None
         current_state["prompt_used"] = None
         current_state["response"] = None
         current_state["suggestive_actions"] = None
+        current_state["conversation_title"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
 
     logger.debug("Existing messages: %s", state.get("messages"))
 
-    async def stream_generator():
-        # Track which nodes have already emitted a thought event so we fire
-        # exactly once per node per request regardless of how many chunks it
-        # produces.
-        seen_nodes: set[str] = set()
+    return StreamingResponse(
+        _stream_graph(state, config, thread_id),
+        media_type="text/event-stream",
+    )
 
-        # ── stream_mode=["messages","updates"] explained ──
-        # "messages" : fires one chunk per LLM token — used for content streaming.
-        #              Only LLM-backed nodes (Supervisor, generate) produce these.
-        # "updates"  : fires once per node when it COMPLETES — fires for ALL
-        #              nodes including non-LLM ones (load_memory, rewrite, embed,
-        #              search, persist, save_memory). Used to emit thought events
-        #              for nodes that never produce "messages" chunks.
-        #
-        # With subgraphs=True the chunk format is:
-        #   (namespace, (mode, data))
-        # where:
-        #   mode="messages" → data = (AIMessageChunk, metadata_dict)
-        #   mode="updates"  → data = {"node_name": state_update_dict}
-        async for chunk in graph.astream(
-            state,
-            config=config,
-            stream_mode=["messages", "updates"],
-            subgraphs=True,
-        ):
-            namespace, mode, data = chunk
 
-            if mode == "updates":
-                # data = {"node_name": {...}} — fires when the node completes.
-                # Emit thought for any node we haven't seen yet (covers all
-                # non-LLM nodes that never produce "messages" chunks).
-                for node in data.keys():
-                    if node and node not in seen_nodes:
-                        seen_nodes.add(node)
-                        thought_entry = _NODE_THOUGHT.get(node)
-                        if thought_entry:
-                            display_name, message = next(iter(thought_entry.items()))
-                        else:
-                            display_name, message = node, f"Processing {node}..."
-                        logger.debug("thought (updates) node=%s", node)
-                        yield sse_format({"type": "thought", "node": display_name, "message": message})
+# ── Stop Generation ──
 
-            elif mode == "messages":
-                chunk_msg, metadata = data
-                node = metadata.get("langgraph_node")
-                logger.debug("Streaming chunk from node=%s content=%r", node, chunk_msg.content)
+@app.post("/chat/cancel")
+async def cancel_chat(body: CancelRequest):
+    """Signal an in-flight generation to stop.
 
-                # Emit thought on the FIRST token of an LLM node — this fires
-                # before "updates" so the spinner appears while the node streams.
-                if node and node not in seen_nodes:
-                    seen_nodes.add(node)
-                    thought_entry = _NODE_THOUGHT.get(node)
-                    if thought_entry:
-                        display_name, message = next(iter(thought_entry.items()))
-                    else:
-                        display_name, message = node, f"Processing {node}..."
-                    yield sse_format({"type": "thought", "node": display_name, "message": message})
+    The stream generator checks _cancel_signals before each yield
+    and emits a final event with cancelled=True when the signal fires.
 
-                # ── Stream LLM tokens as "content" events ──
-                # Only forward tokens from nodes that produce user-facing prose.
-                # Supervisor produces structured JSON when routing — skip those
-                # fragments; only its direct RESPOND prose should reach the UI.
-                if chunk_msg.content and node in _STREAMABLE_NODES:
-                    yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+    NOTE: This works for single-process deployments. For multi-worker
+    deployments behind a load balancer, replace _cancel_signals with
+    a shared store (e.g. Redis pub/sub).
+    """
+    _validate_user(body.user_id)
+    thread_id = f"{body.user_id}_{body.chat_session_id}"
+    _cancel_signals[thread_id] = True
+    return {"status": "cancel_requested"}
 
-        # ── Final event: emit chat_id / message_id / suggestive_actions ──
-        # Use graph.aget_state() — the high-level LangGraph API — instead of
-        # the low-level checkpointer.aget() which may not exist on custom savers.
-        try:
-            state_snapshot = await graph.aget_state(config)
-            if state_snapshot:
-                final_state = state_snapshot.values
-                # Serialise suggestive_actions — may be Pydantic models or plain dicts
-                raw_actions = final_state.get("suggestive_actions") or []
-                actions = []
-                for a in raw_actions:
-                    if hasattr(a, "model_dump"):
-                        actions.append(a.model_dump())
-                    elif isinstance(a, dict):
-                        actions.append(a)
-                    else:
-                        actions.append({"short_title": str(a)})
-                yield sse_format({
-                    "type": "final",
-                    "chat_id": final_state.get("chat_id"),
-                    "message_id": final_state.get("message_id"),
-                    "ai_content": final_state.get("ai_content", []),
-                    "suggestive_actions": actions,
-                })
-        except Exception as exc:
-            logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
 
-    return StreamingResponse(stream_generator(), media_type="text/event-stream")
+# ── Regenerate Last Response ──
+
+@app.post("/chat/regenerate")
+async def regenerate_chat(
+    request: Request,
+    body: RegenerateRequest,
+):
+    """Re-run the last turn in a conversation — same UX as Claude's 'Retry'.
+
+    Fetches the last user message from SQL, rebuilds the state,
+    and streams a fresh response.
+    """
+    _validate_user(body.user_id)
+    await _init_graph()
+
+    thread_id, config = _build_stream_config(body.user_id, body.chat_session_id)
+
+    # Fetch last user message from SQL
+    try:
+        scc = SQLChatClient()
+        await scc.connect()
+        last_msg = await scc.get_last_user_message(int(body.chat_id), body.user_id)
+    except Exception as e:
+        logger.error("regenerate: failed to fetch last message: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve last message")
+
+    if not last_msg or not last_msg.get("UserPrompt"):
+        raise HTTPException(status_code=404, detail="No user message found to regenerate")
+
+    user_input = last_msg["UserPrompt"]
+
+    # Restore checkpoint and rebuild state
+    current_state = None
+    try:
+        checkpoint = await graph.checkpointer.aget(config)
+        if checkpoint:
+            current_state = checkpoint.get("channel_values", {})
+    except Exception:
+        pass
+
+    if current_state and current_state.get("messages"):
+        current_state["messages"] = trim_messages_to_budget(
+            current_state["messages"]
+        )
+        # Don't append a new HumanMessage — we're replaying the existing one
+        current_state["user_input"] = user_input
+        current_state["events"] = []
+        current_state["error_info"] = None
+        current_state["ai_content"] = None
+        current_state["prompt_used"] = None
+        current_state["response"] = None
+        current_state["suggestive_actions"] = None
+        current_state["conversation_title"] = None
+        state = current_state
+    else:
+        raise HTTPException(status_code=404, detail="No conversation state found")
+
+    return StreamingResponse(
+        _stream_graph(state, config, thread_id),
+        media_type="text/event-stream",
+    )
 
 
 @app.post("/feedback")
@@ -350,10 +488,7 @@ async def get_conversations(user_id: str):
     Return all conversation sessions for a user (left-panel chat history).
     Each item includes id, title, type, and timestamps.
     """
-    if not user_id:
-        raise HTTPException(status_code=400, detail="UserId is required")
-    if not _has_gds_domain(user_id):
-        raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
+    _validate_user(user_id)
 
     try:
         scc = SQLChatClient()
@@ -377,10 +512,7 @@ async def get_conversation_messages(user_id: str, chat_id: int):
     Return all messages in a specific conversation session.
     Used by frontend to reload a past conversation.
     """
-    if not user_id:
-        raise HTTPException(status_code=400, detail="UserId is required")
-    if not _has_gds_domain(user_id):
-        raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
+    _validate_user(user_id)
 
     try:
         scc = SQLChatClient()
@@ -395,6 +527,46 @@ async def get_conversation_messages(user_id: str, chat_id: int):
     except Exception as e:
         logger.error("get_conversation_messages failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to retrieve messages")
+
+
+# ── Conversation Management (Claude-parity) ──
+
+@app.delete("/conversations/{user_id}/{chat_id}")
+async def delete_conversation(user_id: str, chat_id: int):
+    """Soft-delete a conversation (marks as deleted, not physically removed)."""
+    _validate_user(user_id)
+
+    try:
+        scc = SQLChatClient()
+        await scc.connect()
+        success = await scc.soft_delete_conversation(chat_id, user_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"status": "deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("delete_conversation failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to delete conversation")
+
+
+@app.patch("/conversations/{user_id}/{chat_id}/rename")
+async def rename_conversation(user_id: str, chat_id: int, body: RenameConversationRequest):
+    """Rename a conversation (user-initiated title change)."""
+    _validate_user(user_id)
+
+    try:
+        scc = SQLChatClient()
+        await scc.connect()
+        success = await scc.rename_conversation(chat_id, user_id, body.title)
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        return {"status": "renamed", "title": body.title}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("rename_conversation failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to rename conversation")
 
 
 if __name__ == "__main__":

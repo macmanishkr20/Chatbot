@@ -1,4 +1,5 @@
 import json
+import re
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
@@ -28,11 +29,13 @@ def _create_message_structure(
     summary: str = "",
     langgraph_messages: list | None = None,
     user_memories: list[str] | None = None,
+    citation_map: dict | None = None,
 ) -> list:
     """Build the LangChain messages list for the LLM call.
 
     Conversation history comes exclusively from LangGraph checkpoint
     messages.  Cross-session context comes from the Store (user_memories).
+    Citation map enables multi-turn citation resolution.
     """
     messages = [SystemMessage(content=system_template)]
 
@@ -43,15 +46,31 @@ def _create_message_structure(
         ))
 
     # Inject long-term user memories from LangGraph Store
+    # Separate user preferences from session history for clearer context
     if user_memories:
-        memories_text = "\n".join(user_memories)
-        messages.append(SystemMessage(
-            content=(
-                "Relevant context from the user's past sessions "
-                "(use if helpful, do not repeat verbatim):\n"
-                + memories_text
-            ),
-        ))
+        preferences = [m for m in user_memories if m.startswith("User preferences:")]
+        sessions = [m for m in user_memories if not m.startswith("User preferences:")]
+
+        if preferences:
+            messages.append(SystemMessage(content="\n".join(preferences)))
+
+        if sessions:
+            messages.append(SystemMessage(
+                content=(
+                    "Relevant context from the user's past sessions "
+                    "(use if helpful, do not repeat verbatim):\n"
+                    + "\n".join(sessions)
+                ),
+            ))
+
+    # Inject prior citation map for multi-turn citation resolution
+    if citation_map:
+        citation_lines = ["Previous citation references (for follow-up questions):"]
+        for ref, info in citation_map.items():
+            url = info.get("url", "")
+            snippet = info.get("content_snippet", "")
+            citation_lines.append(f"[{ref}] {url} — {snippet}")
+        messages.append(SystemMessage(content="\n".join(citation_lines)))
 
     user_template_message = HumanMessage(content=user_template)
 
@@ -140,6 +159,7 @@ async def generate_node(state: RAGState) -> dict:
     summary = state.get("summary", "")
     langgraph_messages = state.get("messages", [])
     user_memories = state.get("user_memories", [])
+    prior_citation_map = state.get("citation_map")
 
     if not events and not state.get("error_info"):
         return {"messages": [AIMessage(content="No Data Available")]}
@@ -153,6 +173,7 @@ async def generate_node(state: RAGState) -> dict:
         summary=summary,
         langgraph_messages=langgraph_messages,
         user_memories=user_memories,
+        citation_map=prior_citation_map,
     )
 
     prompt_used = user_template
@@ -166,8 +187,26 @@ async def generate_node(state: RAGState) -> dict:
     else:
         ai_content = response.content or ""
 
+    # ── Build citation map for multi-turn tracking ──
+    # Parse which citation numbers the LLM actually used in its response
+    # and map them back to the source documents for follow-up resolution.
+    citation_map = None
+    if is_free_form and ai_content and events:
+        used_refs = set(re.findall(r"\[(\d+)\]", ai_content))
+        if used_refs:
+            citation_map = {}
+            for ref_str in used_refs:
+                idx = int(ref_str) - 1  # citations are 1-indexed
+                if 0 <= idx < len(events):
+                    doc = events[idx]
+                    citation_map[ref_str] = {
+                        "url": doc.get("source_url", ""),
+                        "content_snippet": (doc.get("content", ""))[:200],
+                    }
+
     return {
         "ai_content": ai_content,
         "prompt_used": prompt_used,
+        "citation_map": citation_map,
         "messages": [response],
     }

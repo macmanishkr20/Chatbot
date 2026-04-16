@@ -23,11 +23,15 @@ _SUMMARIZE_THRESHOLD = 10
 _KEEP_RECENT = 4
 
 _SUMMARIZE_SYSTEM = (
-    "You are a conversation summarizer. "
-    "Distill the conversation into a concise summary that captures: "
-    "1) the user's original questions and intents, "
-    "2) the key facts and data points the assistant provided, "
-    "3) any source citations mentioned. "
+    "You are a conversation summarizer for an EY MENA internal chatbot. "
+    "Distill the conversation into a concise summary that captures:\n"
+    "1) the user's original questions and intents,\n"
+    "2) the key facts and data points the assistant provided,\n"
+    "3) any source citations mentioned,\n"
+    "4) exact MENA function names (AWS, BMC, C&I, Finance, GCO, Risk, SCS, TME, Talent),\n"
+    "5) policy reference IDs, procedure codes, document identifiers,\n"
+    "6) all dates, deadlines, and time-bound constraints,\n"
+    "7) any user selections or ambiguity resolutions (which option they chose).\n"
     "Return ONLY the summary, no preamble."
 )
 

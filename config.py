@@ -118,3 +118,12 @@ DISCOVERY_TOP_K = int(os.getenv("DISCOVERY_TOP_K", "10"))
 MAX_RECENT_MESSAGES = int(os.getenv("MAX_RECENT_MESSAGES", "6"))
 # Max tokens to allocate for conversation history in the supervisor prompt.
 SUPERVISOR_HISTORY_TOKEN_BUDGET = int(os.getenv("SUPERVISOR_HISTORY_TOKEN_BUDGET", "3000"))
+
+# ── Rate limiting ──
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "20"))
+
+# ── Title generation ──
+TITLE_MAX_LENGTH = int(os.getenv("TITLE_MAX_LENGTH", "60"))
+
+# ── Input validation ──
+MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))

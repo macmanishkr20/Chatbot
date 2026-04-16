@@ -135,6 +135,20 @@ class SupervisorGraph:
         trimmed_messages, updated_summary = prepare_supervisor_messages(
             raw_messages, existing_summary
         )
+
+        # ── Inject citation context for multi-turn resolution ──
+        # When the user says "tell me more about [2]", the supervisor
+        # needs this context to route correctly to rag_graph.
+        citation_map = state.get("citation_map")
+        if citation_map:
+            citation_lines = ["Previous citation references:"]
+            for ref, info in citation_map.items():
+                url = info.get("url", "")
+                snippet = info.get("content_snippet", "")
+                citation_lines.append(f"[{ref}] {url} — {snippet}")
+            from langchain_core.messages import SystemMessage as _SM
+            trimmed_messages.append(_SM(content="\n".join(citation_lines)))
+
         # Replace messages in state copy for this LLM call only
         trimmed_state = {**state, "messages": trimmed_messages, "summary": updated_summary}
 

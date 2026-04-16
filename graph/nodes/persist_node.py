@@ -29,6 +29,7 @@ from services.openai_client import (
     prepare_model_args,
     retry_with_llm_backoff,
 )
+from graph.nodes.title_node import generate_title
 from services.sql_client import SQLChatClient
 
 
@@ -121,6 +122,10 @@ async def persist_node(state: RAGState) -> dict:
     The checkpointer/Store handle LLM context; this node only writes
     the structured rows the frontend APIs (``/conversations``) need.
     """
+    # Track whether this is a brand-new conversation (no chat_id yet).
+    # If so, we'll auto-generate a title after saving AI content.
+    is_new_conversation = state.get("chat_id") is None
+
     app_query = _build_app_query(state)
 
     rewritten_query = state.get("rewritten_query")
@@ -196,10 +201,27 @@ async def persist_node(state: RAGState) -> dict:
     if ai_content:
         await _save_ai_content(ai_content, app_query, scc)
 
+    # ── Auto-generate conversation title for new conversations ──
+    # Same UX as Claude/ChatGPT: title appears after the first exchange.
+    conversation_title = None
+    if is_new_conversation and ai_content:
+        try:
+            conversation_title = await generate_title(
+                state.get("user_input", ""), ai_content
+            )
+            await scc.upsert_chat({
+                "id": app_query.chat_id,
+                "title": conversation_title,
+                "userId": app_query.user_id,
+            })
+        except Exception as e:
+            logger.warning("Title generation failed: %s", e)
+
     return {
         "chat_id": app_query.chat_id,
         "message_id": app_query.message_id,
         "ai_content": ai_content,
+        "conversation_title": conversation_title,
         "response": {
             "chat_id": app_query.chat_id,
             "message_id": app_query.message_id,

@@ -56,7 +56,25 @@ async def load_memory_node(state: RAGState, *, store: BaseStore) -> dict:
 
         if profile_item and profile_item.value:
             prefs = profile_item.value
-            user_memories.append(f"User profile: {prefs}")
+            # Extract structured preferences for clear LLM injection
+            pref_parts = []
+            recent_topics = prefs.get("recent_topics", [])
+            if recent_topics:
+                # Identify most frequent topic themes
+                pref_parts.append(
+                    f"recently asked about: {', '.join(recent_topics[:3])}"
+                )
+            total = prefs.get("total_sessions", 0)
+            if total:
+                pref_parts.append(f"{total} total sessions")
+            last_active = prefs.get("last_active", "")
+            if last_active:
+                pref_parts.append(f"last active: {last_active[:10]}")
+
+            if pref_parts:
+                user_memories.append(
+                    f"User preferences: {'; '.join(pref_parts)}"
+                )
 
         for item in memories:
             val = item.value if item.value else {}

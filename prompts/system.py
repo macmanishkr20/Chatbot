@@ -14,7 +14,10 @@ Rules:
 - Do not use headings or bold text unless the answer has clearly separate sections.
 - Cite every factual claim inline with a numbered reference: [1], [2], etc.
 - At the end, list citations as instructed in the user message.
-- If the documents do not contain enough information to answer, say so in one sentence.\
+- If the documents do not contain enough information to answer, say so in one sentence.
+- If the user references a prior citation number (e.g. "tell me more about [2]"), \
+resolve it using the citation context provided in the system messages. Treat the \
+referenced citation's source and content as the basis for your answer.\
 """
 
 
