@@ -1,4 +1,4 @@
-"""
+﻿"""
 MenaBot Application Entry Point.
 FastAPI with LangGraph RAG pipeline.
 
@@ -15,6 +15,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
+from typing import Any
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
@@ -60,15 +61,33 @@ _STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "Supervisor", "search
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
-_NODE_THOUGHT: dict[str, str] = {
-    "Supervisor":   "Analysing your request...",
-    "load_memory":  "Loading your conversation history...",
-    "rewrite":      "Optimising your query for search...",
-    "embed":        "Generating semantic embeddings...",
-    "search":       "Searching the knowledge base...",
-    "generate":     "Composing your answer from retrieved documents...",
-    "persist":      "Saving conversation to history...",
-    "save_memory":  "Updating long-term memory...",
+
+
+_NODE_THOUGHT: dict[str, dict[str, str]] = {
+    "Supervisor": {
+        "Intent": "Aligning intent…"
+    },
+    "load_memory": {
+        "Recall": "Reconnecting context…"
+    },
+    "rewrite": {
+        "Focus": "Clarifying focus…"
+    },
+    "embed": {
+        "Meaning": "Interpreting meaning…"
+    },
+    "search": {
+        "Relevance": "Finding relevance…"
+    },
+    "generate": {
+        "Response": "Forming response…"
+    },
+    "persist": {
+        "Flow": "Maintaining continuity…"
+    },
+    "save_memory": {
+        "Memory": "Storing insight…"
+    }
 }
 
 
@@ -93,16 +112,10 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
-# CORS: use explicit origins from env when credentials are enabled.
-# Wildcard "*" + allow_credentials=True is invalid per the CORS spec —
-# browsers silently reject credentialed requests.
-_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
-_ALLOW_CREDENTIALS = _ALLOWED_ORIGINS != ["*"]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_ALLOWED_ORIGINS,
-    allow_credentials=_ALLOW_CREDENTIALS,
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -131,7 +144,7 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
 
 def _has_gds_domain(user_id: str) -> bool:
     """Validate that the incoming user ID belongs to the GDS domain."""
-    return user_id.strip().lower().endswith("@gds.ey.com")
+    return user_id.strip().lower().endswith("@gds.ey.com") or user_id.strip().lower().endswith("@ey.com")
 
 
 def sse_format(payload: dict) -> str:
@@ -255,9 +268,13 @@ async def chat_api(
                 for node in data.keys():
                     if node and node not in seen_nodes:
                         seen_nodes.add(node)
-                        thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
+                        thought_entry = _NODE_THOUGHT.get(node)
+                        if thought_entry:
+                            display_name, message = next(iter(thought_entry.items()))
+                        else:
+                            display_name, message = node, f"Processing {node}..."
                         logger.debug("thought (updates) node=%s", node)
-                        yield sse_format({"type": "thought", "node": node, "message": thought_msg})
+                        yield sse_format({"type": "thought", "node": display_name, "message": message})
 
             elif mode == "messages":
                 chunk_msg, metadata = data
@@ -268,8 +285,12 @@ async def chat_api(
                 # before "updates" so the spinner appears while the node streams.
                 if node and node not in seen_nodes:
                     seen_nodes.add(node)
-                    thought_msg = _NODE_THOUGHT.get(node, f"Processing {node}...")
-                    yield sse_format({"type": "thought", "node": node, "message": thought_msg})
+                    thought_entry = _NODE_THOUGHT.get(node)
+                    if thought_entry:
+                        display_name, message = next(iter(thought_entry.items()))
+                    else:
+                        display_name, message = node, f"Processing {node}..."
+                    yield sse_format({"type": "thought", "node": display_name, "message": message})
 
                 # ── Stream LLM tokens as "content" events ──
                 # Only forward tokens from nodes that produce user-facing prose.
@@ -317,8 +338,7 @@ async def save_feedback(payload: FeedbackRequest):
         await scc.save_feedback(payload)
         return {"status": "feedback stored"}
     except Exception as e:
-        logger.error("save_feedback failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to store feedback")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Chat History Endpoints ──
@@ -346,8 +366,7 @@ async def get_conversations(user_id: str):
 
         return {"data": conversations}
     except Exception as e:
-        logger.error("get_conversations failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch conversations")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/conversations/{user_id}/{chat_id}/messages")
@@ -372,8 +391,7 @@ async def get_conversation_messages(user_id: str, chat_id: int):
 
         return {"data": messages}
     except Exception as e:
-        logger.error("get_conversation_messages failed: %s", e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to fetch messages")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":

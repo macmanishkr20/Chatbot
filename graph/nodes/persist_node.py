@@ -9,11 +9,8 @@ only writes the structured records the frontend needs.
 Also emits an AIMessage into LangGraph messages for checkpoint persistence.
 """
 import json
-import logging
 
 from langchain_core.messages import AIMessage
-
-logger = logging.getLogger(__name__)
 
 from graph.state import RAGState
 from config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY
@@ -140,8 +137,7 @@ async def persist_node(state: RAGState) -> dict:
         scc = SQLChatClient()
         await scc.connect()
         await scc.ensure()
-    except Exception as e:
-        logger.error("persist_node: SQL connection failed: %s", e, exc_info=True)
+    except Exception:
         return {}
 
     # Create conversation + message row
@@ -153,7 +149,7 @@ async def persist_node(state: RAGState) -> dict:
             app_query.chat_id = new_message.chat_id
             app_query.message_id = new_message.message_id
     except Exception as e:
-        logger.error("persist_node: message_list_update failed: %s", e, exc_info=True)
+        print(f"[PERSIST_NODE ERROR] message_list_update failed: {type(e).__name__}: {e}")
         return {}
 
     # Error with no events — short-circuit

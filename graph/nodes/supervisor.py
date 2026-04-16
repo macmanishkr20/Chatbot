@@ -32,26 +32,22 @@ from graph.nodes.memory_node import save_memory_node
 from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
 from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
 from graph.context_manager import prepare_supervisor_messages
-from services.openai_client import get_llm_model
+from services.openai_client import  get_llm_model
 
 logger = logging.getLogger(__name__)
 
 MEMBERS = ["rag_graph"]
 OPTIONS_FOR_NEXT = ["RESPOND"] + MEMBERS
 
-# Lock for thread-safe singleton initialisation under async concurrency
-_init_lock = asyncio.Lock()
+current_date = datetime.now().strftime("%Y-%m-%d")
+current_date_readable = datetime.now().strftime("%A, %B %d, %Y")
+tomorrow_date = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d")
 
-
-def _build_system_prompt() -> str:
-    """Build the system prompt with fresh dates — called per-request so
-    dates never go stale if the server runs across midnight."""
-    now = datetime.now()
-    return supervisor_system_prompt.format(
-        current_date=now.strftime("%Y-%m-%d"),
-        current_date_readable=now.strftime("%A, %B %d, %Y"),
-        tomorrow_date=(now + timedelta(days=1)).strftime("%Y-%m-%d"),
-    ) + FEW_SHOT_EXAMPLES
+_SYSTEM_PROMPT = supervisor_system_prompt.format(
+    current_date=current_date,
+    current_date_readable=current_date_readable,
+    tomorrow_date=tomorrow_date,
+) + FEW_SHOT_EXAMPLES
 
 
 # ── Pydantic response models ──
@@ -105,20 +101,14 @@ class SupervisorGraph:
         )
 
     def _create_supervisor_chain(self, state: RAGState):
-        """Build the supervisor routing chain for the given state.
-
-        The system prompt is built per-request via _build_system_prompt()
-        so that date references are always fresh.
-        """
-        system_prompt = _build_system_prompt()
-        lang = state.get("preferred_language") or "English"
+        """Build the supervisor routing chain for the given state."""
         prompt = ChatPromptTemplate.from_messages(
             [
-                ("system", system_prompt),
+                ("system", _SYSTEM_PROMPT),
                 MessagesPlaceholder(variable_name="messages"),
-                ("human", f"Ensure your response is in language: {lang}"),
             ]
         ).partial(options=str(OPTIONS_FOR_NEXT), members=", ".join(MEMBERS))
+        prompt = prompt + f"Ensure your response should be in language -{state['preferred_language']}"
         return prompt | self.llm.with_structured_output(RouteResponse)
 
     async def supervisor_agent(self, state: RAGState) -> Dict[str, Any]:
@@ -220,12 +210,11 @@ _workflow_instance: Optional[SupervisorGraph] = None
 
 
 async def get_graph():
-    """Return the singleton compiled supervisor graph (thread-safe)."""
+    """Return the singleton compiled supervisor graph."""
     global _workflow_instance
-    async with _init_lock:
-        if _workflow_instance is None:
-            _workflow_instance = SupervisorGraph()
-        return await _workflow_instance.compile_graph()
+    if _workflow_instance is None:
+        _workflow_instance = SupervisorGraph()
+    return await _workflow_instance.compile_graph()
 
 
 def save_graph_visualization(filename: str = "graph_diagram.md") -> None:

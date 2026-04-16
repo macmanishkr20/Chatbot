@@ -42,6 +42,8 @@ def trim_messages_to_budget(
     total = 0
 
     for msg in reversed(messages):
+        if not isinstance(msg, BaseMessage):
+            continue
         role = "user" if msg.type == "human" else "assistant"
         content = msg.content or ""
         msg_tokens = get_tokens_count({"role": role, "content": content}, model)
@@ -78,6 +80,8 @@ def split_and_summarise(
     # Build a condensed text from the older messages
     older_lines = []
     for msg in older:
+        if not isinstance(msg, BaseMessage):
+            continue
         role = "User" if msg.type == "human" else "Assistant"
         content = (msg.content or "")[:500]  # cap each message at 500 chars
         older_lines.append(f"{role}: {content}")
@@ -93,12 +97,19 @@ def split_and_summarise(
     else:
         summary = f"Earlier conversation:\n{older_text}"
 
+    # Cap the summary so it doesn't grow unbounded across long conversations.
+    # ~4 chars per token → 3000 chars ≈ 750 tokens, well within budget.
+    MAX_SUMMARY_CHARS = 3000
+    if len(summary) > MAX_SUMMARY_CHARS:
+        summary = summary[-MAX_SUMMARY_CHARS:]
+
     return recent, summary
 
 
 def prepare_supervisor_messages(
     messages: list[BaseMessage],
     existing_summary: str = "",
+    token_budget: int = SUPERVISOR_HISTORY_TOKEN_BUDGET,
 ) -> tuple[list[BaseMessage], str]:
     """Prepare messages for the supervisor chain.
 
@@ -119,5 +130,23 @@ def prepare_supervisor_messages(
             content=f"[Conversation history summary]\n{summary}"
         )
         trimmed = [summary_msg] + trimmed
+
+    # Final safety: if total tokens still exceed budget, drop oldest messages
+    # (skip index 0 if it's the summary system message)
+    model = get_llm_model("events")
+    total_tokens = sum(
+        get_tokens_count({"role": "user" if m.type == "human" else "assistant", "content": m.content or ""}, model)
+        for m in trimmed
+    )
+    while total_tokens > token_budget and len(trimmed) > 1:
+        # Remove the oldest non-summary message
+        drop_idx = 1 if (trimmed[0].type == "system") else 0
+        if drop_idx >= len(trimmed):
+            break
+        dropped = trimmed.pop(drop_idx)
+        drop_tokens = get_tokens_count(
+            {"role": "user" if dropped.type == "human" else "assistant", "content": dropped.content or ""}, model
+        )
+        total_tokens -= drop_tokens
 
     return trimmed, summary
