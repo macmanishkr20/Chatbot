@@ -15,8 +15,6 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
-
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -112,10 +110,12 @@ app = FastAPI(
     redoc_url="/redoc",
 )
 
+_ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "*").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_ALLOWED_ORIGINS,
+    allow_credentials=("*" not in _ALLOWED_ORIGINS),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -338,7 +338,8 @@ async def save_feedback(payload: FeedbackRequest):
         await scc.save_feedback(payload)
         return {"status": "feedback stored"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("save_feedback failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to save feedback")
 
 
 # ── Chat History Endpoints ──
@@ -366,7 +367,8 @@ async def get_conversations(user_id: str):
 
         return {"data": conversations}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("get_conversations failed for user=%s: %s", user_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve conversations")
 
 
 @app.get("/conversations/{user_id}/{chat_id}/messages")
@@ -391,7 +393,8 @@ async def get_conversation_messages(user_id: str, chat_id: int):
 
         return {"data": messages}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("get_conversation_messages failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to retrieve messages")
 
 
 if __name__ == "__main__":
