@@ -14,13 +14,14 @@ SSE event types emitted by /chat:
 import json
 import logging
 import os
+import re
 from contextlib import asynccontextmanager
 from datetime import datetime
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 load_dotenv()
 
@@ -150,6 +151,51 @@ if _rate_limiting_available and limiter:
 
 
 # ── Helpers ──
+
+def _ensure_base_messages(messages: list) -> list[BaseMessage]:
+    """Reconstruct proper BaseMessage objects from checkpoint deserialization output.
+
+    The custom AzureSQLCheckpointSaver previously used ``json.dumps(..., default=str)``
+    which stringified BaseMessage objects into their repr (e.g. "HumanMessage(content='hi')").
+    Newer checkpoints use the LangGraph serde and come back correctly deserialized, but we
+    keep this helper so old checkpoints in the DB still work gracefully.
+
+    Three possible input formats:
+    - Already-proper BaseMessage objects  → pass through as-is
+    - Dicts with a 'type'/'role' key      → reconstruct via LangChain types
+    - Repr strings                         → regex-parse type + content
+    """
+    result: list[BaseMessage] = []
+    for m in messages:
+        if isinstance(m, BaseMessage):
+            result.append(m)
+            continue
+
+        if isinstance(m, dict):
+            role = (m.get("type") or m.get("role") or "").lower()
+            content = m.get("content", "")
+            msg_id = m.get("id")
+            msg = HumanMessage(content=content) if role in ("human", "user") else AIMessage(content=content)
+            if msg_id:
+                try:
+                    object.__setattr__(msg, "id", msg_id)
+                except Exception:
+                    pass
+            result.append(msg)
+            continue
+
+        if isinstance(m, str):
+            # Legacy repr: "HumanMessage(content='...' ...)" or "AIMessage(...)"
+            is_human = m.startswith("HumanMessage") or bool(re.search(r"type=['\"]human['\"]", m))
+            content_match = re.search(r"content='((?:[^'\\]|\\.)*)'", m) or re.search(r'content="((?:[^"\\]|\\.)*)"', m)
+            content = content_match.group(1) if content_match else ""
+            result.append(HumanMessage(content=content) if is_human else AIMessage(content=content))
+            continue
+
+        logger.warning("_ensure_base_messages: unexpected type %s, skipping", type(m))
+
+    return result
+
 
 async def _build_initial_state(query: UserChatQuery) -> dict:
     """Convert a UserChatQuery into the initial RAGState dict."""
@@ -353,6 +399,8 @@ async def chat_api(
 
     # Build or update state for this turn
     if current_state and current_state.get("messages"):
+        # Ensure messages are proper BaseMessage objects (handles legacy checkpoints)
+        current_state["messages"] = _ensure_base_messages(current_state["messages"])
         # Token-aware trimming instead of naive [-5:] slice.
         # Keeps as many recent messages as fit within the token budget;
         # the supervisor will further summarise older ones if needed.
@@ -452,6 +500,8 @@ async def regenerate_chat(
         pass
 
     if current_state and current_state.get("messages"):
+        # Ensure messages are proper BaseMessage objects (handles legacy checkpoints)
+        current_state["messages"] = _ensure_base_messages(current_state["messages"])
         current_state["messages"] = trim_messages_to_budget(
             current_state["messages"]
         )
@@ -518,11 +568,13 @@ async def edit_message(
     if not current_state or not current_state.get("messages"):
         raise HTTPException(status_code=404, detail="No conversation state found")
 
-    messages = current_state["messages"]
+    # Ensure messages are proper BaseMessage objects (handles legacy checkpoints
+    # that were serialised with default=str, coming back as repr strings or dicts)
+    messages = _ensure_base_messages(current_state["messages"])
 
     # Find the user messages to determine which one to edit
     user_msg_positions = [
-        i for i, m in enumerate(messages) if m.type == "human"
+        i for i, m in enumerate(messages) if isinstance(m, HumanMessage)
     ]
 
     if body.message_index < 0 or body.message_index >= len(user_msg_positions):

@@ -121,19 +121,32 @@ class AzureSQLCheckpointSaver(BaseCheckpointSaver):
     def setup(self) -> None:
         """Create the checkpoints table if it doesn't exist."""
         self.metadata.create_all(self.engine)
-    
+
+    # ── Serialisation helpers ──────────────────────────────────────────────
+    # We use LangGraph's built-in serde (JsonPlusSerializer) which correctly
+    # round-trips LangChain BaseMessage objects and other Serializable types.
+    # The payload is stored as JSON with a "_type" / "_data" envelope so we
+    # can detect and migrate legacy rows (plain json.dumps with default=str).
+
     def _serialize_checkpoint(self, checkpoint: Checkpoint) -> str:
-        """Serialize checkpoint to JSON string."""
-        return json.dumps(checkpoint, default=str, ensure_ascii=False)
-    
+        """Serialize checkpoint using LangGraph serde (handles BaseMessage etc.)."""
+        type_str, data_bytes = self.serde.dumps_typed(checkpoint)
+        return json.dumps({"_type": type_str, "_data": data_bytes.decode("utf-8", errors="surrogateescape")}, ensure_ascii=False)
+
     def _deserialize_checkpoint(self, data: str) -> Checkpoint:
-        """Deserialize checkpoint from JSON string."""
-        return json.loads(data)
-    
+        """Deserialize checkpoint, handling both new serde format and legacy plain-JSON rows."""
+        parsed = json.loads(data)
+        if isinstance(parsed, dict) and "_type" in parsed and "_data" in parsed:
+            # New format written by this version
+            return self.serde.loads_typed((parsed["_type"], parsed["_data"].encode("utf-8", errors="surrogateescape")))
+        # Legacy format: plain json.loads — BaseMessage objects were stringified
+        # Return as-is; app.py's _ensure_base_messages() will reconstruct them.
+        return parsed
+
     def _serialize_metadata(self, metadata: CheckpointMetadata) -> str:
         """Serialize metadata to JSON string."""
         return json.dumps(metadata, default=str, ensure_ascii=False)
-    
+
     def _deserialize_metadata(self, data: Optional[str]) -> CheckpointMetadata:
         """Deserialize metadata from JSON string."""
         if data:
@@ -495,19 +508,26 @@ class AsyncAzureSQLCheckpointSaver(BaseCheckpointSaver):
         """Create the checkpoints table if it doesn't exist."""
         async with self.async_engine.begin() as conn:
             await conn.run_sync(self.metadata.create_all)
-    
+
+    # ── Serialisation helpers ──────────────────────────────────────────────
+
     def _serialize_checkpoint(self, checkpoint: Checkpoint) -> str:
-        """Serialize checkpoint to JSON string."""
-        return json.dumps(checkpoint, default=str, ensure_ascii=False)
-    
+        """Serialize checkpoint using LangGraph serde (handles BaseMessage etc.)."""
+        type_str, data_bytes = self.serde.dumps_typed(checkpoint)
+        return json.dumps({"_type": type_str, "_data": data_bytes.decode("utf-8", errors="surrogateescape")}, ensure_ascii=False)
+
     def _deserialize_checkpoint(self, data: str) -> Checkpoint:
-        """Deserialize checkpoint from JSON string."""
-        return json.loads(data)
-    
+        """Deserialize checkpoint, handling both new serde format and legacy plain-JSON rows."""
+        parsed = json.loads(data)
+        if isinstance(parsed, dict) and "_type" in parsed and "_data" in parsed:
+            return self.serde.loads_typed((parsed["_type"], parsed["_data"].encode("utf-8", errors="surrogateescape")))
+        # Legacy row — return raw; _ensure_base_messages() in app.py handles reconstruction.
+        return parsed
+
     def _serialize_metadata(self, metadata: CheckpointMetadata) -> str:
         """Serialize metadata to JSON string."""
         return json.dumps(metadata, default=str, ensure_ascii=False)
-    
+
     def _deserialize_metadata(self, data: Optional[str]) -> CheckpointMetadata:
         """Deserialize metadata from JSON string."""
         if data:
