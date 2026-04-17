@@ -160,6 +160,7 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "is_free_form": query.is_free_form,
         "user_id": query.user_id,
         "chat_id": query.chat_id,
+        "chat_session_id": query.chat_session_id,
         "message_id": query.message_id,
         "function": query.function,
         "sub_function": query.sub_function,
@@ -360,6 +361,7 @@ async def chat_api(
         )
         current_state["messages"].append(HumanMessage(content=user_input))
         current_state["user_input"] = query.user_input
+        current_state["chat_session_id"] = chat_session_id   # always keep in sync
         current_state["function"] = query.function
         current_state["sub_function"] = query.sub_function
         current_state["source_url"] = query.source_url
@@ -378,6 +380,9 @@ async def chat_api(
         state = current_state
     else:
         state = await _build_initial_state(query)
+        # Ensure the computed chat_session_id (defaulted to "new" if absent) is stored
+        # so persist_node can save it to SQL for future edit/regenerate lookups.
+        state["chat_session_id"] = chat_session_id
 
     logger.debug("Existing messages: %s", state.get("messages"))
 

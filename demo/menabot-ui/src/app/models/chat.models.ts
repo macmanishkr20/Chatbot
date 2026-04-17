@@ -67,6 +67,8 @@ export interface Conversation {
   Id: number;
   UserId: string;
   Title: string;
+  /** Original LangGraph chat_session_id — used to restore thread for edit/regenerate. */
+  ChatSessionId?: string | null;
   ConversationType: string;
   CreatedAt: string;
   ModifiedAt: string;

@@ -44,6 +44,7 @@ def _build_app_query(state: RAGState) -> ApplicationChatQuery:
         is_free_form=state.get("is_free_form", False),
         user_id=state.get("user_id", ""),
         chat_id=state.get("chat_id"),
+        chat_session_id=state.get("chat_session_id"),
         message_id=state.get("message_id"),
         function=state.get("function", []),
         sub_function=state.get("sub_function", []),

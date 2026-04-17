@@ -24,6 +24,7 @@ class RAGState(TypedDict, total=False):
     is_free_form: bool
     user_id: str
     chat_id: str | None
+    chat_session_id: str | None   # LangGraph thread key — must round-trip to SQL for edit/regen
     message_id: str | None
     function: list[str]
     sub_function: list[str]

@@ -65,6 +65,7 @@ class SQLChatClient:
                         Id               INT IDENTITY(1,1) PRIMARY KEY,
                         UserId           NVARCHAR(256) NOT NULL,
                         Title            NVARCHAR(1000) NULL,
+                        ChatSessionId    NVARCHAR(256) NULL,
                         ChannelType      INT NOT NULL DEFAULT 0,
                         ConversationType NVARCHAR(50) NULL,
                         IsActive         BIT NOT NULL DEFAULT 1,
@@ -104,6 +105,13 @@ class SQLChatClient:
                         ALTER TABLE ChatMessages ADD SourcePrompt NVARCHAR(MAX) NULL
                     """
                 )
+                # Migration: add ChatSessionId to existing Conversations tables
+                cursor.execute(
+                    """
+                    IF COL_LENGTH('Conversations', 'ChatSessionId') IS NULL
+                        ALTER TABLE Conversations ADD ChatSessionId NVARCHAR(256) NULL
+                    """
+                )
                 conn.commit()
             finally:
                 cursor.close()
@@ -122,13 +130,14 @@ class SQLChatClient:
                 cursor.execute(
                     """
                     INSERT INTO Conversations
-                        (UserId, Title, ChannelType, ConversationType,
+                        (UserId, Title, ChatSessionId, ChannelType, ConversationType,
                          IsActive, IsDeleted, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy)
                     OUTPUT INSERTED.*
-                    VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
                     """,
                     query.user_id,
                     query.user_input,
+                    query.chat_session_id,
                     0,
                     str(query.conversation_type.value),
                     now,
@@ -342,7 +351,7 @@ class SQLChatClient:
             try:
                 cursor.execute(
                     """
-                    SELECT Id, UserId, Title, ConversationType, CreatedAt, ModifiedAt
+                    SELECT Id, UserId, Title, ChatSessionId, ConversationType, CreatedAt, ModifiedAt
                     FROM Conversations
                     WHERE UserId = ? AND IsDeleted = 0
                     ORDER BY ModifiedAt DESC

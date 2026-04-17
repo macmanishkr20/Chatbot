@@ -199,7 +199,10 @@ export class ChatService {
   loadConversation(conv: Conversation): void {
     this.activeChatId.set(conv.Id);
     this.conversationTitle.set(conv.Title);
-    this.activeSessionId.set(String(conv.Id));
+    // Restore the original LangGraph session ID so edit/regenerate find the right
+    // checkpoint.  Fall back to String(conv.Id) only for conversations created before
+    // the ChatSessionId column was added (legacy rows where it is null).
+    this.activeSessionId.set(conv.ChatSessionId || String(conv.Id));
     this.messages.set([]);
     this.userMsgCounter = 0;
 
