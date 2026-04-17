@@ -1,5 +1,6 @@
 """Azure SQL checkpoint store for LangGraph."""
 
+import base64
 import hashlib
 import json
 import threading
@@ -125,20 +126,30 @@ class AzureSQLCheckpointSaver(BaseCheckpointSaver):
     # ── Serialisation helpers ──────────────────────────────────────────────
     # We use LangGraph's built-in serde (JsonPlusSerializer) which correctly
     # round-trips LangChain BaseMessage objects and other Serializable types.
-    # The payload is stored as JSON with a "_type" / "_data" envelope so we
-    # can detect and migrate legacy rows (plain json.dumps with default=str).
+    # Raw serde bytes are stored as base64 text to avoid lone-surrogate issues
+    # with SQL Server NVARCHAR/TEXT encoding.
 
     def _serialize_checkpoint(self, checkpoint: Checkpoint) -> str:
         """Serialize checkpoint using LangGraph serde (handles BaseMessage etc.)."""
         type_str, data_bytes = self.serde.dumps_typed(checkpoint)
-        return json.dumps({"_type": type_str, "_data": data_bytes.decode("utf-8", errors="surrogateescape")}, ensure_ascii=False)
+        payload = {
+            "_type": type_str,
+            "_encoding": "base64",
+            "_data": base64.b64encode(data_bytes).decode("ascii"),
+        }
+        return json.dumps(payload, ensure_ascii=False)
 
     def _deserialize_checkpoint(self, data: str) -> Checkpoint:
         """Deserialize checkpoint, handling both new serde format and legacy plain-JSON rows."""
         parsed = json.loads(data)
         if isinstance(parsed, dict) and "_type" in parsed and "_data" in parsed:
-            # New format written by this version
-            return self.serde.loads_typed((parsed["_type"], parsed["_data"].encode("utf-8", errors="surrogateescape")))
+            encoding = parsed.get("_encoding")
+            if encoding == "base64":
+                data_bytes = base64.b64decode(parsed["_data"])
+            else:
+                # Backward compatibility for previously stored surrogateescape rows.
+                data_bytes = parsed["_data"].encode("utf-8", errors="surrogateescape")
+            return self.serde.loads_typed((parsed["_type"], data_bytes))
         # Legacy format: plain json.loads — BaseMessage objects were stringified
         # Return as-is; app.py's _ensure_base_messages() will reconstruct them.
         return parsed
@@ -514,13 +525,24 @@ class AsyncAzureSQLCheckpointSaver(BaseCheckpointSaver):
     def _serialize_checkpoint(self, checkpoint: Checkpoint) -> str:
         """Serialize checkpoint using LangGraph serde (handles BaseMessage etc.)."""
         type_str, data_bytes = self.serde.dumps_typed(checkpoint)
-        return json.dumps({"_type": type_str, "_data": data_bytes.decode("utf-8", errors="surrogateescape")}, ensure_ascii=False)
+        payload = {
+            "_type": type_str,
+            "_encoding": "base64",
+            "_data": base64.b64encode(data_bytes).decode("ascii"),
+        }
+        return json.dumps(payload, ensure_ascii=False)
 
     def _deserialize_checkpoint(self, data: str) -> Checkpoint:
         """Deserialize checkpoint, handling both new serde format and legacy plain-JSON rows."""
         parsed = json.loads(data)
         if isinstance(parsed, dict) and "_type" in parsed and "_data" in parsed:
-            return self.serde.loads_typed((parsed["_type"], parsed["_data"].encode("utf-8", errors="surrogateescape")))
+            encoding = parsed.get("_encoding")
+            if encoding == "base64":
+                data_bytes = base64.b64decode(parsed["_data"])
+            else:
+                # Backward compatibility for previously stored surrogateescape rows.
+                data_bytes = parsed["_data"].encode("utf-8", errors="surrogateescape")
+            return self.serde.loads_typed((parsed["_type"], data_bytes))
         # Legacy row — return raw; _ensure_base_messages() in app.py handles reconstruction.
         return parsed
 

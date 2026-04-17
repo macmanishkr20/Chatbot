@@ -172,20 +172,9 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
             continue
 
         if isinstance(m, dict):
-            # ── Format A: simple {"type": "human", "content": "..."} ──
             role = (m.get("type") or m.get("role") or "").lower()
             content = m.get("content", "")
             msg_id = m.get("id")
-
-            # ── Format B: LangChain serde {"lc":1,"type":"constructor","id":[...,"HumanMessage"],"kwargs":{...}} ──
-            if not role and m.get("lc") == 1 and m.get("type") == "constructor":
-                id_path = m.get("id", [])  # e.g. ["langchain","schema","messages","HumanMessage"]
-                class_name = id_path[-1] if id_path else ""
-                role = "human" if "Human" in class_name else "ai"
-                kwargs = m.get("kwargs", {})
-                content = kwargs.get("content", "")
-                msg_id = kwargs.get("id")
-
             msg = HumanMessage(content=content) if role in ("human", "user") else AIMessage(content=content)
             if msg_id:
                 try:
@@ -203,10 +192,7 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
             result.append(HumanMessage(content=content) if is_human else AIMessage(content=content))
             continue
 
-        logger.warning(
-            "_ensure_base_messages: unexpected type %s value=%r — skipping",
-            type(m).__name__, str(m)[:200],
-        )
+        logger.warning("_ensure_base_messages: unexpected type %s, skipping", type(m))
 
     return result
 
@@ -579,47 +565,70 @@ async def edit_message(
         logger.error("edit: failed to load checkpoint: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load conversation state")
 
-    logger.info(
-        "edit: thread_id=%s checkpoint_found=%s state_keys=%s raw_msg_count=%s raw_msg_types=%s",
-        thread_id,
-        checkpoint is not None,
-        list(current_state.keys()) if current_state else [],
-        len(current_state.get("messages", [])) if current_state else 0,
-        [type(m).__name__ for m in current_state.get("messages", [])] if current_state else [],
-    )
+    def _build_fresh_state_from_edit() -> dict:
+        """Treat edit payload as a fresh prompt when no checkpoint history exists."""
+        return {
+            "messages": [HumanMessage(content=new_input)],
+            "input_type": "ask",
+            "user_input": new_input,
+            "is_free_form": body.is_free_form,
+            "user_id": body.user_id,
+            "chat_id": None,
+            "chat_session_id": body.chat_session_id,
+            "message_id": None,
+            "function": body.function,
+            "sub_function": body.sub_function,
+            "source_url": body.source_url,
+            "start_date": body.start_date,
+            "end_date": body.end_date,
+            "preferred_language": body.preferred_language,
+            # Ensure transient fields are reset just like a normal graph entry.
+            "events": [],
+            "error_info": None,
+            "ai_content": None,
+            "prompt_used": None,
+            "response": None,
+            "suggestive_actions": None,
+            "conversation_title": None,
+            "citation_map": None,
+            "is_ambiguous": False,
+            "pending_ambiguous_query": None,
+        }
 
     if not current_state or not current_state.get("messages"):
-        raise HTTPException(status_code=404, detail="No conversation state found")
+        logger.warning(
+            "edit: no checkpoint messages for thread_id=%s; treating edit as new turn",
+            thread_id,
+        )
+        return StreamingResponse(
+            _stream_graph(_build_fresh_state_from_edit(), config, thread_id),
+            media_type="text/event-stream",
+        )
 
     # Ensure messages are proper BaseMessage objects (handles legacy checkpoints
     # that were serialised with default=str, coming back as repr strings or dicts)
     messages = _ensure_base_messages(current_state["messages"])
 
-    logger.info(
-        "edit: after _ensure_base_messages count=%s types=%s",
-        len(messages),
-        [type(m).__name__ for m in messages],
-    )
+    # Find the user messages to determine which one to edit
+    user_msg_positions = [
+        i for i, m in enumerate(messages) if isinstance(m, HumanMessage)
+    ]
 
-    # Identify user-message positions — use both isinstance and .type attribute
-    # for maximum compatibility across LangChain versions.
-    def _is_human(m: BaseMessage) -> bool:
-        if isinstance(m, HumanMessage):
-            return True
-        return getattr(m, "type", None) in ("human", "user")
-
-    user_msg_positions = [i for i, m in enumerate(messages) if _is_human(m)]
-
-    logger.info("edit: user_msg_positions=%s requested_index=%s", user_msg_positions, body.message_index)
+    if not user_msg_positions:
+        logger.warning(
+            "edit: checkpoint has no user messages for thread_id=%s; treating edit as new turn",
+            thread_id,
+        )
+        return StreamingResponse(
+            _stream_graph(_build_fresh_state_from_edit(), config, thread_id),
+            media_type="text/event-stream",
+        )
 
     if body.message_index < 0 or body.message_index >= len(user_msg_positions):
         raise HTTPException(
             status_code=400,
-            detail=(
-                f"message_index {body.message_index} out of range "
-                f"(conversation has {len(user_msg_positions)} user messages). "
-                f"Message types in checkpoint: {[type(m).__name__ for m in messages]}"
-            ),
+            detail=f"message_index {body.message_index} out of range "
+                   f"(conversation has {len(user_msg_positions)} user messages)",
         )
 
     # The absolute position in the messages list of the message being edited
