@@ -14,7 +14,7 @@
 
     @if (chat.isStreaming()) {
       <button class="send-btn cancel-btn" title="Stop generating" (click)="cancelStream()">
-        <span class="stop-icon">&#9632;</span>
+        <span class="stop-icon"><span class="mat-icon filled">stop_circle</span></span>
       </button>
     } @else {
       <button
@@ -23,7 +23,7 @@
         title="Send message"
         (click)="send()"
       >
-        <span class="send-icon">&#10148;</span>
+        <span class="send-icon"><span class="mat-icon filled">arrow_upward</span></span>
       </button>
     }
   </div>

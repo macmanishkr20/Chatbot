@@ -1,0 +1,40 @@
+<div class="login-page">
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="login-card">
+    <div class="card-header">
+      <div class="logo-icon">EY</div>
+      <h1 class="card-title">MENA Assistant</h1>
+      <p class="card-subtitle">Sign in with your EY email to continue</p>
+    </div>
+
+    <form class="login-form" (ngSubmit)="onSubmit()">
+      <div class="form-group">
+        <label class="form-label" for="email">Email address</label>
+        <input
+          id="email"
+          type="email"
+          class="form-input"
+          placeholder="name@gds.ey.com"
+          [ngModel]="email()"
+          (ngModelChange)="email.set($event); error.set('')"
+          name="email"
+          autocomplete="email"
+          autofocus
+        />
+        @if (error()) {
+          <div class="form-error">{{ error() }}</div>
+        }
+      </div>
+
+      <button type="submit" class="login-btn">
+        <span>Sign in</span>
+        <span class="mat-icon" style="font-size: 18px;">arrow_forward</span>
+      </button>
+    </form>
+
+    <p class="card-footer">Internal use only &mdash; EY MENA region</p>
+  </div>
+</div>

@@ -1,10 +1,17 @@
+:host {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}
+
 .chat-window {
   flex: 1;
   display: flex;
   flex-direction: column;
   height: 100%;
   min-width: 0;
-  background: #f0f2f5;
+  background: var(--bg-main, #f0f2f5);
 }
 
 // ── Header ──
@@ -12,10 +19,26 @@
 .chat-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   padding: 12px 24px;
-  background: #fff;
-  border-bottom: 1px solid #e5e5e5;
+  background: var(--bg-header, #fff);
+  border-bottom: 1px solid var(--border-header, #e5e5e5);
+  flex-shrink: 0;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   flex-shrink: 0;
 }
 
@@ -42,11 +65,53 @@
 .chat-title {
   font-size: 16px;
   font-weight: 600;
-  color: #1a1a1a;
+  color: var(--text-primary, #1a1a1a);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   margin: 0;
+}
+
+.header-icon-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary, #666);
+  transition: all 0.15s;
+
+  .mat-icon {
+    font-size: 20px;
+  }
+
+  &:hover {
+    background: var(--hover-bg, #f0f0f0);
+    color: var(--text-primary, #333);
+  }
+}
+
+.logout-btn:hover {
+  color: #ef4444;
+}
+
+.user-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #ffe600;
+  color: #18181b;
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+  flex-shrink: 0;
 }
 
 // ── Messages ──
@@ -55,6 +120,26 @@
   flex: 1;
   overflow-y: auto;
   scroll-behavior: smooth;
+  position: relative;
+  background-color: var(--bg-chat, #eef1f6);
+
+  // Soft ambient gradient blobs
+  background-image:
+    radial-gradient(ellipse 50% 50% at 5% 10%, rgba(45, 107, 207, 0.12) 0%, transparent 100%),
+    radial-gradient(ellipse 45% 40% at 90% 70%, rgba(255, 230, 0, 0.13) 0%, transparent 100%),
+    radial-gradient(ellipse 40% 35% at 50% 95%, rgba(45, 107, 207, 0.08) 0%, transparent 100%),
+    radial-gradient(circle at 85% 5%, rgba(255, 230, 0, 0.09) 0%, transparent 50%);
+
+  // Dot grid overlay
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(0, 0, 0, 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+    pointer-events: none;
+    z-index: 0;
+  }
 
   &::-webkit-scrollbar {
     width: 6px;
@@ -66,38 +151,148 @@
 }
 
 .messages-container {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 16px 24px;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  gap: 0.5rem;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 16px 24px 1rem;
+  position: relative;
+  z-index: 1;
 }
 
 // ── Empty State ──
 
 .empty-state {
   text-align: center;
-  padding: 80px 20px;
+  padding: 60px 20px 40px;
   color: #888;
-
-  .empty-icon {
-    font-size: 48px;
-    margin-bottom: 16px;
-  }
+  max-width: 680px;
+  margin: 0 auto;
 
   h2 {
-    font-size: 22px;
+    font-size: 26px;
     font-weight: 700;
-    color: #1a1a1a;
+    color: var(--text-primary, #1a1a1a);
     margin: 0 0 8px;
   }
 
   p {
     font-size: 14px;
-    color: #888;
-    margin: 0;
+    color: var(--text-muted, #888);
+    margin: 0 0 36px;
   }
+}
+
+.welcome-logo {
+  margin-bottom: 18px;
+}
+
+.welcome-icon {
+  font-size: 44px;
+  background: linear-gradient(135deg, #2d6bcf 0%, #ffe600 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+// ── Starter Prompt Cards ──
+
+.starter-prompts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  text-align: left;
+}
+
+.prompt-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--bg-assistant-msg, rgba(255, 255, 255, 0.85));
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border-msg, #e5e7eb);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+  font-family: inherit;
+
+  &:hover {
+    background: #fff;
+    border-color: #2d6bcf;
+    box-shadow: 0 4px 16px rgba(45, 107, 207, 0.1);
+    transform: translateY(-1px);
+
+    .prompt-card-title {
+      color: #1a1a1a;
+    }
+
+    .prompt-card-desc {
+      color: #555;
+    }
+
+    .prompt-card-arrow {
+      opacity: 1;
+      color: #2d6bcf;
+      transform: translateX(2px);
+    }
+
+    .prompt-card-icon {
+      background: #2d6bcf;
+      color: #fff;
+    }
+  }
+}
+
+.prompt-card-icon {
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f0f4ff;
+  color: #2d6bcf;
+  transition: all 0.2s ease;
+}
+
+.prompt-card-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.prompt-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #1a1a1a);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.prompt-card-desc {
+  font-size: 12px;
+  color: #888;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.prompt-card-arrow {
+  font-size: 16px;
+  color: #ccc;
+  opacity: 0;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 // ── Error Banner ──

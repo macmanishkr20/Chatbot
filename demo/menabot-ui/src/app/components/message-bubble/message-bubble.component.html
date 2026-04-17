@@ -2,7 +2,7 @@
   <!-- Avatar -->
   <div class="avatar">
     @if (message().role === 'user') {
-      <span class="avatar-icon user-avatar">U</span>
+      <span class="avatar-icon user-avatar">{{ auth.userInitial() }}</span>
     } @else {
       <span class="avatar-icon bot-avatar">EY</span>
     }
@@ -27,7 +27,7 @@
       } @else {
         <div class="user-content">{{ message().content }}</div>
         <div class="message-actions user-actions">
-          <button class="action-btn" title="Edit message" (click)="startEdit()">&#9998;</button>
+          <button class="action-btn" title="Edit message" (click)="startEdit()"><span class="mat-icon filled">edit_square</span></button>
         </div>
       }
     }
@@ -44,7 +44,7 @@
 
       <!-- Content -->
       @if (message().content) {
-        <div class="assistant-content" [innerHTML]="message().content | markdown"></div>
+        <div class="assistant-content" [innerHTML]="displayContent | markdown"></div>
       }
 
       <!-- Streaming indicator -->
@@ -56,14 +56,46 @@
         </div>
       }
 
+      <!-- Citations Collapsible -->
+      @if (isBot && hasCitations && !message().isStreaming) {
+        <div class="citations-section">
+          <button class="citations-header" (click)="toggleCitations()">
+            <div class="citations-header-left">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+              </svg>
+              <span>Citations</span>
+            </div>
+            <svg
+              class="citations-chevron"
+              [class.expanded]="citationsExpanded()"
+              width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+            >
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          @if (citationsExpanded()) {
+            <div class="citations-body">
+              @for (cite of citations; track cite.url) {
+                <a class="citation-link" [href]="cite.url" target="_blank" rel="noopener noreferrer">
+                  @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }{{ cite.url }}
+                </a>
+              }
+            </div>
+          }
+        </div>
+      }
+
       <!-- Message actions (copy, feedback, regenerate) -->
       @if (!message().isStreaming) {
         <div class="message-actions assistant-actions">
-          <button class="action-btn" title="Copy" (click)="copyContent()">&#128203;</button>
-          <button class="action-btn" title="Helpful" (click)="thumbsUp()">&#128077;</button>
-          <button class="action-btn" title="Not helpful" (click)="thumbsDown()">&#128078;</button>
+          <button class="action-btn" title="Copy" (click)="copyContent()"><span class="mat-icon">content_copy</span></button>
+          <button class="action-btn" title="Helpful" (click)="thumbsUp()" [class.active-up]="feedbackGiven() === 'up'" [disabled]="!!feedbackGiven()"><span class="mat-icon filled">thumb_up</span></button>
+          <button class="action-btn" title="Not helpful" (click)="thumbsDown()" [class.active-down]="feedbackGiven() === 'down'" [disabled]="!!feedbackGiven()"><span class="mat-icon filled">thumb_down</span></button>
           @if (isLastAssistant()) {
-            <button class="action-btn" title="Regenerate" (click)="regenerate()">&#8635;</button>
+            <button class="action-btn" title="Regenerate" (click)="regenerate()"><span class="mat-icon">autorenew</span></button>
           }
         </div>
       }
@@ -73,6 +105,15 @@
         <app-suggestive-actions
           [actions]="message().suggestiveActions!"
           (actionClicked)="actionClicked.emit($event)"
+        />
+      }
+      <!-- Feedback Modal -->
+      @if (showFeedback()) {
+        <app-feedback-modal
+          [messageId]="message().messageId || message().id"
+          [rating]="feedbackRating()"
+          (submitted)="onFeedbackSubmitted()"
+          (closed)="onFeedbackClosed()"
         />
       }
     }

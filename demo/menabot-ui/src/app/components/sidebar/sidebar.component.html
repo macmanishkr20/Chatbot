@@ -5,54 +5,102 @@
       <span class="logo-text">MENA Assistant</span>
     </div>
     <button class="new-chat-btn" (click)="newChat()">
-      <span>+</span> New Chat
+      <span class="mat-icon" style="font-size: 18px;">add</span>
+      New Chat
     </button>
   </div>
 
-  <div class="conv-list">
-    @if (chat.conversationsLoading()) {
-      <div class="loading">Loading conversations...</div>
-    }
+  @if (chat.conversationsLoading()) {
+    <div class="loading">Loading conversations...</div>
+  }
 
-    @for (conv of chat.conversations(); track conv.Id) {
-      <div
-        class="conv-item"
-        [class.active]="isActive(conv)"
-        (click)="selectConversation(conv)"
-      >
-        @if (renamingId() === conv.Id) {
-          <div class="rename-form" (click)="$event.stopPropagation()">
-            <input
-              type="text"
-              [value]="renameText()"
-              (input)="renameText.set($any($event.target).value)"
-              (keydown.enter)="submitRename(conv)"
-              (keydown.escape)="cancelRename()"
-              autofocus
-            />
-            <div class="rename-actions">
-              <button class="btn-ok" (click)="submitRename(conv)">&#10003;</button>
-              <button class="btn-cancel" (click)="cancelRename()">&#10005;</button>
-            </div>
-          </div>
-        } @else {
-          <div class="conv-title">{{ conv.Title || 'Untitled' }}</div>
-          <div class="conv-date">{{ conv.ModifiedAt | date:'MMM d, y' }}</div>
-          <div class="conv-actions">
-            @if (confirmDeleteId() === conv.Id) {
-              <button class="btn-delete-confirm" (click)="doDelete(conv, $event)">Delete?</button>
-              <button class="btn-cancel-sm" (click)="cancelDelete($event)">No</button>
-            } @else {
-              <button class="btn-action" title="Rename" (click)="startRename(conv, $event)">&#9998;</button>
-              <button class="btn-action btn-delete" title="Delete" (click)="confirmDelete(conv, $event)">&#128465;</button>
-            }
-          </div>
+  <!-- ── Pinned Section ── -->
+  @if (pinnedConversations().length > 0) {
+    <div class="section">
+      <div class="section-header">
+        <div class="section-header-left">
+          <span class="mat-icon filled section-icon">keep</span>
+          <span>Pinned</span>
+        </div>
+      </div>
+      <div class="conv-list pinned-list">
+        @for (conv of pinnedConversations(); track conv.Id) {
+          <ng-container *ngTemplateOutlet="convItem; context: { $implicit: conv }"></ng-container>
         }
       </div>
-    } @empty {
-      @if (!chat.conversationsLoading()) {
-        <div class="empty-state">No conversations yet</div>
-      }
+    </div>
+  }
+
+  <!-- ── Conversations Section ── -->
+  <div class="section conversations-section">
+    <button class="section-header" (click)="toggleConversations()">
+      <div class="section-header-left">
+        <span class="mat-icon section-icon">forum</span>
+        <span>Conversations</span>
+      </div>
+      <span
+        class="mat-icon section-chevron"
+        [class.expanded]="conversationsExpanded()"
+      >expand_more</span>
+    </button>
+
+    @if (conversationsExpanded()) {
+      <div class="conv-list">
+        @for (conv of unpinnedConversations(); track conv.Id) {
+          <ng-container *ngTemplateOutlet="convItem; context: { $implicit: conv }"></ng-container>
+        }
+        @empty {
+          @if (!chat.conversationsLoading()) {
+            <div class="empty-state">No conversations yet</div>
+          }
+        }
+      </div>
     }
   </div>
 </aside>
+
+<!-- ── Reusable conversation item template ── -->
+<ng-template #convItem let-conv>
+  <div
+    class="conv-item"
+    [class.active]="isActive(conv)"
+    (click)="selectConversation(conv)"
+  >
+    @if (renamingId() === conv.Id) {
+      <div class="rename-form" (click)="$event.stopPropagation()">
+        <input
+          type="text"
+          [value]="renameText()"
+          (input)="renameText.set($any($event.target).value)"
+          (keydown.enter)="submitRename(conv)"
+          (keydown.escape)="cancelRename()"
+          autofocus
+        />
+        <div class="rename-actions">
+          <button class="btn-ok" (click)="submitRename(conv)"><span class="mat-icon">check</span></button>
+          <button class="btn-cancel" (click)="cancelRename()"><span class="mat-icon">close</span></button>
+        </div>
+      </div>
+    } @else {
+      <div class="conv-title">{{ conv.Title || 'Untitled' }}</div>
+      <div class="conv-date">{{ conv.ModifiedAt | date:'MMM d, y' }}</div>
+      <div class="conv-actions">
+        @if (confirmDeleteId() === conv.Id) {
+          <button class="btn-delete-confirm" (click)="doDelete(conv, $event)">Delete?</button>
+          <button class="btn-cancel-sm" (click)="cancelDelete($event)">No</button>
+        } @else {
+          <button
+            class="btn-action btn-pin"
+            [class.pinned]="isPinned(conv.Id)"
+            [title]="isPinned(conv.Id) ? 'Unpin' : 'Pin'"
+            (click)="togglePin(conv.Id, $event)"
+          >
+            <span class="mat-icon filled">{{ isPinned(conv.Id) ? 'keep_off' : 'keep' }}</span>
+          </button>
+          <button class="btn-action" title="Rename" (click)="startRename(conv, $event)"><span class="mat-icon filled">edit_square</span></button>
+          <button class="btn-action btn-delete" title="Delete" (click)="confirmDelete(conv, $event)"><span class="mat-icon filled">delete</span></button>
+        }
+      </div>
+    }
+  </div>
+</ng-template>

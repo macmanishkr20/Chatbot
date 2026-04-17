@@ -1,7 +1,9 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
 import { ApiService } from './api.service';
+import { AuthService } from './auth.service';
 import {
   ChatMessage,
+  Citation,
   Conversation,
   FinalEvent,
   SSEEvent,
@@ -21,6 +23,7 @@ import {
 @Injectable({ providedIn: 'root' })
 export class ChatService {
   private readonly api = inject(ApiService);
+  private readonly auth = inject(AuthService);
 
   // ── Reactive State (Signals) ──
 
@@ -45,8 +48,8 @@ export class ChatService {
   /** Whether the sidebar is visible (mobile toggle). */
   readonly sidebarOpen = signal(true);
 
-  /** Current user ID. */
-  readonly userId = signal('demo.user@gds.ey.com');
+  /** Current user ID derived from auth. */
+  readonly userId = computed(() => this.auth.userEmail() || 'demo.user@gds.ey.com');
 
   /** Loading state for conversation list. */
   readonly conversationsLoading = signal(false);
@@ -100,6 +103,7 @@ export class ChatService {
       is_free_form: true,
       user_id: this.userId(),
       chat_session_id: this.activeSessionId(),
+      chat_id: this.activeChatId() ? String(this.activeChatId()) : undefined,
       function: [],
       sub_function: [],
       source_url: [],
@@ -223,6 +227,8 @@ export class ChatService {
               id: this.generateId(),
               role: 'assistant',
               content,
+              messageId: stored.MessageId || undefined,
+              citations: this.parseCitations(content),
               timestamp: new Date(stored.CreatedAt),
             });
           }
@@ -305,6 +311,7 @@ export class ChatService {
       is_free_form: boolean;
       user_id: string;
       chat_session_id: string | null;
+      chat_id?: string;
       function: string[];
       sub_function: string[];
       source_url: string[];
@@ -417,18 +424,26 @@ export class ChatService {
         if (final.chat_id) this.activeChatId.set(final.chat_id);
         if (final.conversation_title) this.conversationTitle.set(final.conversation_title);
 
+        // Parse suggestive actions — backend may send Python repr strings
+        const parsedActions = this.parseSuggestiveActions(final.suggestive_actions);
+
         this.messages.update(msgs =>
           msgs.map(m => {
             if (m.id !== assistantId) return m;
             // Mark all remaining steps as done
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
+            // If no content was streamed, use ai_content from final event
+            const content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : m.content);
+            const citations = this.parseCitations(content);
             return {
               ...m,
+              content,
               thinkingSteps: steps,
               chatId: final.chat_id,
               messageId: final.message_id,
-              suggestiveActions: final.suggestive_actions,
+              suggestiveActions: parsedActions,
               conversationTitle: final.conversation_title,
+              citations,
             };
           })
         );
@@ -448,5 +463,62 @@ export class ChatService {
 
   private generateSessionId(): string {
     return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  /**
+   * Parse suggestive actions from backend.
+   * Backend may send Python repr strings like:
+   *   { "short_title": "short_title='AWS information' description='What is AWS?'" }
+   * We extract the actual short_title and description values.
+   */
+  private parseSuggestiveActions(actions?: SuggestiveAction[]): SuggestiveAction[] | undefined {
+    if (!actions || actions.length === 0) return actions;
+
+    return actions.map(action => {
+      let shortTitle = action.short_title ?? '';
+      let description = action.description ?? '';
+
+      // Check if short_title contains Python repr format: "short_title='...' description='...'"
+      const reprMatch = shortTitle.match(/^short_title='([^']*)'\s*description='([^']*)'$/);
+      if (reprMatch) {
+        shortTitle = reprMatch[1];
+        description = reprMatch[2];
+      }
+
+      return { short_title: shortTitle, description };
+    });
+  }
+
+  /**
+   * Extract citation URLs from the response content.
+   * Keeps grouped references together exactly as the backend sends them:
+   *   [1][2][3] https://...  →  { indexes: [1,2,3], url: "https://..." }
+   *   [1] https://...        →  { indexes: [1], url: "https://..." }
+   */
+  private parseCitations(content: string): Citation[] {
+    const citations: Citation[] = [];
+
+    // Match one or more [number] groups followed by optional ":" then a URL
+    const linePattern = /((?:\[\d+\])+):?\s*(https?:\/\/[^\s)<>]+)/g;
+    let lineMatch: RegExpExecArray | null;
+
+    while ((lineMatch = linePattern.exec(content)) !== null) {
+      const bracketsPart = lineMatch[1]; // e.g. "[1][2][3]"
+      const url = lineMatch[2];
+
+      // Extract every [number] from the brackets portion
+      const indexes: number[] = [];
+      const numPattern = /\[(\d+)\]/g;
+      let numMatch: RegExpExecArray | null;
+      while ((numMatch = numPattern.exec(bracketsPart)) !== null) {
+        indexes.push(parseInt(numMatch[1], 10));
+      }
+
+      if (indexes.length > 0 && url) {
+        citations.push({ indexes, url });
+      }
+    }
+
+    return citations;
   }
 }

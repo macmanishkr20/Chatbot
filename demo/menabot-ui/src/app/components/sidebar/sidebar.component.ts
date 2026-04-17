@@ -1,8 +1,10 @@
-import { Component, inject, OnInit, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, inject, OnInit, signal, computed, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
 import { Conversation } from '../../models/chat.models';
+
+const PINNED_KEY = 'menabot_pinned_conversations';
 
 @Component({
   selector: 'app-sidebar',
@@ -18,8 +20,27 @@ export class SidebarComponent implements OnInit {
   renameText = signal('');
   confirmDeleteId = signal<number | null>(null);
 
+  /** Collapsible state for Conversations section */
+  conversationsExpanded = signal(true);
+
+  /** Set of pinned conversation IDs (persisted in localStorage) */
+  pinnedIds = signal<Set<number>>(new Set());
+
+  /** Pinned conversations, filtered from full list */
+  pinnedConversations = computed(() => {
+    const ids = this.pinnedIds();
+    return this.chat.conversations().filter(c => ids.has(c.Id));
+  });
+
+  /** Unpinned conversations */
+  unpinnedConversations = computed(() => {
+    const ids = this.pinnedIds();
+    return this.chat.conversations().filter(c => !ids.has(c.Id));
+  });
+
   ngOnInit(): void {
     this.chat.loadConversations();
+    this.loadPinnedIds();
   }
 
   newChat(): void {
@@ -29,6 +50,30 @@ export class SidebarComponent implements OnInit {
   selectConversation(conv: Conversation): void {
     this.chat.loadConversation(conv);
   }
+
+  // ── Pin functionality ──
+
+  togglePin(convId: number, event: Event): void {
+    event.stopPropagation();
+    const ids = new Set(this.pinnedIds());
+    if (ids.has(convId)) {
+      ids.delete(convId);
+    } else {
+      ids.add(convId);
+    }
+    this.pinnedIds.set(ids);
+    this.savePinnedIds(ids);
+  }
+
+  isPinned(convId: number): boolean {
+    return this.pinnedIds().has(convId);
+  }
+
+  toggleConversations(): void {
+    this.conversationsExpanded.update(v => !v);
+  }
+
+  // ── Rename / Delete ──
 
   startRename(conv: Conversation, event: Event): void {
     event.stopPropagation();
@@ -57,6 +102,12 @@ export class SidebarComponent implements OnInit {
     event.stopPropagation();
     this.chat.deleteConversation(conv);
     this.confirmDeleteId.set(null);
+    // Also unpin if it was pinned
+    const ids = new Set(this.pinnedIds());
+    if (ids.delete(conv.Id)) {
+      this.pinnedIds.set(ids);
+      this.savePinnedIds(ids);
+    }
   }
 
   cancelDelete(event: Event): void {
@@ -66,5 +117,21 @@ export class SidebarComponent implements OnInit {
 
   isActive(conv: Conversation): boolean {
     return this.chat.activeChatId() === conv.Id;
+  }
+
+  // ── localStorage persistence ──
+
+  private loadPinnedIds(): void {
+    try {
+      const raw = localStorage.getItem(PINNED_KEY);
+      if (raw) {
+        const arr = JSON.parse(raw) as number[];
+        this.pinnedIds.set(new Set(arr));
+      }
+    } catch { /* ignore corrupt data */ }
+  }
+
+  private savePinnedIds(ids: Set<number>): void {
+    localStorage.setItem(PINNED_KEY, JSON.stringify([...ids]));
   }
 }

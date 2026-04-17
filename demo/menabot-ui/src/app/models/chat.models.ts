@@ -29,6 +29,12 @@ export interface SuggestiveAction {
   description?: string;
 }
 
+/** Parsed citation entry. */
+export interface Citation {
+  indexes: number[];
+  url: string;
+}
+
 /** Chain-of-thought step displayed in the thinking panel. */
 export interface ThinkingStep {
   node: string;
@@ -53,6 +59,7 @@ export interface ChatMessage {
   isStreaming?: boolean;
   isEditing?: boolean;
   editText?: string;
+  citations?: Citation[];
 }
 
 /** Conversation session from /conversations endpoint. */
@@ -132,4 +139,6 @@ export interface FeedbackRequest {
   message_id: string;
   rating: number;
   comments?: string;
+  created_by?: string;
+  modified_by?: string;
 }

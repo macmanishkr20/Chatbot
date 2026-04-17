@@ -14,14 +14,25 @@ export class ThinkingPanelComponent {
   /** The list of thinking steps to display. */
   steps = input.required<ThinkingStep[]>();
 
-  /** Whether the panel is collapsed. */
+  /** Whether the panel starts collapsed. */
   collapsed = input(false);
 
-  /** Emitted when the user toggles collapsed state. */
-  isCollapsed = false;
+  /** Local override — null means "use the input". */
+  private localCollapsed: boolean | null = null;
+
+  /** Effective collapsed state. */
+  get isCollapsed(): boolean {
+    return this.localCollapsed !== null ? this.localCollapsed : this.collapsed();
+  }
+
+  /** Whether all steps are completed. */
+  get allDone(): boolean {
+    const s = this.steps();
+    return s.length > 0 && s.every(step => step.state === 'done');
+  }
 
   toggle(): void {
-    this.isCollapsed = !this.isCollapsed;
+    this.localCollapsed = !this.isCollapsed;
   }
 
   trackByNode(_: number, step: ThinkingStep): string {

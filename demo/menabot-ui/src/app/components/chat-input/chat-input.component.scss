@@ -1,14 +1,14 @@
 .chat-input-bar {
   padding: 12px 24px 16px;
-  background: #f0f2f5;
+  background: var(--bg-chat, #f0f2f5);
 }
 
 .input-wrapper {
   display: flex;
   align-items: flex-end;
   gap: 8px;
-  background: #fff;
-  border: 1px solid #d0d5dd;
+  background: var(--bg-input, #fff);
+  border: 1px solid var(--border-msg, #d0d5dd);
   border-radius: 16px;
   padding: 8px 8px 8px 16px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
@@ -28,7 +28,7 @@
   font-family: inherit;
   font-size: 14px;
   line-height: 1.5;
-  color: #1a1a1a;
+  color: var(--text-primary, #1a1a1a);
   background: transparent;
   min-height: 24px;
   max-height: 200px;
@@ -48,8 +48,8 @@
   width: 36px;
   height: 36px;
   border: none;
-  border-radius: 10px;
-  background: #2d6bcf;
+  border-radius: 50%;
+  background: #1a1a1a;
   color: #fff;
   cursor: pointer;
   display: flex;
@@ -59,15 +59,16 @@
   transition: background 0.15s, transform 0.1s;
 
   &:hover:not(:disabled) {
-    background: #245bb5;
+    background: #333;
   }
 
   &:active:not(:disabled) {
-    transform: scale(0.95);
+    transform: scale(0.92);
   }
 
   &:disabled {
-    background: #d0d5dd;
+    background: #e0e0e0;
+    color: #aaa;
     cursor: not-allowed;
   }
 }
@@ -80,28 +81,28 @@
   }
 }
 
-.send-icon {
-  font-size: 16px;
+.send-icon, .stop-icon {
   line-height: 1;
-}
 
-.stop-icon {
-  font-size: 14px;
-  line-height: 1;
+  .mat-icon {
+    font-size: 20px;
+  }
 }
 
 .input-hint {
   text-align: center;
   font-size: 11px;
-  color: #aaa;
+  color: var(--text-muted, #aaa);
   margin-top: 6px;
 
   kbd {
-    background: #e5e5e5;
+    background: var(--kbd-bg, #e5e5e5);
     padding: 1px 5px;
     border-radius: 3px;
     font-size: 10px;
     font-family: inherit;
-    border: 1px solid #d0d5dd;
+    color: var(--kbd-color, inherit);
+    border: 1px solid var(--kbd-border, #d0d5dd);
+    box-shadow: var(--kbd-glow, none);
   }
 }

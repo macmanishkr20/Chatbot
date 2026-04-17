@@ -1,10 +1,23 @@
 <div class="chat-window">
   <!-- Header -->
   <div class="chat-header">
-    <button class="toggle-sidebar-btn" (click)="toggleSidebar()" title="Toggle sidebar">
-      &#9776;
-    </button>
-    <h1 class="chat-title">{{ headerTitle() }}</h1>
+    <div class="header-left">
+      <button class="toggle-sidebar-btn" (click)="toggleSidebar()" title="Toggle sidebar">
+        &#9776;
+      </button>
+      <h1 class="chat-title">{{ headerTitle() }}</h1>
+    </div>
+    <div class="header-right">
+      <button class="header-icon-btn" (click)="toggleTheme()" [title]="theme.isDark() ? 'Light mode' : 'Dark mode'">
+        <span class="mat-icon">{{ theme.isDark() ? 'light_mode' : 'dark_mode' }}</span>
+      </button>
+      <div class="user-avatar" [title]="auth.displayName()">
+        {{ auth.userInitial() }}
+      </div>
+      <button class="header-icon-btn logout-btn" (click)="logout()" title="Sign out">
+        <span class="mat-icon">logout</span>
+      </button>
+    </div>
   </div>
 
   <!-- Messages Area -->
@@ -12,9 +25,49 @@
     <div class="messages-container">
       @if (showEmpty()) {
         <div class="empty-state">
-          <div class="empty-icon">&#128172;</div>
-          <h2>How can I help you today?</h2>
-          <p>Ask me anything about MENA region data, reports, and analysis.</p>
+          <div class="welcome-logo">
+            <span class="mat-icon welcome-icon">auto_awesome</span>
+          </div>
+          <h2>What can I help with?</h2>
+          <p>Your MENA region AI assistant for data, reports, and insights.</p>
+
+          <div class="starter-prompts">
+            <button class="prompt-card" (click)="sendStarter('What are the latest Finance function policies?')">
+              <span class="mat-icon prompt-card-icon">account_balance</span>
+              <div class="prompt-card-text">
+                <span class="prompt-card-title">Finance policies</span>
+                <span class="prompt-card-desc">Explore the latest finance function policies and procedures</span>
+              </div>
+              <span class="mat-icon prompt-card-arrow">arrow_forward</span>
+            </button>
+
+            <button class="prompt-card" (click)="sendStarter('What are the Talent function guidelines for employees?')">
+              <span class="mat-icon prompt-card-icon">groups</span>
+              <div class="prompt-card-text">
+                <span class="prompt-card-title">Talent guidelines</span>
+                <span class="prompt-card-desc">Learn about talent function guidelines and employee resources</span>
+              </div>
+              <span class="mat-icon prompt-card-arrow">arrow_forward</span>
+            </button>
+
+            <button class="prompt-card" (click)="sendStarter('What information is available about the AWS function?')">
+              <span class="mat-icon prompt-card-icon">cloud</span>
+              <div class="prompt-card-text">
+                <span class="prompt-card-title">AWS information</span>
+                <span class="prompt-card-desc">Discover details about AWS functions and cloud services</span>
+              </div>
+              <span class="mat-icon prompt-card-arrow">arrow_forward</span>
+            </button>
+
+            <button class="prompt-card" (click)="sendStarter('Summarize the latest MENA region reports')">
+              <span class="mat-icon prompt-card-icon">analytics</span>
+              <div class="prompt-card-text">
+                <span class="prompt-card-title">MENA reports</span>
+                <span class="prompt-card-desc">Get a summary of the latest regional data and analysis</span>
+              </div>
+              <span class="mat-icon prompt-card-arrow">arrow_forward</span>
+            </button>
+          </div>
         </div>
       }
 
@@ -29,8 +82,8 @@
       <!-- Error -->
       @if (chat.error()) {
         <div class="error-banner">
-          <span>&#9888; {{ chat.error() }}</span>
-          <button class="dismiss-btn" (click)="chat.error.set(null)">&#10005;</button>
+          <span><span class="mat-icon" style="font-size:14px;vertical-align:middle">warning</span> {{ chat.error() }}</span>
+          <button class="dismiss-btn" (click)="chat.error.set(null)"><span class="mat-icon" style="font-size:14px">close</span></button>
         </div>
       }
     </div>

@@ -1,0 +1,27 @@
+<div class="modal-overlay" (click)="onOverlayClick($event)">
+  <div class="modal-card">
+    <h2 class="modal-title">{{ title }}</h2>
+
+    <textarea
+      class="modal-textarea"
+      placeholder="Share your thoughts (optional)..."
+      [ngModel]="comments()"
+      (ngModelChange)="comments.set($event)"
+      rows="4"
+    ></textarea>
+
+    @if (submitError()) {
+      <p class="modal-error">{{ submitError() }}</p>
+    }
+
+    <div class="modal-actions">
+      <button class="btn-modal-cancel" (click)="cancel()" [disabled]="isSubmitting()">Cancel</button>
+      <button class="btn-modal-submit" (click)="submit()" [disabled]="isSubmitting()">
+        @if (isSubmitting()) {
+          <span class="spinner"></span>
+        }
+        <span>Submit</span>
+      </button>
+    </div>
+  </div>
+</div>

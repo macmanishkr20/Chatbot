@@ -10,6 +10,8 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatService } from '../../services/chat.service';
+import { AuthService } from '../../services/auth.service';
+import { ThemeService } from '../../services/theme.service';
 import { MessageBubbleComponent } from '../message-bubble/message-bubble.component';
 import { ChatInputComponent } from '../chat-input/chat-input.component';
 import { SuggestiveAction } from '../../models/chat.models';
@@ -24,6 +26,8 @@ import { SuggestiveAction } from '../../models/chat.models';
 })
 export class ChatWindowComponent implements AfterViewInit {
   readonly chat = inject(ChatService);
+  readonly auth = inject(AuthService);
+  readonly theme = inject(ThemeService);
 
   @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 
@@ -60,8 +64,20 @@ export class ChatWindowComponent implements AfterViewInit {
     this.chat.sidebarOpen.update(v => !v);
   }
 
+  toggleTheme(): void {
+    this.theme.toggle();
+  }
+
+  logout(): void {
+    this.auth.logout();
+  }
+
   onActionClicked(action: SuggestiveAction): void {
     this.chat.sendMessage(action.short_title);
+  }
+
+  sendStarter(text: string): void {
+    this.chat.sendMessage(text);
   }
 
   trackById(_: number, msg: { id: string }): string {
