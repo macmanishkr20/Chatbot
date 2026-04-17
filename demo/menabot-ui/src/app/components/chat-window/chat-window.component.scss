@@ -1,0 +1,133 @@
+.chat-window {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  background: #f0f2f5;
+}
+
+// ── Header ──
+
+.chat-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 24px;
+  background: #fff;
+  border-bottom: 1px solid #e5e5e5;
+  flex-shrink: 0;
+}
+
+.toggle-sidebar-btn {
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 18px;
+  color: #666;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #f0f0f0;
+    color: #333;
+  }
+}
+
+.chat-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #1a1a1a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0;
+}
+
+// ── Messages ──
+
+.messages-scroll {
+  flex: 1;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: #ccc;
+    border-radius: 6px;
+  }
+}
+
+.messages-container {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 16px 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+// ── Empty State ──
+
+.empty-state {
+  text-align: center;
+  padding: 80px 20px;
+  color: #888;
+
+  .empty-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0 0 8px;
+  }
+
+  p {
+    font-size: 14px;
+    color: #888;
+    margin: 0;
+  }
+}
+
+// ── Error Banner ──
+
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  max-width: 800px;
+  padding: 10px 16px;
+  background: #fef3f2;
+  border: 1px solid #fda29b;
+  border-radius: 8px;
+  margin-top: 8px;
+  font-size: 13px;
+  color: #b42318;
+}
+
+.dismiss-btn {
+  border: none;
+  background: transparent;
+  color: #b42318;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 4px;
+
+  &:hover {
+    background: #fda29b33;
+  }
+}

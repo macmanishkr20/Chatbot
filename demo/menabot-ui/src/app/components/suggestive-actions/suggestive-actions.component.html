@@ -1,0 +1,11 @@
+<div class="suggestive-actions">
+  @for (action of actions(); track trackByTitle($index, action)) {
+    <button
+      class="action-chip"
+      [title]="action.description || action.short_title"
+      (click)="onAction(action)"
+    >
+      {{ action.short_title }}
+    </button>
+  }
+</div>

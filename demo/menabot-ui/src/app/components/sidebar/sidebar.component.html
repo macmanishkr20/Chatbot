@@ -1,0 +1,58 @@
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="logo-row">
+      <div class="logo-icon">EY</div>
+      <span class="logo-text">MENA Assistant</span>
+    </div>
+    <button class="new-chat-btn" (click)="newChat()">
+      <span>+</span> New Chat
+    </button>
+  </div>
+
+  <div class="conv-list">
+    @if (chat.conversationsLoading()) {
+      <div class="loading">Loading conversations...</div>
+    }
+
+    @for (conv of chat.conversations(); track conv.Id) {
+      <div
+        class="conv-item"
+        [class.active]="isActive(conv)"
+        (click)="selectConversation(conv)"
+      >
+        @if (renamingId() === conv.Id) {
+          <div class="rename-form" (click)="$event.stopPropagation()">
+            <input
+              type="text"
+              [value]="renameText()"
+              (input)="renameText.set($any($event.target).value)"
+              (keydown.enter)="submitRename(conv)"
+              (keydown.escape)="cancelRename()"
+              autofocus
+            />
+            <div class="rename-actions">
+              <button class="btn-ok" (click)="submitRename(conv)">&#10003;</button>
+              <button class="btn-cancel" (click)="cancelRename()">&#10005;</button>
+            </div>
+          </div>
+        } @else {
+          <div class="conv-title">{{ conv.Title || 'Untitled' }}</div>
+          <div class="conv-date">{{ conv.ModifiedAt | date:'MMM d, y' }}</div>
+          <div class="conv-actions">
+            @if (confirmDeleteId() === conv.Id) {
+              <button class="btn-delete-confirm" (click)="doDelete(conv, $event)">Delete?</button>
+              <button class="btn-cancel-sm" (click)="cancelDelete($event)">No</button>
+            } @else {
+              <button class="btn-action" title="Rename" (click)="startRename(conv, $event)">&#9998;</button>
+              <button class="btn-action btn-delete" title="Delete" (click)="confirmDelete(conv, $event)">&#128465;</button>
+            }
+          </div>
+        }
+      </div>
+    } @empty {
+      @if (!chat.conversationsLoading()) {
+        <div class="empty-state">No conversations yet</div>
+      }
+    }
+  </div>
+</aside>

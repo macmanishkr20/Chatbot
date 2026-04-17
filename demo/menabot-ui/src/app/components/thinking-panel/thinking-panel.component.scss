@@ -1,0 +1,132 @@
+.thinking-panel {
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #f7f7f8;
+  border: 1px solid #e5e5e5;
+  overflow: hidden;
+  font-size: 13px;
+}
+
+.thinking-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #666;
+  font-size: 13px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #efefef;
+  }
+}
+
+.thinking-icon {
+  font-size: 14px;
+  animation: spin 2s linear infinite;
+}
+
+.collapsed .thinking-icon {
+  animation: none;
+}
+
+.thinking-label {
+  font-weight: 600;
+  color: #444;
+}
+
+.thinking-count {
+  margin-left: auto;
+  color: #999;
+  font-size: 12px;
+}
+
+.thinking-caret {
+  font-size: 10px;
+  transition: transform 0.2s;
+  color: #999;
+}
+
+.collapsed .thinking-caret {
+  transform: rotate(0deg);
+}
+
+.thinking-panel:not(.collapsed) .thinking-caret {
+  transform: rotate(90deg);
+}
+
+.thinking-steps {
+  padding: 4px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.step {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  color: #888;
+  transition: color 0.2s;
+
+  &.running {
+    color: #2d6bcf;
+    font-weight: 500;
+  }
+
+  &.done {
+    color: #666;
+  }
+}
+
+.step-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #2d6bcf;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+.checkmark {
+  color: #27ae60;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.pending-dot {
+  color: #ccc;
+  font-size: 16px;
+}
+
+.step-node {
+  font-weight: 600;
+  font-size: 12px;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+
+.step-msg {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

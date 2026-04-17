@@ -1,0 +1,34 @@
+<div class="chat-input-bar">
+  <div class="input-wrapper">
+    <textarea
+      #textareaEl
+      class="chat-textarea"
+      placeholder="Ask me anything..."
+      [ngModel]="inputText()"
+      (ngModelChange)="inputText.set($event)"
+      (keydown)="onKeydown($event)"
+      (input)="autoGrow($event)"
+      [disabled]="chat.isStreaming()"
+      rows="1"
+    ></textarea>
+
+    @if (chat.isStreaming()) {
+      <button class="send-btn cancel-btn" title="Stop generating" (click)="cancelStream()">
+        <span class="stop-icon">&#9632;</span>
+      </button>
+    } @else {
+      <button
+        class="send-btn"
+        [disabled]="!inputText().trim()"
+        title="Send message"
+        (click)="send()"
+      >
+        <span class="send-icon">&#10148;</span>
+      </button>
+    }
+  </div>
+
+  <div class="input-hint">
+    Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
+  </div>
+</div>

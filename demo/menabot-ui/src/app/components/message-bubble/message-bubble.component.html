@@ -1,0 +1,80 @@
+<div class="message-bubble" [class.user]="message().role === 'user'" [class.assistant]="message().role === 'assistant'">
+  <!-- Avatar -->
+  <div class="avatar">
+    @if (message().role === 'user') {
+      <span class="avatar-icon user-avatar">U</span>
+    } @else {
+      <span class="avatar-icon bot-avatar">EY</span>
+    }
+  </div>
+
+  <div class="message-body">
+    <!-- User message -->
+    @if (message().role === 'user') {
+      @if (message().isEditing) {
+        <div class="edit-form">
+          <textarea
+            class="edit-textarea"
+            [(ngModel)]="editText"
+            (keydown.control.enter)="submitEdit()"
+            rows="3"
+          ></textarea>
+          <div class="edit-actions">
+            <button class="btn-save" (click)="submitEdit()">Save & Submit</button>
+            <button class="btn-cancel" (click)="cancelEdit()">Cancel</button>
+          </div>
+        </div>
+      } @else {
+        <div class="user-content">{{ message().content }}</div>
+        <div class="message-actions user-actions">
+          <button class="action-btn" title="Edit message" (click)="startEdit()">&#9998;</button>
+        </div>
+      }
+    }
+
+    <!-- Assistant message -->
+    @if (message().role === 'assistant') {
+      <!-- Thinking panel -->
+      @if (message().thinkingSteps && message().thinkingSteps!.length > 0) {
+        <app-thinking-panel
+          [steps]="message().thinkingSteps!"
+          [collapsed]="message().thinkingCollapsed ?? false"
+        />
+      }
+
+      <!-- Content -->
+      @if (message().content) {
+        <div class="assistant-content" [innerHTML]="message().content | markdown"></div>
+      }
+
+      <!-- Streaming indicator -->
+      @if (message().isStreaming && !message().content) {
+        <div class="streaming-indicator">
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      }
+
+      <!-- Message actions (copy, feedback, regenerate) -->
+      @if (!message().isStreaming) {
+        <div class="message-actions assistant-actions">
+          <button class="action-btn" title="Copy" (click)="copyContent()">&#128203;</button>
+          <button class="action-btn" title="Helpful" (click)="thumbsUp()">&#128077;</button>
+          <button class="action-btn" title="Not helpful" (click)="thumbsDown()">&#128078;</button>
+          @if (isLastAssistant()) {
+            <button class="action-btn" title="Regenerate" (click)="regenerate()">&#8635;</button>
+          }
+        </div>
+      }
+
+      <!-- Suggestive actions -->
+      @if (message().suggestiveActions && message().suggestiveActions!.length > 0 && !message().isStreaming) {
+        <app-suggestive-actions
+          [actions]="message().suggestiveActions!"
+          (actionClicked)="actionClicked.emit($event)"
+        />
+      }
+    }
+  </div>
+</div>

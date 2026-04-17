@@ -1,0 +1,28 @@
+<div class="thinking-panel" [class.collapsed]="isCollapsed || collapsed()">
+  <button class="thinking-toggle" (click)="toggle()">
+    <span class="thinking-icon">&#9881;</span>
+    <span class="thinking-label">Thinking&hellip;</span>
+    <span class="thinking-count">{{ steps().length }} steps</span>
+    <span class="thinking-caret">&#9654;</span>
+  </button>
+
+  @if (!isCollapsed && !collapsed()) {
+    <div class="thinking-steps">
+      @for (step of steps(); track trackByNode($index, step)) {
+        <div class="step" [class.running]="step.state === 'running'" [class.done]="step.state === 'done'">
+          <span class="step-icon">
+            @if (step.state === 'running') {
+              <span class="spinner"></span>
+            } @else if (step.state === 'done') {
+              <span class="checkmark">&#10003;</span>
+            } @else {
+              <span class="pending-dot">&#8226;</span>
+            }
+          </span>
+          <span class="step-node">{{ formatNode(step.node) }}</span>
+          <span class="step-msg">{{ step.message }}</span>
+        </div>
+      }
+    </div>
+  }
+</div>

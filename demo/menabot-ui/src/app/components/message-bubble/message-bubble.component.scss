@@ -1,0 +1,383 @@
+.message-bubble {
+  display: flex;
+  gap: 12px;
+  padding: 16px 0;
+  max-width: 800px;
+  width: 100%;
+
+  &.user {
+    justify-content: flex-end;
+  }
+
+  &.assistant {
+    justify-content: flex-start;
+  }
+}
+
+// ── Avatar ──
+
+.avatar {
+  flex-shrink: 0;
+  order: 0;
+}
+
+.user .avatar {
+  order: 1;
+}
+
+.avatar-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.user-avatar {
+  background: #e3e8ef;
+  color: #344054;
+}
+
+.bot-avatar {
+  background: #ffe600;
+  color: #1a1a1a;
+  font-size: 10px;
+}
+
+// ── Message Body ──
+
+.message-body {
+  flex: 1;
+  min-width: 0;
+  max-width: 680px;
+}
+
+// ── User Content ──
+
+.user-content {
+  background: #2d6bcf;
+  color: #fff;
+  padding: 12px 16px;
+  border-radius: 16px 16px 4px 16px;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// ── Assistant Content ──
+
+.assistant-content {
+  background: #fff;
+  padding: 14px 18px;
+  border-radius: 16px 16px 16px 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #1a1a1a;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+  word-break: break-word;
+
+  // Markdown styles
+  :host ::ng-deep {
+    h1, h2, h3 {
+      margin: 12px 0 6px;
+      line-height: 1.3;
+    }
+    h1 { font-size: 18px; }
+    h2 { font-size: 16px; }
+    h3 { font-size: 15px; }
+
+    pre {
+      position: relative;
+      background: #1e1e1e;
+      border-radius: 8px;
+      padding: 14px;
+      overflow-x: auto;
+      margin: 10px 0;
+
+      code {
+        color: #d4d4d4;
+        font-family: 'Fira Code', 'Consolas', monospace;
+        font-size: 13px;
+        line-height: 1.5;
+      }
+    }
+
+    .code-lang {
+      position: absolute;
+      top: 6px;
+      left: 12px;
+      font-size: 10px;
+      color: #888;
+      text-transform: uppercase;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 6px;
+      right: 8px;
+      padding: 2px 8px;
+      font-size: 11px;
+      background: #333;
+      color: #ccc;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        background: #444;
+        color: #fff;
+      }
+    }
+
+    code {
+      background: #f0f0f0;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-family: 'Fira Code', 'Consolas', monospace;
+    }
+
+    pre code {
+      background: none;
+      padding: 0;
+    }
+
+    table {
+      border-collapse: collapse;
+      margin: 10px 0;
+      width: 100%;
+      font-size: 13px;
+
+      th, td {
+        border: 1px solid #ddd;
+        padding: 8px 12px;
+        text-align: left;
+      }
+
+      th {
+        background: #f5f5f5;
+        font-weight: 600;
+      }
+
+      tr:nth-child(even) td {
+        background: #fafafa;
+      }
+    }
+
+    blockquote {
+      border-left: 3px solid #ffe600;
+      padding: 8px 14px;
+      margin: 8px 0;
+      background: #fffef0;
+      color: #555;
+    }
+
+    ul, ol {
+      padding-left: 20px;
+      margin: 6px 0;
+    }
+
+    li {
+      margin: 3px 0;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #e5e5e5;
+      margin: 12px 0;
+    }
+
+    .ref {
+      font-size: 11px;
+      color: #2d6bcf;
+      vertical-align: super;
+      cursor: pointer;
+    }
+
+    // Citations accordion
+    .citations-accordion {
+      border: 1px solid #e5e5e5;
+      border-radius: 8px;
+      margin-top: 12px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+
+    .citations-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 14px;
+      background: #fafafa;
+      font-size: 13px;
+      font-weight: 600;
+      color: #555;
+    }
+
+    .citations-caret {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .citations-accordion.open .citations-caret {
+      transform: rotate(90deg);
+    }
+
+    .citations-body {
+      display: none;
+      padding: 10px 14px;
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .citations-accordion.open .citations-body {
+      display: block;
+    }
+
+    .cite-ref {
+      color: #2d6bcf;
+      font-weight: 600;
+    }
+
+    .cite-url {
+      color: #2d6bcf;
+      text-decoration: none;
+      word-break: break-all;
+
+      &:hover {
+        text-decoration: underline;
+      }
+    }
+  }
+}
+
+// ── Edit Form ──
+
+.edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.edit-textarea {
+  width: 100%;
+  min-height: 60px;
+  padding: 10px 14px;
+  border: 1px solid #2d6bcf;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  color: #1a1a1a;
+  background: #fff;
+
+  &:focus {
+    box-shadow: 0 0 0 2px rgba(45, 107, 207, 0.2);
+  }
+}
+
+.edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-save {
+  padding: 6px 16px;
+  background: #2d6bcf;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:hover {
+    background: #245bb5;
+  }
+}
+
+.btn-cancel {
+  padding: 6px 16px;
+  background: #e5e5e5;
+  color: #444;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+
+  &:hover {
+    background: #d5d5d5;
+  }
+}
+
+// ── Action Buttons ──
+
+.message-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.message-bubble:hover .message-actions {
+  opacity: 1;
+}
+
+.user-actions {
+  justify-content: flex-end;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: #f0f0f0;
+    color: #333;
+  }
+}
+
+// ── Streaming Indicator ──
+
+.streaming-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 14px 18px;
+  background: #fff;
+  border-radius: 16px 16px 16px 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  background: #ccc;
+  border-radius: 50%;
+  animation: bounce 1.4s ease-in-out infinite;
+
+  &:nth-child(2) { animation-delay: 0.16s; }
+  &:nth-child(3) { animation-delay: 0.32s; }
+}
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}

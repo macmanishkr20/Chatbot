@@ -1,0 +1,41 @@
+<div class="chat-window">
+  <!-- Header -->
+  <div class="chat-header">
+    <button class="toggle-sidebar-btn" (click)="toggleSidebar()" title="Toggle sidebar">
+      &#9776;
+    </button>
+    <h1 class="chat-title">{{ headerTitle() }}</h1>
+  </div>
+
+  <!-- Messages Area -->
+  <div class="messages-scroll" #scrollContainer>
+    <div class="messages-container">
+      @if (showEmpty()) {
+        <div class="empty-state">
+          <div class="empty-icon">&#128172;</div>
+          <h2>How can I help you today?</h2>
+          <p>Ask me anything about MENA region data, reports, and analysis.</p>
+        </div>
+      }
+
+      @for (msg of chat.messages(); track trackById($index, msg)) {
+        <app-message-bubble
+          [message]="msg"
+          [isLastAssistant]="$index === lastAssistantIdx()"
+          (actionClicked)="onActionClicked($event)"
+        />
+      }
+
+      <!-- Error -->
+      @if (chat.error()) {
+        <div class="error-banner">
+          <span>&#9888; {{ chat.error() }}</span>
+          <button class="dismiss-btn" (click)="chat.error.set(null)">&#10005;</button>
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Input -->
+  <app-chat-input />
+</div>
