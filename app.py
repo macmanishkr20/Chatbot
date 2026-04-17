@@ -28,8 +28,10 @@ from config import MAX_INPUT_LENGTH, RATE_LIMIT_PER_MINUTE
 from graph.context_manager import trim_messages_to_budget
 from graph.nodes.supervisor import get_graph
 from graph.state import RAGState
+from langchain_core.messages import RemoveMessage
 from models.chat_models import (
     CancelRequest,
+    EditMessageRequest,
     FeedbackRequest,
     RegenerateRequest,
     RenameConversationRequest,
@@ -460,6 +462,114 @@ async def regenerate_chat(
         state = current_state
     else:
         raise HTTPException(status_code=404, detail="No conversation state found")
+
+    return StreamingResponse(
+        _stream_graph(state, config, thread_id),
+        media_type="text/event-stream",
+    )
+
+
+# ── Edit Message Mid-Thread (Branching) ──
+
+@app.post("/chat/edit")
+async def edit_message(
+    request: Request,
+    body: EditMessageRequest,
+):
+    """Edit a message mid-thread and re-run the graph from that point.
+
+    This is the Claude/ChatGPT "edit" feature. When a user edits a prior
+    message, everything after that message is discarded (branch) and the
+    graph re-runs with the edited text.
+
+    How it works:
+      1. Load the current checkpoint's full message list.
+      2. Truncate messages to keep only those BEFORE the edited message.
+      3. Append the new edited message as a HumanMessage.
+      4. Reset all transient state fields.
+      5. Re-run the graph and stream the new response.
+
+    The old messages after the edit point are effectively "branched off" —
+    they remain in checkpoint history but the active thread moves forward
+    with the edited version.
+    """
+    _validate_user(body.user_id)
+    new_input = _sanitize_input(body.new_input)
+
+    await _init_graph()
+
+    thread_id, config = _build_stream_config(body.user_id, body.chat_session_id)
+
+    # Load current checkpoint
+    current_state = None
+    try:
+        checkpoint = await graph.checkpointer.aget(config)
+        if checkpoint:
+            current_state = checkpoint.get("channel_values", {})
+    except Exception as e:
+        logger.error("edit: failed to load checkpoint: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to load conversation state")
+
+    if not current_state or not current_state.get("messages"):
+        raise HTTPException(status_code=404, detail="No conversation state found")
+
+    messages = current_state["messages"]
+
+    # Find the user messages to determine which one to edit
+    user_msg_positions = [
+        i for i, m in enumerate(messages) if m.type == "human"
+    ]
+
+    if body.message_index < 0 or body.message_index >= len(user_msg_positions):
+        raise HTTPException(
+            status_code=400,
+            detail=f"message_index {body.message_index} out of range "
+                   f"(conversation has {len(user_msg_positions)} user messages)",
+        )
+
+    # The absolute position in the messages list of the message being edited
+    edit_pos = user_msg_positions[body.message_index]
+
+    # ── Branch: keep messages BEFORE the edit point, discard the rest ──
+    # Use RemoveMessage to tell the add_messages reducer to drop them.
+    messages_to_remove = [
+        RemoveMessage(id=m.id) for m in messages[edit_pos:]
+    ]
+
+    # Apply removals to get the truncated history
+    kept_messages = messages[:edit_pos]
+
+    # Token-trim the kept messages
+    kept_messages = trim_messages_to_budget(kept_messages)
+
+    # Append the new edited message
+    kept_messages.append(HumanMessage(content=new_input))
+
+    # Build the new state — truncated history + fresh transient fields
+    state = {
+        **current_state,
+        "messages": kept_messages,
+        "user_input": new_input,
+        "is_free_form": body.is_free_form,
+        "function": body.function,
+        "sub_function": body.sub_function,
+        "source_url": body.source_url,
+        "start_date": body.start_date,
+        "end_date": body.end_date,
+        "preferred_language": body.preferred_language,
+        "input_type": "ask",
+        # Reset all transient fields
+        "events": [],
+        "error_info": None,
+        "ai_content": None,
+        "prompt_used": None,
+        "response": None,
+        "suggestive_actions": None,
+        "conversation_title": None,
+        "citation_map": None,
+        "is_ambiguous": False,
+        "pending_ambiguous_query": None,
+    }
 
     return StreamingResponse(
         _stream_graph(state, config, thread_id),

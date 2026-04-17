@@ -68,6 +68,7 @@
     .user-row {
       display: flex;
       justify-content: flex-end;
+      position: relative;
     }
     .user-bubble {
       background: #1a1a1a;
@@ -77,7 +78,28 @@
       max-width: 68%;
       font-size: 14px;
       line-height: 1.55;
+      position: relative;
     }
+    /* Edit button on hover */
+    .user-bubble .edit-btn {
+      display: none;
+      position: absolute;
+      left: -32px;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 26px; height: 26px;
+      background: #f0f0f0;
+      border: 1px solid #ddd;
+      border-radius: 50%;
+      cursor: pointer;
+      font-size: 12px;
+      align-items: center;
+      justify-content: center;
+      color: #666;
+      transition: background .15s;
+    }
+    .user-bubble .edit-btn:hover { background: #ffe600; color: #1a1a1a; border-color: #ffd000; }
+    .user-bubble:hover .edit-btn { display: flex; }
 
     /* ── Bot row ── */
     .bot-row {
@@ -184,6 +206,110 @@
       color: #38bdf8;       /* sky blue */
       font-style: italic;
       font-weight: 500;
+    }
+
+    /* ── Markdown: Headers ── */
+    .answer-bubble h1 { font-size: 1.3em; font-weight: 700; margin: 12px 0 6px; }
+    .answer-bubble h2 { font-size: 1.15em; font-weight: 700; margin: 10px 0 5px; }
+    .answer-bubble h3 { font-size: 1.05em; font-weight: 600; margin: 8px 0 4px; }
+
+    /* ── Markdown: Lists ── */
+    .answer-bubble ul, .answer-bubble ol {
+      margin: 6px 0 6px 20px;
+      line-height: 1.7;
+    }
+    .answer-bubble li { margin-bottom: 3px; }
+
+    /* ── Markdown: Code blocks ── */
+    .answer-bubble pre {
+      background: #1e1e1e;
+      color: #d4d4d4;
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin: 10px 0;
+      overflow-x: auto;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      position: relative;
+    }
+    .answer-bubble pre code {
+      background: none;
+      padding: 0;
+      border-radius: 0;
+      color: inherit;
+      font-size: inherit;
+    }
+    /* Language label on code blocks */
+    .answer-bubble pre .code-lang {
+      position: absolute;
+      top: 6px; right: 10px;
+      font-size: 10px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-family: -apple-system, sans-serif;
+    }
+    /* Copy button */
+    .answer-bubble pre .copy-btn {
+      position: absolute;
+      top: 6px; right: 60px;
+      font-size: 11px;
+      background: #333;
+      color: #ccc;
+      border: 1px solid #555;
+      border-radius: 4px;
+      padding: 2px 8px;
+      cursor: pointer;
+      font-family: -apple-system, sans-serif;
+      transition: background .15s;
+    }
+    .answer-bubble pre .copy-btn:hover { background: #555; color: #fff; }
+
+    /* ── Markdown: Inline code ── */
+    .answer-bubble code {
+      background: #f0f0f0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 0.9em;
+      color: #c7254e;
+    }
+
+    /* ── Markdown: Tables ── */
+    .answer-bubble table {
+      border-collapse: collapse;
+      margin: 10px 0;
+      width: 100%;
+      font-size: 13px;
+    }
+    .answer-bubble th, .answer-bubble td {
+      border: 1px solid #ddd;
+      padding: 8px 12px;
+      text-align: left;
+    }
+    .answer-bubble th {
+      background: #f5f5f5;
+      font-weight: 600;
+    }
+    .answer-bubble tr:nth-child(even) { background: #fafafa; }
+    .answer-bubble tr:hover { background: #f0f0f0; }
+
+    /* ── Markdown: Blockquote ── */
+    .answer-bubble blockquote {
+      border-left: 3px solid #ffe600;
+      padding: 6px 14px;
+      margin: 8px 0;
+      background: #fffde6;
+      color: #555;
+      font-style: italic;
+    }
+
+    /* ── Markdown: Horizontal rule ── */
+    .answer-bubble hr {
+      border: none;
+      border-top: 1px solid #e0e0e0;
+      margin: 12px 0;
     }
 
     /* ── Citations accordion ── */
@@ -297,6 +423,38 @@
     }
     .suggestion-chip:hover { background: #fffde6; border-color: #ffe600; }
 
+    /* ── Edit inline form ── */
+    .edit-form {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+    }
+    .edit-form textarea {
+      flex: 1;
+      border: 1px solid #ffe600;
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      line-height: 1.4;
+      background: #2a2a2a;
+      color: #fff;
+    }
+    .edit-form button {
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .edit-save { background: #ffe600; color: #1a1a1a; }
+    .edit-save:hover { background: #ffd000; }
+    .edit-cancel { background: #444; color: #ccc; }
+    .edit-cancel:hover { background: #555; }
+
     /* ── Scrollbar ── */
     .messages::-webkit-scrollbar { width: 4px; }
     .messages::-webkit-scrollbar-thumb { background: #ddd; border-radius: 4px; }
@@ -323,7 +481,7 @@
       <div class="bot-avatar">M</div>
       <div class="bot-body">
         <div class="answer-bubble">
-          👋 Hello! I'm your <strong>MENA Assistant</strong>. Ask me anything about EY MENA internal functions, policies, and procedures.
+          Hello! I'm your <strong>MENA Assistant</strong>. Ask me anything about EY MENA internal functions, policies, and procedures.
         </div>
         <div class="suggestions">
           <span class="suggestion-chip" onclick="sendDemo('What are the Finance function policies?')">Finance policies</span>
@@ -348,43 +506,58 @@
 // ── Simulated SSE events from /chat ──────────────────────────────────────
 const DEMO_STREAMS = {
   default: [
-    // thoughts
-    {type:"thought", node:"Supervisor",   message:"Analysing your request..."},
-    {type:"thought", node:"load_memory",  message:"Loading your conversation history..."},
-    {type:"thought", node:"rewrite",      message:"Optimising your query for search..."},
-    {type:"thought", node:"embed",        message:"Generating semantic embeddings..."},
-    {type:"thought", node:"search",       message:"Searching the knowledge base..."},
-    {type:"thought", node:"generate",     message:"Composing your answer from retrieved documents..."},
-    // content tokens
+    {type:"thought", node:"Intent",      message:"Aligning intent…"},
+    {type:"thought", node:"Recall",      message:"Reconnecting context…"},
+    {type:"thought", node:"Focus",       message:"Clarifying focus…"},
+    {type:"thought", node:"Meaning",     message:"Interpreting meaning…"},
+    {type:"thought", node:"Relevance",   message:"Finding relevance…"},
+    {type:"thought", node:"Response",    message:"Forming response…"},
+    // Content tokens with rich markdown
+    {type:"content", node:"generate", content:"## Invoice Submission Policy\n\n"},
     {type:"content", node:"generate", content:"Invoice submissions must be completed "},
     {type:"content", node:"generate", content:"within **30 days** of the service date [1]. "},
     {type:"content", node:"generate", content:"Late submissions require written manager approval "},
     {type:"content", node:"generate", content:"and a valid reason code [2].\n\n"},
-    {type:"content", node:"generate", content:"Recurring late submissions may be escalated "},
-    {type:"content", node:"generate", content:"to the Finance Compliance team [1][2].\n\n"},
+    {type:"content", node:"generate", content:"### Key Requirements\n\n"},
+    {type:"content", node:"generate", content:"- All invoices must include a **valid PO number**\n"},
+    {type:"content", node:"generate", content:"- Amounts exceeding $10,000 require **dual approval**\n"},
+    {type:"content", node:"generate", content:"- Recurring late submissions may trigger escalation [1][2]\n\n"},
+    {type:"content", node:"generate", content:"### Submission Process\n\n"},
+    {type:"content", node:"generate", content:"| Step | Action | Timeline |\n"},
+    {type:"content", node:"generate", content:"| --- | --- | --- |\n"},
+    {type:"content", node:"generate", content:"| 1 | Submit invoice via BRIDGE | Within 30 days |\n"},
+    {type:"content", node:"generate", content:"| 2 | Manager review | 5 business days |\n"},
+    {type:"content", node:"generate", content:"| 3 | Finance processing | 10 business days |\n\n"},
+    {type:"content", node:"generate", content:"> **Note:** Invoices without a valid PO number will be automatically rejected.\n\n"},
+    {type:"content", node:"generate", content:"Example BRIDGE request format:\n\n"},
+    {type:"content", node:"generate", content:"```json\n"},
+    {type:"content", node:"generate", content:'{\n  "type": "invoice",\n  "po_number": "PO-2025-001",\n  "amount": 5000,\n  "currency": "AED"\n}\n'},
+    {type:"content", node:"generate", content:"```\n\n"},
     {type:"content", node:"generate", content:"Citations:\n"},
     {type:"content", node:"generate", content:"[1] https://ey.com/mena/finance/invoice-policy\n"},
     {type:"content", node:"generate", content:"[2] https://ey.com/mena/finance/approval-guidelines"},
     // persist & save_memory
-    {type:"thought", node:"persist",      message:"Saving conversation to history..."},
-    {type:"thought", node:"save_memory",  message:"Updating long-term memory..."},
+    {type:"thought", node:"Flow",        message:"Maintaining continuity…"},
+    {type:"thought", node:"Memory",      message:"Storing insight…"},
     // final
-    {type:"final",   chat_id:42, message_id:"msg-7f3a9c", ai_content:[]},
+    {type:"final", chat_id:42, message_id:"msg-7f3a9c", ai_content:[], conversation_title:"Invoice Submission Policy"},
   ]
 };
 
 const NODE_ICONS = {
-  Supervisor:   "🔍",
-  load_memory:  "🧠",
-  rewrite:      "✏️",
-  embed:        "🔢",
-  search:       "🔎",
-  generate:     "💡",
-  persist:      "💾",
-  save_memory:  "📚",
+  Intent:    "🔍",
+  Recall:    "🧠",
+  Focus:     "✏️",
+  Meaning:   "🔢",
+  Relevance: "🔎",
+  Response:  "💡",
+  Flow:      "💾",
+  Memory:    "📚",
 };
 
 let isStreaming = false;
+// Track all user messages for the edit feature
+let userMessageHistory = [];
 
 function sendDemo(text) {
   document.getElementById("input").value = text;
@@ -401,36 +574,108 @@ async function triggerDemo() {
   document.getElementById("sendBtn").disabled = true;
   input.value = "";
 
+  const msgIndex = userMessageHistory.length;
+  userMessageHistory.push(text);
+
+  await runStream(text, msgIndex);
+}
+
+/**
+ * Edit a previously sent user message (mid-thread branching).
+ * Removes everything after the edited message and re-runs.
+ */
+function startEdit(msgIndex, bubbleEl) {
+  if (isStreaming) return;
+  const currentText = userMessageHistory[msgIndex];
+  const originalHtml = bubbleEl.innerHTML;
+
+  bubbleEl.innerHTML = `
+    <div class="edit-form">
+      <textarea rows="2" id="editArea">${escHtml(currentText)}</textarea>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="edit-save" onclick="submitEdit(${msgIndex}, this)">Save</button>
+        <button class="edit-cancel" onclick="cancelEdit(${msgIndex}, this)">Cancel</button>
+      </div>
+    </div>`;
+  bubbleEl.querySelector('#editArea').focus();
+
+  // Store original HTML for cancel
+  bubbleEl._origHtml = originalHtml;
+}
+
+function cancelEdit(msgIndex, btn) {
+  const bubbleEl = btn.closest('.user-bubble');
+  bubbleEl.innerHTML = bubbleEl._origHtml;
+}
+
+async function submitEdit(msgIndex, btn) {
+  const bubbleEl = btn.closest('.user-bubble');
+  const newText = bubbleEl.querySelector('#editArea').value.trim();
+  if (!newText) return;
+
+  // Update history — truncate everything after this message
+  userMessageHistory = userMessageHistory.slice(0, msgIndex);
+  userMessageHistory.push(newText);
+
+  // Remove all DOM elements after this user row
+  const msgs = document.getElementById("messages");
+  const allRows = Array.from(msgs.children);
+  // Find the user-row containing this bubble
+  const userRow = bubbleEl.closest('.user-row');
+  const rowIdx = allRows.indexOf(userRow);
+
+  // Remove everything after this row (the old bot response + subsequent messages)
+  while (msgs.children.length > rowIdx + 1) {
+    msgs.removeChild(msgs.lastChild);
+  }
+
+  // Update the bubble text
+  bubbleEl.innerHTML = `<button class="edit-btn" onclick="startEdit(${msgIndex}, this.closest('.user-bubble'))">&#9998;</button>${escHtml(newText)}`;
+
+  // Re-run the stream with the edited message
+  isStreaming = true;
+  document.getElementById("sendBtn").disabled = true;
+  await runStream(newText, msgIndex);
+}
+
+/**
+ * Core streaming logic — used by both new messages and edits.
+ */
+async function runStream(text, msgIndex) {
   const msgs = document.getElementById("messages");
 
-  // ── User bubble ──
-  const userRow = document.createElement("div");
-  userRow.className = "user-row";
-  userRow.innerHTML = `<div class="user-bubble">${escHtml(text)}</div>`;
-  msgs.appendChild(userRow);
+  // ── User bubble (only if it's a new message, not an edit) ──
+  const existingRows = msgs.querySelectorAll('.user-row');
+  if (existingRows.length <= msgIndex) {
+    const userRow = document.createElement("div");
+    userRow.className = "user-row";
+    userRow.innerHTML = `<div class="user-bubble"><button class="edit-btn" onclick="startEdit(${msgIndex}, this.closest('.user-bubble'))">&#9998;</button>${escHtml(text)}</div>`;
+    msgs.appendChild(userRow);
+  }
   scrollBottom();
 
   // ── Bot row shell ──
+  const botRowId = `botRow_${Date.now()}`;
   const botRow = document.createElement("div");
   botRow.className = "bot-row";
   botRow.innerHTML = `
     <div class="bot-avatar">M</div>
-    <div class="bot-body" id="botBody">
-      <div class="thinking-panel" id="thinkingPanel">
-        <div class="thinking-header open" id="thinkingHeader" onclick="toggleThinking()">
-          <span>⚙️</span>
-          <span id="thinkingLabel">Thinking…</span>
-          <span class="chevron">▼</span>
+    <div class="bot-body" id="${botRowId}_body">
+      <div class="thinking-panel">
+        <div class="thinking-header open" id="${botRowId}_thHeader" onclick="togglePanel('${botRowId}')">
+          <span>&#9881;</span>
+          <span id="${botRowId}_thLabel">Thinking…</span>
+          <span class="chevron">&#9660;</span>
         </div>
-        <div class="thinking-steps" id="thinkingSteps"></div>
+        <div class="thinking-steps" id="${botRowId}_thSteps"></div>
       </div>
     </div>`;
   msgs.appendChild(botRow);
   scrollBottom();
 
-  const thinkingSteps = document.getElementById("thinkingSteps");
-  const thinkingLabel = document.getElementById("thinkingLabel");
-  const thinkingHeader = document.getElementById("thinkingHeader");
+  const thinkingSteps = document.getElementById(`${botRowId}_thSteps`);
+  const thinkingLabel = document.getElementById(`${botRowId}_thLabel`);
+  const thinkingHeader = document.getElementById(`${botRowId}_thHeader`);
 
   let answerEl = null;
   let answerText = "";
@@ -441,10 +686,9 @@ async function triggerDemo() {
 
   for (let i = 0; i < events.length; i++) {
     const ev = events[i];
-    await sleep(ev.type === "thought" ? 420 : 28);
+    await sleep(ev.type === "thought" ? 380 : 22);
 
     if (ev.type === "thought") {
-      // Mark previous active step done (next step has started → previous is finished)
       if (activeNode && stepMap[activeNode]) {
         setStepState(stepMap[activeNode], "done");
       }
@@ -457,9 +701,8 @@ async function triggerDemo() {
       scrollBottom();
 
     } else if (ev.type === "content") {
-      // Create answer bubble on first content token
       if (!answerEl) {
-        const botBody = document.getElementById("botBody");
+        const botBody = document.getElementById(`${botRowId}_body`);
         answerEl = document.createElement("div");
         answerEl.className = "answer-bubble";
         botBody.appendChild(answerEl);
@@ -470,27 +713,28 @@ async function triggerDemo() {
       scrollBottom();
 
     } else if (ev.type === "final") {
-      // Mark last active step done
       if (activeNode && stepMap[activeNode]) {
         setStepState(stepMap[activeNode], "done");
       }
 
-      // Remove blinking cursor; do final render (no cursor)
       if (answerEl) {
         answerEl.innerHTML = renderAnswer(answerText);
+        // Add copy buttons to all code blocks
+        answerEl.querySelectorAll('pre').forEach(addCopyButton);
       }
 
       // Collapse thinking panel
       thinkingHeader.classList.remove("open");
-      document.getElementById("thinkingSteps").classList.add("collapsed");
+      thinkingSteps.classList.add("collapsed");
       thinkingLabel.textContent = `${Object.keys(stepMap).length} steps completed`;
 
       // Meta row
-      const botBody = document.getElementById("botBody");
+      const botBody = document.getElementById(`${botRowId}_body`);
       const meta = document.createElement("div");
       meta.className = "meta-row";
+      const title = ev.conversation_title ? `<span>${escHtml(ev.conversation_title)}</span><span>·</span>` : "";
       meta.innerHTML =
-        `<span>chat #${ev.chat_id}</span><span>·</span>` +
+        `${title}<span>chat #${ev.chat_id}</span><span>·</span>` +
         `<span>msg ${ev.message_id}</span><span>·</span>` +
         `<span>${new Date().toLocaleTimeString()}</span>`;
       botBody.appendChild(meta);
@@ -515,22 +759,27 @@ async function triggerDemo() {
   document.getElementById("sendBtn").disabled = false;
 }
 
-// ── Helpers ─────────────────────────────────────────────────────────────
+// ── Markdown Rendering ────────────────────────────────────────────────
 
 /**
- * Render the full answer text:
- *  - inline [1], [2][3] refs → italic sky-blue
- *  - splits off "Citations:\n…" block → collapsible accordion
- *    with italic sky-blue ref labels and URLs
+ * Full markdown renderer — handles:
+ *  - Code blocks (``` with language label)
+ *  - Tables (| col | col |)
+ *  - Headers (## H2, ### H3)
+ *  - Bold, italic, inline code
+ *  - Blockquotes (> text)
+ *  - Ordered and unordered lists
+ *  - Horizontal rules (---)
+ *  - Inline [1][2] citation refs
+ *  - Citations block → collapsible accordion
  */
 function renderAnswer(text) {
-  // Detect citations block
+  // Separate citations block
   const citMarker = /\nCitations:\n|^Citations:\n/;
   const splitIdx = text.search(citMarker);
 
   let mainText, citationsRaw;
   if (splitIdx !== -1) {
-    // Find the actual marker length to slice correctly
     const match = text.match(citMarker);
     mainText     = text.slice(0, splitIdx);
     citationsRaw = text.slice(splitIdx + match[0].length);
@@ -539,7 +788,7 @@ function renderAnswer(text) {
     citationsRaw = null;
   }
 
-  let html = renderMainText(mainText);
+  let html = renderMarkdown(mainText);
 
   if (citationsRaw !== null) {
     html += buildCitationsAccordion(citationsRaw);
@@ -548,13 +797,138 @@ function renderAnswer(text) {
   return html;
 }
 
-/** Render main prose: bold + inline [n] refs styled */
-function renderMainText(text) {
+/**
+ * Parse markdown into HTML.
+ * Handles blocks (code, tables, lists, blockquotes, headers, hr)
+ * then inline formatting (bold, italic, code, refs).
+ */
+function renderMarkdown(text) {
+  // Protect code blocks first — extract them so inline rules don't touch them
+  const codeBlocks = [];
+  text = text.replace(/```(\w*)\n([\s\S]*?)```/g, (_, lang, code) => {
+    const placeholder = `%%CODEBLOCK_${codeBlocks.length}%%`;
+    const langLabel = lang ? `<span class="code-lang">${escHtml(lang)}</span>` : "";
+    codeBlocks.push(`<pre>${langLabel}<code>${escHtml(code.trimEnd())}</code></pre>`);
+    return placeholder;
+  });
+
+  // Split into lines for block-level parsing
+  const lines = text.split("\n");
+  let html = "";
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    // Check for code block placeholder
+    const cbMatch = line.match(/^%%CODEBLOCK_(\d+)%%$/);
+    if (cbMatch) {
+      html += codeBlocks[parseInt(cbMatch[1])];
+      i++;
+      continue;
+    }
+
+    // Table: detect | col | col | pattern
+    if (line.trim().startsWith("|") && line.trim().endsWith("|")) {
+      const tableLines = [];
+      while (i < lines.length && lines[i].trim().startsWith("|") && lines[i].trim().endsWith("|")) {
+        tableLines.push(lines[i]);
+        i++;
+      }
+      html += renderTable(tableLines);
+      continue;
+    }
+
+    // Headers
+    if (line.startsWith("### "))  { html += `<h3>${renderInline(line.slice(4))}</h3>`; i++; continue; }
+    if (line.startsWith("## "))   { html += `<h2>${renderInline(line.slice(3))}</h2>`; i++; continue; }
+    if (line.startsWith("# "))    { html += `<h1>${renderInline(line.slice(2))}</h1>`; i++; continue; }
+
+    // Horizontal rule
+    if (/^---+$/.test(line.trim())) { html += "<hr>"; i++; continue; }
+
+    // Blockquote
+    if (line.startsWith("> ")) {
+      const quoteLines = [];
+      while (i < lines.length && lines[i].startsWith("> ")) {
+        quoteLines.push(lines[i].slice(2));
+        i++;
+      }
+      html += `<blockquote>${renderInline(quoteLines.join("<br>"))}</blockquote>`;
+      continue;
+    }
+
+    // Unordered list
+    if (/^[-*] /.test(line.trimStart())) {
+      const listItems = [];
+      while (i < lines.length && /^[-*] /.test(lines[i].trimStart())) {
+        listItems.push(lines[i].trimStart().slice(2));
+        i++;
+      }
+      html += "<ul>" + listItems.map(li => `<li>${renderInline(li)}</li>`).join("") + "</ul>";
+      continue;
+    }
+
+    // Ordered list
+    if (/^\d+\.\s/.test(line.trimStart())) {
+      const listItems = [];
+      while (i < lines.length && /^\d+\.\s/.test(lines[i].trimStart())) {
+        listItems.push(lines[i].trimStart().replace(/^\d+\.\s/, ""));
+        i++;
+      }
+      html += "<ol>" + listItems.map(li => `<li>${renderInline(li)}</li>`).join("") + "</ol>";
+      continue;
+    }
+
+    // Empty line → paragraph break
+    if (line.trim() === "") { html += "<br>"; i++; continue; }
+
+    // Normal paragraph line
+    html += renderInline(line) + "<br>";
+    i++;
+  }
+
+  return html;
+}
+
+/** Render inline markdown: bold, italic, inline code, refs */
+function renderInline(text) {
   return escHtml(text)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    // One or more consecutive [n] groups → italic sky blue
-    .replace(/(\[\d+\])+/g, m => `<em class="ref">${m}</em>`)
-    .replace(/\n/g, "<br>");
+    // Inline code (backticks)
+    .replace(/`([^`]+)`/g, '<code>$1</code>')
+    // Bold + italic
+    .replace(/\*\*\*(.+?)\*\*\*/g, '<strong><em>$1</em></strong>')
+    // Bold
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    // Italic
+    .replace(/\*(.+?)\*/g, '<em>$1</em>')
+    // Citation refs [1][2] → sky blue italic
+    .replace(/(\[\d+\])+/g, m => `<em class="ref">${m}</em>`);
+}
+
+/** Parse markdown table lines into an HTML table */
+function renderTable(lines) {
+  if (lines.length < 2) return lines.map(l => renderInline(l) + "<br>").join("");
+
+  const parseRow = line => line.split("|").slice(1, -1).map(c => c.trim());
+  const headers = parseRow(lines[0]);
+
+  // Check if line[1] is separator (| --- | --- |)
+  const isSep = /^\|[\s-:|]+\|$/.test(lines[1].trim());
+  const dataStart = isSep ? 2 : 1;
+
+  let html = "<table><thead><tr>";
+  headers.forEach(h => { html += `<th>${renderInline(h)}</th>`; });
+  html += "</tr></thead><tbody>";
+
+  for (let r = dataStart; r < lines.length; r++) {
+    const cells = parseRow(lines[r]);
+    html += "<tr>";
+    cells.forEach(c => { html += `<td>${renderInline(c)}</td>`; });
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  return html;
 }
 
 /** Build a closed collapsible citations accordion */
@@ -562,31 +936,45 @@ function buildCitationsAccordion(raw) {
   const lines = raw.trim().split("\n").filter(l => l.trim());
 
   const citationLines = lines.map(line => {
-    // Match pattern: [1] url  OR  [1][2] url  OR  [1][2][3] url
     const m = line.match(/^((?:\[\d+\])+)\s+(https?:\/\/\S+)$/);
     if (m) {
       return `<span class="cite-ref">${escHtml(m[1])}</span>&nbsp;<em class="cite-url">${escHtml(m[2])}</em>`;
     }
-    // Fallback: render as-is with ref styling for any [n] patterns
     return escHtml(line).replace(/(\[\d+\])+/g, m => `<em class="cite-ref">${m}</em>`);
   }).join("<br>");
 
   return `
     <div class="citations-accordion">
       <div class="citations-header" onclick="this.closest('.citations-accordion').classList.toggle('open')">
-        <span>📎 Citations</span>
-        <span class="citations-caret">▶</span>
+        <span>&#128206; Citations</span>
+        <span class="citations-caret">&#9654;</span>
       </div>
       <div class="citations-body">${citationLines}</div>
     </div>`;
 }
 
+// ── UI Helpers ─────────────────────────────────────────────────────────
+
+function addCopyButton(preEl) {
+  const btn = document.createElement("button");
+  btn.className = "copy-btn";
+  btn.textContent = "Copy";
+  btn.onclick = () => {
+    const code = preEl.querySelector("code").textContent;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = "Copied!";
+      setTimeout(() => { btn.textContent = "Copy"; }, 1500);
+    });
+  };
+  preEl.appendChild(btn);
+}
+
 function makeStep(node, label, state) {
   const el = document.createElement("div");
   el.className = `step ${state}`;
-  const icon = NODE_ICONS[node] || "⚙️";
+  const icon = NODE_ICONS[node] || "&#9881;";
   el.innerHTML = `
-    <div class="step-icon">${state === "running" ? '<span class="spinner">⟳</span>' : icon}</div>
+    <div class="step-icon">${state === "running" ? '<span class="spinner">&#10227;</span>' : icon}</div>
     <span class="step-label">${escHtml(label)}</span>`;
   return el;
 }
@@ -594,12 +982,12 @@ function makeStep(node, label, state) {
 function setStepState(el, state) {
   el.className = `step ${state}`;
   el.querySelector(".step-icon").innerHTML =
-    state === "done" ? "✓" : `<span class="spinner">⟳</span>`;
+    state === "done" ? "&#10003;" : `<span class="spinner">&#10227;</span>`;
 }
 
-function toggleThinking() {
-  const header = document.getElementById("thinkingHeader");
-  const steps  = document.getElementById("thinkingSteps");
+function togglePanel(id) {
+  const header = document.getElementById(`${id}_thHeader`);
+  const steps  = document.getElementById(`${id}_thSteps`);
   header.classList.toggle("open");
   steps.classList.toggle("collapsed");
 }

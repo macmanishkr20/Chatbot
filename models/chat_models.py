@@ -107,6 +107,35 @@ class CancelRequest(BaseModel):
     chat_session_id: str
 
 
+class EditMessageRequest(BaseModel):
+    """Request body for POST /chat/edit — edit a message mid-thread and re-run.
+
+    The backend walks back through checkpoint history to find the state
+    just before the target message, replaces it with new_input, and
+    re-runs the graph from that point. Everything after the edit point
+    is discarded (branching).
+    """
+    user_id: str
+    chat_session_id: str
+    message_index: int = Field(
+        ...,
+        description=(
+            "Zero-based index of the user message to edit within the "
+            "conversation's message list. The frontend tracks this "
+            "from the messages array."
+        ),
+    )
+    new_input: str = Field(..., min_length=1, max_length=10000)
+    # Carry forward the original query parameters
+    is_free_form: bool = True
+    function: List[str] = []
+    sub_function: List[str] = []
+    source_url: List[str] = []
+    start_date: str = ""
+    end_date: str = ""
+    preferred_language: Optional[str] = None
+
+
 
 
 
