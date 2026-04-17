@@ -172,9 +172,20 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
             continue
 
         if isinstance(m, dict):
+            # ── Format A: simple {"type": "human", "content": "..."} ──
             role = (m.get("type") or m.get("role") or "").lower()
             content = m.get("content", "")
             msg_id = m.get("id")
+
+            # ── Format B: LangChain serde {"lc":1,"type":"constructor","id":[...,"HumanMessage"],"kwargs":{...}} ──
+            if not role and m.get("lc") == 1 and m.get("type") == "constructor":
+                id_path = m.get("id", [])  # e.g. ["langchain","schema","messages","HumanMessage"]
+                class_name = id_path[-1] if id_path else ""
+                role = "human" if "Human" in class_name else "ai"
+                kwargs = m.get("kwargs", {})
+                content = kwargs.get("content", "")
+                msg_id = kwargs.get("id")
+
             msg = HumanMessage(content=content) if role in ("human", "user") else AIMessage(content=content)
             if msg_id:
                 try:
@@ -192,7 +203,10 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
             result.append(HumanMessage(content=content) if is_human else AIMessage(content=content))
             continue
 
-        logger.warning("_ensure_base_messages: unexpected type %s, skipping", type(m))
+        logger.warning(
+            "_ensure_base_messages: unexpected type %s value=%r — skipping",
+            type(m).__name__, str(m)[:200],
+        )
 
     return result
 
@@ -565,6 +579,15 @@ async def edit_message(
         logger.error("edit: failed to load checkpoint: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to load conversation state")
 
+    logger.info(
+        "edit: thread_id=%s checkpoint_found=%s state_keys=%s raw_msg_count=%s raw_msg_types=%s",
+        thread_id,
+        checkpoint is not None,
+        list(current_state.keys()) if current_state else [],
+        len(current_state.get("messages", [])) if current_state else 0,
+        [type(m).__name__ for m in current_state.get("messages", [])] if current_state else [],
+    )
+
     if not current_state or not current_state.get("messages"):
         raise HTTPException(status_code=404, detail="No conversation state found")
 
@@ -572,16 +595,31 @@ async def edit_message(
     # that were serialised with default=str, coming back as repr strings or dicts)
     messages = _ensure_base_messages(current_state["messages"])
 
-    # Find the user messages to determine which one to edit
-    user_msg_positions = [
-        i for i, m in enumerate(messages) if isinstance(m, HumanMessage)
-    ]
+    logger.info(
+        "edit: after _ensure_base_messages count=%s types=%s",
+        len(messages),
+        [type(m).__name__ for m in messages],
+    )
+
+    # Identify user-message positions — use both isinstance and .type attribute
+    # for maximum compatibility across LangChain versions.
+    def _is_human(m: BaseMessage) -> bool:
+        if isinstance(m, HumanMessage):
+            return True
+        return getattr(m, "type", None) in ("human", "user")
+
+    user_msg_positions = [i for i, m in enumerate(messages) if _is_human(m)]
+
+    logger.info("edit: user_msg_positions=%s requested_index=%s", user_msg_positions, body.message_index)
 
     if body.message_index < 0 or body.message_index >= len(user_msg_positions):
         raise HTTPException(
             status_code=400,
-            detail=f"message_index {body.message_index} out of range "
-                   f"(conversation has {len(user_msg_positions)} user messages)",
+            detail=(
+                f"message_index {body.message_index} out of range "
+                f"(conversation has {len(user_msg_positions)} user messages). "
+                f"Message types in checkpoint: {[type(m).__name__ for m in messages]}"
+            ),
         )
 
     # The absolute position in the messages list of the message being edited
