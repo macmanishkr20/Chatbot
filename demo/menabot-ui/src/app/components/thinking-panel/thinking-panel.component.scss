@@ -1,49 +1,36 @@
 .thinking-panel {
-  margin-bottom: 10px;
-  border-radius: 14px;
-  background: var(--bg-subtle);
-  border: 1px solid var(--border-subtle);
+  margin-bottom: 8px;
+  border-radius: 8px;
+  background: #f7f7f8;
+  border: 1px solid #e5e5e5;
   overflow: hidden;
   font-size: 13px;
-  transition: background 180ms var(--ease);
-}
-
-.thinking-panel.collapsed {
-  display: inline-block;
-  border-radius: 12px;
 }
 
 .thinking-toggle {
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 14px;
+  gap: 8px;
+  padding: 8px 12px;
   background: none;
   border: none;
   cursor: pointer;
-  color: var(--text-secondary);
+  color: #666;
   font-size: 13px;
-  font-family: inherit;
-  letter-spacing: -0.005em;
-  transition: background 180ms var(--ease);
+  transition: background 0.15s;
 
   &:hover {
-    background: var(--border-subtle);
+    background: #efefef;
   }
 }
 
 .thinking-icon {
-  width: 14px;
-  height: 14px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  animation: thinking-spin 2s linear infinite;
+  font-size: 14px;
+  animation: spin 2s linear infinite;
 
   .mat-icon {
     font-size: 14px;
-    color: var(--accent);
   }
 }
 
@@ -53,32 +40,28 @@
 
 .completed .thinking-icon {
   animation: none;
-
-  .mat-icon {
-    color: var(--success);
-  }
+  color: #27ae60;
 }
 
 .completed .thinking-label {
-  color: var(--success);
+  color: #27ae60;
 }
 
 .thinking-label {
-  font-weight: 500;
-  color: var(--text-primary);
-  letter-spacing: -0.01em;
+  font-weight: 600;
+  color: #444;
 }
 
 .thinking-count {
   margin-left: auto;
-  color: var(--text-muted);
+  color: #999;
   font-size: 12px;
 }
 
 .thinking-caret {
-  font-size: 14px !important;
-  transition: transform 240ms var(--ease-out);
-  color: var(--text-muted);
+  font-size: 10px;
+  transition: transform 0.2s;
+  color: #999;
 
   .mat-icon {
     font-size: 14px;
@@ -93,77 +76,55 @@
   transform: rotate(90deg);
 }
 
-// ── Steps (timeline) ──
-
 .thinking-steps {
-  padding: 6px 16px 12px 22px;
+  padding: 4px 12px 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    left: 15px;
-    top: 12px;
-    bottom: 16px;
-    width: 2px;
-    background: linear-gradient(to bottom, var(--brand-yellow), var(--accent) 60%, var(--border-subtle));
-    border-radius: 2px;
-    opacity: 0.7;
-  }
 }
 
 .step {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  padding: 5px 0;
-  color: var(--text-muted);
-  transition: color 180ms var(--ease);
-  position: relative;
+  gap: 8px;
+  padding: 4px 0;
+  color: #888;
+  transition: color 0.2s;
 
   &.running {
-    color: var(--accent);
+    color: #2d6bcf;
     font-weight: 500;
   }
 
   &.done {
-    color: var(--text-secondary);
+    color: #666;
   }
 }
 
 .step-icon {
-  width: 14px;
-  height: 14px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
   margin-top: 1px;
-  background: var(--bg-subtle);
-  border-radius: 50%;
-  z-index: 1;
 }
 
 .spinner {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--accent);
+  border: 2px solid #2d6bcf;
   border-top-color: transparent;
   border-radius: 50%;
-  animation: thinking-spin 0.8s linear infinite;
+  animation: spin 0.8s linear infinite;
 }
 
 .checkmark {
-  color: var(--success);
+  color: #27ae60;
   font-size: 13px;
   font-weight: 700;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
 
   .mat-icon {
     font-size: 13px;
@@ -171,9 +132,8 @@
 }
 
 .pending-dot {
-  color: var(--text-muted);
+  color: #ccc;
   font-size: 16px;
-  line-height: 1;
 }
 
 .step-node {
@@ -181,16 +141,13 @@
   font-size: 12px;
   min-width: 80px;
   flex-shrink: 0;
-  color: var(--text-primary);
-  letter-spacing: -0.005em;
 }
 
 .step-msg {
-  font-size: 12.5px;
-  line-height: 1.5;
-  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
 }
 
-@keyframes thinking-spin {
+@keyframes spin {
   to { transform: rotate(360deg); }
 }
