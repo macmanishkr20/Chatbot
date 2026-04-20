@@ -25,8 +25,10 @@ export class LoginComponent {
       this.error.set('Please enter your email address.');
       return;
     }
-    if (!email.endsWith('@gds.ey.com')) {
-      this.error.set('Please use your @gds.ey.com email address.');
+    // Accept any EY regional subdomain: name@{region}.ey.com (e.g. gds, ae, bh, sa…)
+    const EY_EMAIL_RE = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.ey\.com$/;
+    if (!EY_EMAIL_RE.test(email)) {
+      this.error.set('Please use your EY email address (e.g. name@gds.ey.com, name@ae.ey.com).');
       return;
     }
     if (this.auth.login(email)) {
