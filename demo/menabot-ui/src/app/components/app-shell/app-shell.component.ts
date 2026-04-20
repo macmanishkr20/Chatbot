@@ -23,11 +23,22 @@ import { ChatService } from '../../services/chat.service';
     .app-shell {
       display: flex;
       height: 100%;
-      background: var(--bg-main, #f0f2f5);
+      background: var(--bg-main);
+      color: var(--text-primary);
+    }
+
+    app-sidebar {
+      flex-shrink: 0;
+      overflow: hidden;
+      width: 268px;
+      transition: width 240ms cubic-bezier(0.4, 0, 0.2, 1),
+                  opacity 180ms cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .app-shell.sidebar-collapsed app-sidebar {
-      display: none;
+      width: 0;
+      opacity: 0;
+      pointer-events: none;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,
