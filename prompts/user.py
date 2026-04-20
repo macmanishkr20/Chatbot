@@ -38,41 +38,37 @@ def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
         documents_section = str(curateddata)
 
     # ── Build filter context line (only shown when a filter was applied) ──
-    filter_context = f"\n<applied_filter>{suffix}</applied_filter>" if suffix else ""
+    filter_context = f"\nApplied filter: {suffix}" if suffix else ""
 
     return f"""\
-<source_documents>
+Source Documents:
 {documents_section}
-</source_documents>{filter_context}
+{filter_context}
 
-<instructions>
-- Answer the user query below using ONLY the source documents above.
+Instructions:
+- Answer the user query below using ONLY the source documents listed above.
 - Do not use outside knowledge or make assumptions beyond the documents.
-- Cite every factual claim with an inline numeric reference corresponding
-  to the document number, e.g. [1] or [2][3].
-- Include a citation only when the document's content directly supports
-  the claim.
-</instructions>
+- Cite every factual claim with an inline numeric reference corresponding to \
+the document number, e.g. [1] or [2][3].
+- Do not include a citation for a document unless its content directly \
+supports the claim.
 
-<citation_format>
-- Inline: place the reference number immediately after the supported
-  statement, e.g. "... approval is required within 5 business days [1]."
-- Citation block: list all references at the end under a "Citations:"
-  heading, one per line — [N] <source_url>.
-- If multiple reference numbers share the same source URL, group them on
-  one line: [1][2] <source_url>.
-</citation_format>
+Citation format rules:
+- Inline: place the reference number immediately after the supported statement,
+  e.g. "... approval is required within 5 business days [1]."
+- Citation block: list all references at the end under a "Citations:" heading.
+  - One reference per line: [N] <source_url>
+  - If multiple reference numbers share the same source URL, group them on one
+    line: [1][2] <source_url>
 
-<example>
-Invoices must be submitted within 30 days of the service date [1].
-Late submissions require manager approval [2][3].
+Example output:
+  Invoices must be submitted within 30 days of the service date [1].
+  Late submissions require manager approval [2][3].
 
-Citations:
-[1] https://ey.com/mena/finance/invoice-policy
-[2][3] https://ey.com/mena/finance/approval-guidelines
-</example>
+  Citations:
+  [1] https://ey.com/mena/finance/invoice-policy
+  [2][3] https://ey.com/mena/finance/approval-guidelines
 
-<user_query>
-{query}
-</user_query>\
+User query:
+{query}\
 """

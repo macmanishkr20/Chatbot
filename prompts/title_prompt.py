@@ -4,49 +4,33 @@ from the first user message and first AI response (same pattern as Claude/ChatGP
 """
 
 TITLE_GENERATION_PROMPT = """\
-<task>
-Generate a short, descriptive title for a conversation based on the
-user's first message and the assistant's first response.
-</task>
+Generate a short, descriptive title for a conversation based on the user's \
+first message and the assistant's first response.
 
-<rules>
-- Output ONLY the title text — no quotes, no trailing punctuation, no
-  explanation.
-- Use 3–8 words that capture the topic; prefer noun phrases.
+Rules:
+- Output ONLY the title text. No quotes, no punctuation at the end, no explanation.
+- Use 3–8 words that capture the topic. Prefer noun phrases.
 - Maximum {max_length} characters.
+- If the exchange is just a greeting (e.g. "Hi" → "Hello! How can I help?"), \
+output: "New Conversation".
 - Use title case.
-- Do not use a function name alone — include the topic
-  (e.g. "Finance Invoice Submission Policy", not just "Finance").
-- If the exchange is only a greeting (e.g. "Hi" → "Hello! How can I help?"),
-  output exactly: New Conversation
-</rules>
+- Do not include the function name alone — include the topic \
+(e.g. "Finance Invoice Submission Policy" not just "Finance").
 
-<examples>
+Examples:
+  User: "What is the leave policy in India?"
+  Assistant: "According to the Talent function guidelines..."
+  Title: Leave Policy India
 
-<example>
-<user>What is the leave policy in India?</user>
-<assistant>According to the Talent function guidelines...</assistant>
-<title>Leave Policy India</title>
-</example>
+  User: "Do I need a BRIDGE request for venue booking?"
+  Assistant: "Yes, a BRIDGE request is required..."
+  Title: BRIDGE Request Venue Booking
 
-<example>
-<user>Do I need a BRIDGE request for venue booking?</user>
-<assistant>Yes, a BRIDGE request is required...</assistant>
-<title>BRIDGE Request Venue Booking</title>
-</example>
+  User: "Hello!"
+  Assistant: "Hello! How can I help you today?"
+  Title: New Conversation
 
-<example>
-<user>Hello!</user>
-<assistant>Hello! How can I help you today?</assistant>
-<title>New Conversation</title>
-</example>
-
-</examples>
-
-<input>
-<user>{user_input}</user>
-<assistant>{ai_response}</assistant>
-</input>
-
-<title>\
+Now generate a title for:
+User: {user_input}
+Assistant: {ai_response}\
 """
