@@ -217,12 +217,13 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
     }
 
 
+# Accept any EY regional subdomain: name@{region}.ey.com (gds, ae, bh, sa, …) or name@ey.com
+_EY_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)?ey\.com$")
+
+
 def _has_gds_domain(user_id: str) -> bool:
-    """Validate that the incoming user ID belongs to the GDS domain."""
-    return (
-        user_id.strip().lower().endswith("@gds.ey.com")
-        or user_id.strip().lower().endswith("@ey.com")
-    )
+    """Validate that the incoming user ID belongs to an EY domain."""
+    return bool(_EY_EMAIL_RE.match(user_id.strip().lower()))
 
 
 def _validate_user(user_id: str) -> None:
@@ -230,7 +231,7 @@ def _validate_user(user_id: str) -> None:
     if not user_id:
         raise HTTPException(status_code=400, detail="UserId is not provided")
     if not _has_gds_domain(user_id):
-        raise HTTPException(status_code=400, detail="UserId must belong to @gds.ey.com")
+        raise HTTPException(status_code=400, detail="UserId must be an EY email (e.g. @gds.ey.com, @ae.ey.com)")
 
 
 def _sanitize_input(text: str) -> str:

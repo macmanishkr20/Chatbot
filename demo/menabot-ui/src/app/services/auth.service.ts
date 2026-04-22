@@ -30,7 +30,8 @@ export class AuthService {
   }
 
   login(email: string): boolean {
-    if (!email.endsWith('@gds.ey.com')) return false;
+    // Accept any EY regional subdomain: name@{region}.ey.com
+    if (!/^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.ey\.com$/.test(email)) return false;
     localStorage.setItem(AUTH_KEY, email);
     this.userEmail.set(email);
     this.isLoggedIn.set(true);
