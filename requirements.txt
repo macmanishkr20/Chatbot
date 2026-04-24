@@ -41,3 +41,14 @@ slowapi
 # langfuse
 # microsoft-agents-a365-observability-extensions-langchain
 # azure-monitor-opentelemetry
+
+# ── Optional: Screen-share + voice assistance (feature/screen-share-voice) ──
+# Uncomment (and set AZURE_OPENAI_REALTIME_* env vars) to enable the
+# /ws/screenshare/* endpoints. The module is loaded lazily in app.py so
+# absence of these packages does not break the main chat service.
+# aiortc>=1.9.0
+# av>=12.3.0
+# Pillow>=10.4.0
+# imagehash>=4.3.1
+# websockets>=13.0
+# azure-cognitiveservices-speech>=1.40.0

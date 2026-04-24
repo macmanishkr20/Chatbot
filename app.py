@@ -117,7 +117,15 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
     await _init_graph()
-    yield
+    try:
+        yield
+    finally:
+        # Screenshare feature: tear down any live WebRTC peers.
+        try:
+            from screenshare.rtc_peer import close_all_peers
+            await close_all_peers()
+        except Exception:
+            pass
 
 
 # ── FastAPI App ──
@@ -127,7 +135,8 @@ app = FastAPI(
     title="MenaBot RAG Service - M365 Agents SDK + LangGraph",
     description=(
         "Backend service for MenaBot using LangGraph for RAG orchestration. "
-        "Endpoints: /health, /chat, /feedback, /conversations."
+        "Endpoints: /health, /chat, /feedback, /conversations, "
+        "/ws/screenshare/signaling, /ws/screenshare/control."
     ),
     version="1.0.0",
     docs_url="/docs",
@@ -148,6 +157,29 @@ app.add_middleware(
 if _rate_limiting_available and limiter:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# ── Screen-share + voice assistance (optional feature module) ──
+# Registers two WebSocket routes:
+#   /ws/screenshare/signaling  — WebRTC offer/answer exchange
+#   /ws/screenshare/control    — transcripts + assistant events
+#
+# The module is loaded lazily so that missing optional deps
+# (aiortc, av, websockets, Pillow, imagehash, azure-cognitiveservices-speech)
+# don't break the main chat service — the feature simply won't register.
+try:
+    from screenshare import control_router as _ss_control_router
+    from screenshare import signaling_router as _ss_signaling_router
+
+    app.include_router(_ss_signaling_router)
+    app.include_router(_ss_control_router)
+    logger.info("screenshare: WebSocket routes registered")
+except Exception as _ss_exc:  # pragma: no cover
+    logger.warning(
+        "screenshare: feature disabled (%s). Install optional deps "
+        "and set AZURE_OPENAI_REALTIME_* env vars to enable.",
+        _ss_exc,
+    )
 
 
 # ── Helpers ──
