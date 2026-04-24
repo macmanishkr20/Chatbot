@@ -1,5 +1,19 @@
 <div class="chat-input-bar">
   <div class="input-wrapper">
+    <button
+      type="button"
+      class="screenshare-btn"
+      [class.active]="screenshare.isActive()"
+      [class.speaking]="screenshare.userSpeaking() || screenshare.assistantSpeaking()"
+      [disabled]="screenshare.status() === 'connecting'"
+      [title]="screenshare.isActive() ? 'Stop screen share' : 'Share screen and talk'"
+      (click)="toggleScreenshare()"
+    >
+      <span class="mat-icon filled">
+        {{ screenshare.isActive() ? 'stop_screen_share' : 'screen_share' }}
+      </span>
+    </button>
+
     <textarea
       #textareaEl
       class="chat-textarea"
@@ -28,7 +42,27 @@
     }
   </div>
 
-  <div class="input-hint">
-    Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
-  </div>
+  @if (screenshare.isActive()) {
+    <div class="screenshare-status">
+      @if (screenshare.userSpeaking()) {
+        <span class="status-dot listening"></span> Listening…
+      } @else if (screenshare.assistantSpeaking()) {
+        <span class="status-dot speaking"></span> Assistant speaking…
+      } @else {
+        <span class="status-dot idle"></span> Screen share live — speak anytime
+      }
+    </div>
+  } @else if (screenshare.status() === 'connecting') {
+    <div class="screenshare-status">
+      <span class="status-dot idle"></span> Connecting…
+    </div>
+  } @else if (screenshare.errorMessage()) {
+    <div class="screenshare-status error">
+      ⚠ {{ screenshare.errorMessage() }}
+    </div>
+  } @else {
+    <div class="input-hint">
+      Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
+    </div>
+  }
 </div>

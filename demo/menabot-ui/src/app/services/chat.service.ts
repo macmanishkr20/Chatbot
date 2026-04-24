@@ -305,6 +305,114 @@ export class ChatService {
     );
   }
 
+  // ── Voice / screen-share ingest helpers ──
+  //
+  // The screenshare service receives events over a WebSocket (not SSE) and
+  // calls these to render the turn in the chat window. Persistence,
+  // checkpointing, and memory are handled server-side by the same
+  // LangGraph pipeline the REST /chat endpoint uses — see
+  // ``screenshare/chat_bridge.py`` on the backend.
+
+  /** Called when a final user transcript arrives from the voice channel. */
+  ingestVoiceUserMessage(text: string): void {
+    if (!text.trim()) return;
+    if (!this.activeSessionId()) {
+      this.activeSessionId.set(this.generateSessionId());
+    }
+    const userMsg: ChatMessage = {
+      id: this.generateId(),
+      role: 'user',
+      content: text.trim(),
+      userMessageIndex: this.userMsgCounter++,
+      timestamp: new Date(),
+    };
+    this.messages.update(msgs => [...msgs, userMsg]);
+  }
+
+  /** Append an assistant token delta arriving from the voice channel.
+   *  Returns the (possibly newly-created) placeholder message id so the
+   *  caller can keep routing subsequent deltas to the same bubble. */
+  ingestVoiceAssistantDelta(delta: string, existingId: string | null): string {
+    let id = existingId;
+    if (!id) {
+      const placeholder: ChatMessage = {
+        id: this.generateId(),
+        role: 'assistant',
+        content: delta,
+        isStreaming: true,
+        timestamp: new Date(),
+      };
+      id = placeholder.id;
+      this.messages.update(msgs => [...msgs, placeholder]);
+    } else {
+      const targetId = id;
+      this.messages.update(msgs =>
+        msgs.map(m =>
+          m.id === targetId
+            ? { ...m, content: m.content + delta }
+            : m,
+        ),
+      );
+    }
+    return id;
+  }
+
+  /** Final assistant text from the voice channel — authoritative rewrite. */
+  ingestVoiceAssistantFinal(text: string, existingId: string | null): void {
+    const finalText = text.trim();
+    if (!existingId && !finalText) return;
+    if (!existingId) {
+      const msg: ChatMessage = {
+        id: this.generateId(),
+        role: 'assistant',
+        content: finalText,
+        isStreaming: false,
+        timestamp: new Date(),
+      };
+      this.messages.update(msgs => [...msgs, msg]);
+      return;
+    }
+    const targetId = existingId;
+    this.messages.update(msgs =>
+      msgs.map(m =>
+        m.id === targetId
+          ? {
+              ...m,
+              content: finalText || m.content,
+              isStreaming: false,
+              citations: this.parseCitations(finalText || m.content),
+            }
+          : m,
+      ),
+    );
+  }
+
+  /** Apply the terminal ``final`` payload (same shape as the REST /chat event). */
+  ingestVoiceFinal(payload: FinalEvent, existingId: string | null): void {
+    if (payload.chat_id) this.activeChatId.set(payload.chat_id);
+    if (payload.conversation_title) {
+      this.conversationTitle.set(payload.conversation_title);
+    }
+    if (existingId && payload.message_id) {
+      const targetId = existingId;
+      const actions = this.parseSuggestiveActions(payload.suggestive_actions);
+      this.messages.update(msgs =>
+        msgs.map(m =>
+          m.id === targetId
+            ? {
+                ...m,
+                messageId: payload.message_id ?? undefined,
+                chatId: payload.chat_id,
+                suggestiveActions: actions,
+                conversationTitle: payload.conversation_title ?? null,
+              }
+            : m,
+        ),
+      );
+    }
+    this.loadConversations();
+  }
+
   // ── Private: Core streaming logic ──
 
   private async streamResponse(

@@ -2,6 +2,7 @@ import { Component, ChangeDetectionStrategy, inject, signal, ElementRef, ViewChi
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
+import { ScreenshareService } from '../../services/screenshare.service';
 
 @Component({
   selector: 'app-chat-input',
@@ -13,6 +14,7 @@ import { ChatService } from '../../services/chat.service';
 })
 export class ChatInputComponent {
   readonly chat = inject(ChatService);
+  readonly screenshare = inject(ScreenshareService);
 
   inputText = signal('');
 
@@ -41,6 +43,10 @@ export class ChatInputComponent {
     const el = event.target as HTMLTextAreaElement;
     el.style.height = 'auto';
     el.style.height = Math.min(el.scrollHeight, 200) + 'px';
+  }
+
+  toggleScreenshare(): void {
+    void this.screenshare.toggle();
   }
 
   private resetHeight(): void {
