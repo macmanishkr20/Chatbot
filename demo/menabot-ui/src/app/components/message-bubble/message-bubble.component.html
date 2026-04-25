@@ -56,6 +56,16 @@
         </div>
       }
 
+      <!-- Template upload (assistant requested a template) -->
+      @if (message().templateRequest && !message().isStreaming) {
+        <app-template-upload [request]="message().templateRequest!" />
+      }
+
+      <!-- Download card (assistant generated a document) -->
+      @if (message().download && !message().isStreaming) {
+        <app-download-card [info]="message().download!" />
+      }
+
       <!-- Citations Collapsible -->
       @if (isBot && hasCitations && !message().isStreaming) {
         <div class="citations-section">

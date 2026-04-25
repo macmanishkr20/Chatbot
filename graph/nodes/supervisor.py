@@ -29,6 +29,7 @@ from graph.rag_graph import build_rag_graph
 from graph.state import RAGState
 from graph.nodes.persist_node import persist_node
 from graph.nodes.memory_node import save_memory_node
+from graph.nodes.export_node import export_node
 from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
 from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
 from graph.context_manager import prepare_supervisor_messages
@@ -36,7 +37,7 @@ from services.openai_client import  get_llm_model
 
 logger = logging.getLogger(__name__)
 
-MEMBERS = ["rag_graph"]
+MEMBERS = ["rag_graph", "export_document"]
 OPTIONS_FOR_NEXT = ["RESPOND"] + MEMBERS
 
 # Lock for thread-safe singleton initialisation under async concurrency
@@ -71,7 +72,7 @@ class SuggestiveActionResponse(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    next: Literal["RESPOND", "rag_graph"] = Field(
+    next: Literal["RESPOND", "rag_graph", "export_document"] = Field(
         description="The next step in the workflow"
     )
     suggestive_actions: list[ActionResponse] | None = Field(
@@ -192,20 +193,25 @@ class SupervisorGraph:
         rag_graph = build_rag_graph(memory_store=self._memory_store)
         workflow = StateGraph(RAGState)
         workflow.add_node("rag_graph", rag_graph)
+        workflow.add_node("export_document", export_node)
         workflow.add_node("Supervisor", self.supervisor_agent)
 
-        # persist + save_memory are shared by both paths so greetings and
-        # direct RESPOND replies are stored in SQL chat history.
+        # persist + save_memory are shared by all paths so greetings, direct
+        # RESPOND replies, and export-document responses are all stored in
+        # SQL chat history.
         workflow.add_node("persist", persist_node)
         workflow.add_node("save_memory", save_memory_node)
 
-        # RESPOND routes to persist (not END) so the reply is persisted.
+        # RESPOND and export_document route through persist so their replies
+        # are persisted. rag_graph runs its own persist internally.
         conditional_map = {member: member for member in MEMBERS}
         conditional_map["RESPOND"] = "persist"
+        conditional_map["export_document"] = "export_document"
 
         workflow.add_conditional_edges("Supervisor", self._get_next, conditional_map)
         workflow.add_edge(START, "Supervisor")
         workflow.add_edge("rag_graph", END)
+        workflow.add_edge("export_document", "persist")
         workflow.add_edge("persist", "save_memory")
         workflow.add_edge("save_memory", END)
 

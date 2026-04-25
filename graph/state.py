@@ -68,6 +68,19 @@ class RAGState(TypedDict, total=False):
     # can resolve "tell me more about [2]" to the original source.
     citation_map: dict | None
 
+    # ── Document export (export_document node) ──
+    # Format key understood by tools.export_generators (xlsx, pptx, docx, txt,
+    # json, pages, numbers, keynote). Set by client when invoking export.
+    export_format: str | None
+    # ID of a previously uploaded template (POST /upload-template returns this).
+    template_file_id: str | None
+    # Set by export_node when a template is required but missing — UI renders
+    # an inline upload widget. Shape: {"format": str, "extension": str, "topic": str}
+    template_request: dict | None
+    # Set by export_node when generation succeeds — UI renders a download
+    # button. Shape: {"file_id", "filename", "extension", "format", "url", "ios_note"}
+    download: dict | None
+
     # ── Output ──
     response: dict | None
     error_info: dict | None

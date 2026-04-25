@@ -10,6 +10,7 @@ import {
   SuggestiveAction,
   ThinkingStep,
 } from '../models/chat.models';
+import { firstValueFrom } from 'rxjs';
 
 /**
  * Central chat state manager using Angular 19 signals.
@@ -84,7 +85,10 @@ export class ChatService {
   }
 
   /** Send a user message and stream the response. */
-  async sendMessage(text: string): Promise<void> {
+  async sendMessage(
+    text: string,
+    opts?: { exportFormat?: string; templateFileId?: string; suppressUserBubble?: boolean },
+  ): Promise<void> {
     if (this.isStreaming() || !text.trim()) return;
 
     // Ensure we have a session
@@ -92,15 +96,16 @@ export class ChatService {
       this.activeSessionId.set(this.generateSessionId());
     }
 
-    const userMsg: ChatMessage = {
-      id: this.generateId(),
-      role: 'user',
-      content: text.trim(),
-      userMessageIndex: this.userMsgCounter++,
-      timestamp: new Date(),
-    };
-
-    this.messages.update(msgs => [...msgs, userMsg]);
+    if (!opts?.suppressUserBubble) {
+      const userMsg: ChatMessage = {
+        id: this.generateId(),
+        role: 'user',
+        content: text.trim(),
+        userMessageIndex: this.userMsgCounter++,
+        timestamp: new Date(),
+      };
+      this.messages.update(msgs => [...msgs, userMsg]);
+    }
 
     await this.streamResponse({
       input_type: 'ask',
@@ -114,7 +119,35 @@ export class ChatService {
       source_url: [],
       start_date: '',
       end_date: '',
+      export_format: opts?.exportFormat,
+      template_file_id: opts?.templateFileId,
     });
+  }
+
+  /**
+   * Upload a template and re-run the original export request. Called from
+   * the inline template-upload widget rendered when the backend asks for one.
+   */
+  async submitTemplate(file: File, format: string, topic: string): Promise<void> {
+    if (this.isStreaming()) return;
+    try {
+      const result = await firstValueFrom(
+        this.api.uploadTemplate(this.userId(), file),
+      );
+      await this.sendMessage(topic, {
+        exportFormat: format,
+        templateFileId: result.template_file_id,
+        suppressUserBubble: true,
+      });
+    } catch (err) {
+      console.error('Template upload failed:', err);
+      this.error.set('Failed to upload template. Please try again.');
+    }
+  }
+
+  /** Build an absolute download URL for a generated document. */
+  downloadUrl(relativeUrl: string): string {
+    return this.api.buildDownloadUrl(relativeUrl);
   }
 
   /** Edit a user message at the given index and re-run from that point. */
@@ -329,6 +362,8 @@ export class ChatService {
       source_url: string[];
       start_date: string;
       end_date: string;
+      export_format?: string;
+      template_file_id?: string;
     },
     editBody?: {
       user_id: string;
@@ -455,6 +490,8 @@ export class ChatService {
               suggestiveActions: parsedActions,
               conversationTitle: final.conversation_title,
               citations,
+              templateRequest: final.template_request ?? null,
+              download: final.download ?? null,
             };
           })
         );

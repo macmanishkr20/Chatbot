@@ -8,6 +8,8 @@ import { SuggestiveActionsComponent } from '../suggestive-actions/suggestive-act
 import { ChatService } from '../../services/chat.service';
 import { AuthService } from '../../services/auth.service';
 import { FeedbackModalComponent } from '../feedback-modal/feedback-modal.component';
+import { TemplateUploadComponent } from '../template-upload/template-upload.component';
+import { DownloadCardComponent } from '../download-card/download-card.component';
 
 @Component({
   selector: 'app-message-bubble',
@@ -19,6 +21,8 @@ import { FeedbackModalComponent } from '../feedback-modal/feedback-modal.compone
     ThinkingPanelComponent,
     SuggestiveActionsComponent,
     FeedbackModalComponent,
+    TemplateUploadComponent,
+    DownloadCardComponent,
   ],
   templateUrl: './message-bubble.component.html',
   styleUrl: './message-bubble.component.scss',

@@ -60,6 +60,16 @@ class UserChatQuery(BaseModel):
     current_date: str = ""
     preferred_language: Optional[str] = None
 
+    # ── Document export (optional; populated when user invokes export flow) ──
+    export_format: Optional[str] = Field(
+        default=None,
+        description="Requested output format: pptx, xlsx, docx, txt, json, pages, numbers, keynote.",
+    )
+    template_file_id: Optional[str] = Field(
+        default=None,
+        description="ID returned by POST /upload-template when the user uploaded a template.",
+    )
+
 class BusinessExceptionResponse(BaseModel):
     error_code: str | None = None
     text: str | None = None

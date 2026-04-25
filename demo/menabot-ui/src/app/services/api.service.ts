@@ -12,6 +12,7 @@ import {
   RenameRequest,
   SSEEvent,
   StoredMessage,
+  UploadTemplateResponse,
 } from '../models/chat.models';
 
 /**
@@ -86,6 +87,22 @@ export class ApiService {
 
   healthCheck(): Observable<{ status: string; engine: string }> {
     return this.http.get<{ status: string; engine: string }>(`${this.baseUrl}/health`);
+  }
+
+  // ── Document Export ──
+
+  /** Upload a .pptx / .xlsx / .docx template; returns a template_file_id. */
+  uploadTemplate(userId: string, file: File): Observable<UploadTemplateResponse> {
+    const form = new FormData();
+    form.append('user_id', userId);
+    form.append('template', file);
+    return this.http.post<UploadTemplateResponse>(`${this.baseUrl}/upload-template`, form);
+  }
+
+  /** Build an absolute URL for a generated document. */
+  buildDownloadUrl(relativeUrl: string): string {
+    if (!relativeUrl) return '';
+    return /^https?:\/\//.test(relativeUrl) ? relativeUrl : `${this.baseUrl}${relativeUrl}`;
   }
 
   // ── Private: SSE stream parser ──
