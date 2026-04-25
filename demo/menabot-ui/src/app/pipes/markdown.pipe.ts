@@ -7,6 +7,9 @@ import { marked } from 'marked';
   standalone: true,
 })
 export class MarkdownPipe implements PipeTransform {
+  private lastInput = '';
+  private lastOutput: SafeHtml = '';
+
   constructor(private sanitizer: DomSanitizer) {
     marked.setOptions({
       breaks: true,
@@ -16,6 +19,9 @@ export class MarkdownPipe implements PipeTransform {
 
   transform(value: string | null | undefined): SafeHtml {
     if (!value) return '';
+    // Skip re-parsing if input unchanged (same content rendered twice in one CD cycle)
+    if (value === this.lastInput) return this.lastOutput;
+
     try {
       let html = marked.parse(value) as string;
 
@@ -25,7 +31,9 @@ export class MarkdownPipe implements PipeTransform {
         '<span class="citation-ref">[$1]</span>'
       );
 
-      return this.sanitizer.bypassSecurityTrustHtml(html);
+      this.lastInput = value;
+      this.lastOutput = this.sanitizer.bypassSecurityTrustHtml(html);
+      return this.lastOutput;
     } catch {
       return value;
     }

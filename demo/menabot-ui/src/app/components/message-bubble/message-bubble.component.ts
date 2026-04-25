@@ -70,8 +70,8 @@ export class MessageBubbleComponent {
     // Strip the entire "Citations:" block and everything after it
     raw = raw.replace(/\n?\s*Citations:\s*[\s\S]*$/i, '');
 
-    // Strip citation definition lines (indexes + URL on same line)
-    raw = raw.replace(/^\s*(?:\[\d+\])+:?\s*https?:\/\/[^\s]+\s*$/gm, '');
+    // Strip citation definition lines: [1] https://... or [1] Document_Name
+    raw = raw.replace(/^\s*(?:\[\d+\])+:?\s*\S.*$/gm, '');
 
     // Strip standalone bracket reference lines: [1][2][3]
     raw = raw.replace(/^\s*(?:\[\d+\])+\s*$/gm, '');

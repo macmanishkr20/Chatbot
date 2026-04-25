@@ -66,6 +66,11 @@ export class ChatService {
   private abortController: AbortController | null = null;
   private userMsgCounter = 0;
 
+  // ── Smooth streaming (word-by-word drip buffer) ──
+  private contentQueue = '';
+  private dripTimerId: ReturnType<typeof setTimeout> | null = null;
+  private dripAssistantId: string | null = null;
+
   // ── Public API ──
 
   /** Start a new chat — clears messages and generates a new session ID. */
@@ -173,6 +178,10 @@ export class ChatService {
   /** Cancel the current in-flight stream. */
   cancelStream(): void {
     this.abortController?.abort();
+    // Flush any buffered content before cancelling
+    if (this.dripAssistantId) {
+      this.flushContentQueue(this.dripAssistantId);
+    }
     this.api.cancelChat({
       user_id: this.userId(),
       chat_session_id: this.activeSessionId()!,
@@ -378,6 +387,9 @@ export class ChatService {
         this.error.set('Failed to get response. Please try again.');
       }
     } finally {
+      // Flush any remaining buffered content immediately
+      this.flushContentQueue(assistantMsg.id);
+
       // Finalize the assistant message
       this.messages.update(msgs =>
         msgs.map(m =>
@@ -410,13 +422,9 @@ export class ChatService {
       }
 
       case 'content': {
-        this.messages.update(msgs =>
-          msgs.map(m =>
-            m.id === assistantId
-              ? { ...m, content: m.content + event.content }
-              : m
-          )
-        );
+        this.contentQueue += event.content;
+        this.dripAssistantId = assistantId;
+        this.startDrip();
         break;
       }
 
@@ -458,6 +466,67 @@ export class ChatService {
     }
   }
 
+  // ── Smooth streaming: word-by-word drip with deliberate pacing ──
+
+  /**
+   * Start the drip timer if not already running.
+   * Words are revealed one at a time at ~30 words/sec, speeding up
+   * when the buffer grows so we never fall far behind the backend.
+   * This produces the smooth Gemini-style "materialising" effect.
+   */
+  private startDrip(): void {
+    if (this.dripTimerId !== null) return;
+    this.dripTimerId = setTimeout(() => this.dripTick(), 0);
+  }
+
+  private dripTick(): void {
+    this.dripTimerId = null;
+    if (!this.contentQueue || !this.dripAssistantId) return;
+
+    // Extract the next word (including its trailing whitespace)
+    const match = this.contentQueue.match(/^\s*\S+\s?/);
+    const end = match ? match[0].length : Math.min(1, this.contentQueue.length);
+    const chunk = this.contentQueue.slice(0, end);
+    this.contentQueue = this.contentQueue.slice(end);
+
+    this.messages.update(msgs =>
+      msgs.map(m =>
+        m.id === this.dripAssistantId
+          ? { ...m, content: m.content + chunk }
+          : m
+      )
+    );
+
+    if (this.contentQueue) {
+      // Adaptive pacing: slow when buffer is small (smooth feel),
+      // fast when buffer is large (catch up to backend).
+      const delay = this.contentQueue.length > 200 ? 50
+                  : this.contentQueue.length > 80  ? 65
+                  : 85;
+      this.dripTimerId = setTimeout(() => this.dripTick(), delay);
+    }
+  }
+
+  /** Flush all remaining buffered content at once (used when stream ends). */
+  private flushContentQueue(assistantId: string): void {
+    if (this.dripTimerId !== null) {
+      clearTimeout(this.dripTimerId);
+      this.dripTimerId = null;
+    }
+    if (this.contentQueue) {
+      const remaining = this.contentQueue;
+      this.contentQueue = '';
+      this.messages.update(msgs =>
+        msgs.map(m =>
+          m.id === assistantId
+            ? { ...m, content: m.content + remaining }
+            : m
+        )
+      );
+    }
+    this.dripAssistantId = null;
+  }
+
   // ── Helpers ──
 
   private generateId(): string {
@@ -493,21 +562,27 @@ export class ChatService {
   }
 
   /**
-   * Extract citation URLs from the response content.
-   * Keeps grouped references together exactly as the backend sends them:
-   *   [1][2][3] https://...  →  { indexes: [1,2,3], url: "https://..." }
-   *   [1] https://...        →  { indexes: [1], url: "https://..." }
+   * Extract citations from the response content.
+   * Supports both URL-based and document-name-based citations:
+   *   [1][2][3] https://...              →  { indexes: [1,2,3], source: "https://...", isUrl: true }
+   *   [1] Finance_Internal_QnA_Document. →  { indexes: [1], source: "Finance_Internal_QnA_Document", isUrl: false }
    */
   private parseCitations(content: string): Citation[] {
     const citations: Citation[] = [];
 
-    // Match one or more [number] groups followed by optional ":" then a URL
-    const linePattern = /((?:\[\d+\])+):?\s*(https?:\/\/[^\s)<>]+)/g;
+    // First isolate the Citations block if present
+    const citationsBlockMatch = content.match(/\n?\s*Citations:\s*\n([\s\S]*)$/i);
+    const searchContent = citationsBlockMatch ? citationsBlockMatch[1] : content;
+
+    // Match [number] groups followed by a source (URL or document name)
+    const linePattern = /^\s*((?:\[\d+\])+):?\s*(.+?)\s*$/gm;
     let lineMatch: RegExpExecArray | null;
 
-    while ((lineMatch = linePattern.exec(content)) !== null) {
-      const bracketsPart = lineMatch[1]; // e.g. "[1][2][3]"
-      const url = lineMatch[2];
+    while ((lineMatch = linePattern.exec(searchContent)) !== null) {
+      const bracketsPart = lineMatch[1];
+      const rawSource = lineMatch[2].replace(/\.+$/, '').trim(); // strip trailing dots
+
+      if (!rawSource) continue;
 
       // Extract every [number] from the brackets portion
       const indexes: number[] = [];
@@ -517,8 +592,9 @@ export class ChatService {
         indexes.push(parseInt(numMatch[1], 10));
       }
 
-      if (indexes.length > 0 && url) {
-        citations.push({ indexes, url });
+      if (indexes.length > 0) {
+        const isUrl = /^https?:\/\//.test(rawSource);
+        citations.push({ indexes, source: rawSource, isUrl });
       }
     }
 

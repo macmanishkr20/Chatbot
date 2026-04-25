@@ -84,12 +84,17 @@ export class ChatWindowComponent implements AfterViewInit {
     return msg.id;
   }
 
+  private scrollRafId: number | null = null;
+
   private scrollToBottom(): void {
-    setTimeout(() => {
+    // Coalesce rapid scroll requests into a single RAF
+    if (this.scrollRafId !== null) return;
+    this.scrollRafId = requestAnimationFrame(() => {
+      this.scrollRafId = null;
       const el = this.scrollContainer?.nativeElement;
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
-    }, 50);
+    });
   }
 }

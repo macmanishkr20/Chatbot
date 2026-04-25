@@ -44,7 +44,7 @@
 
       <!-- Content -->
       @if (message().content) {
-        <div class="assistant-content" [innerHTML]="displayContent | markdown"></div>
+        <div class="assistant-content" [class.streaming]="message().isStreaming" [innerHTML]="displayContent | markdown"></div>
       }
 
       <!-- Streaming indicator -->
@@ -78,10 +78,16 @@
 
           @if (citationsExpanded()) {
             <div class="citations-body">
-              @for (cite of citations; track cite.url) {
-                <a class="citation-link" [href]="cite.url" target="_blank" rel="noopener noreferrer">
-                  @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }{{ cite.url }}
-                </a>
+              @for (cite of citations; track cite.source) {
+                @if (cite.isUrl) {
+                  <a class="citation-link" [href]="cite.source" target="_blank" rel="noopener noreferrer">
+                    @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ cite.source }}
+                  </a>
+                } @else {
+                  <span class="citation-doc">
+                    @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ cite.source }}
+                  </span>
+                }
               }
             </div>
           }

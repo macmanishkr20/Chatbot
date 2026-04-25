@@ -32,7 +32,10 @@ export interface SuggestiveAction {
 /** Parsed citation entry. */
 export interface Citation {
   indexes: number[];
-  url: string;
+  /** URL or document/source name. */
+  source: string;
+  /** Whether the source is a clickable URL. */
+  isUrl: boolean;
 }
 
 /** Chain-of-thought step displayed in the thinking panel. */
