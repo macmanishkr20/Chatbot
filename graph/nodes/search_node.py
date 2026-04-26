@@ -25,6 +25,7 @@ def _strip_internal_fields(results: list) -> list:
             "page_number": r.get("page_number", ""),
             "content": r.get("content", ""),
             "source_url": r.get("source_url", ""),
+            "function": r.get("function", ""),
             "sub_function": r.get("sub_function", ""),
         })
     return cleaned

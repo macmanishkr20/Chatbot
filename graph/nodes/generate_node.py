@@ -5,6 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
 
 from graph.state import RAGState
+from services.telemetry import get_tracer_span
 from config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
@@ -151,62 +152,67 @@ async def generate_node(state: RAGState) -> dict:
       - **Checkpoint messages** (short-term, this thread)
       - **user_memories** (long-term, from Store)
     """
-    events = state.get("events", [])
-    is_free_form = state.get("is_free_form", False)
-    rewritten_query = state.get("rewritten_query", {})
-    sub_function = state.get("sub_function", "")
-    llm_model = get_llm_model("events")
-    summary = state.get("summary", "")
-    langgraph_messages = state.get("messages", [])
-    user_memories = state.get("user_memories", [])
-    prior_citation_map = state.get("citation_map")
+    with get_tracer_span("generate_node"):
+        events = state.get("events", [])
+        is_free_form = state.get("is_free_form", False)
+        rewritten_query = state.get("rewritten_query", {})
+        sub_function = state.get("sub_function", "")
+        llm_model = get_llm_model("events")
+        summary = state.get("summary", "")
+        langgraph_messages = state.get("messages", [])
+        user_memories = state.get("user_memories", [])
+        prior_citation_map = state.get("citation_map")
 
-    if not events and not state.get("error_info"):
-        return {"messages": [AIMessage(content="No Data Available")]}
+        if not events and not state.get("error_info"):
+            return {"messages": [AIMessage(content="No Data Available")]}
 
-    tools, system_template, user_template = _get_tools_and_templates(
-        events, is_free_form, rewritten_query, sub_function
-    )
+        tools, system_template, user_template = _get_tools_and_templates(
+            events, is_free_form, rewritten_query, sub_function
+        )
 
-    messages = _create_message_structure(
-        system_template, user_template, llm_model,
-        summary=summary,
-        langgraph_messages=langgraph_messages,
-        user_memories=user_memories,
-        citation_map=prior_citation_map,
-    )
+        messages = _create_message_structure(
+            system_template, user_template, llm_model,
+            summary=summary,
+            langgraph_messages=langgraph_messages,
+            user_memories=user_memories,
+            citation_map=prior_citation_map,
+        )
 
-    prompt_used = user_template
+        prompt_used = user_template
 
-    llm = _get_llm(llm_model, tools)
-    response = await llm.ainvoke(messages)
+        llm = _get_llm(llm_model, tools)
+        response = await llm.ainvoke(messages)
 
-    # Extract content — for tool calls, get the arguments JSON
-    if response.tool_calls:
-        ai_content = json.dumps(response.tool_calls[0]["args"])
-    else:
-        ai_content = response.content or ""
+        # Extract content — for tool calls, get the arguments JSON
+        if response.tool_calls:
+            ai_content = json.dumps(response.tool_calls[0]["args"])
+        else:
+            ai_content = response.content or ""
 
-    # ── Build citation map for multi-turn tracking ──
-    # Parse which citation numbers the LLM actually used in its response
-    # and map them back to the source documents for follow-up resolution.
-    citation_map = None
-    if is_free_form and ai_content and events:
-        used_refs = set(re.findall(r"\[(\d+)\]", ai_content))
-        if used_refs:
-            citation_map = {}
-            for ref_str in used_refs:
-                idx = int(ref_str) - 1  # citations are 1-indexed
-                if 0 <= idx < len(events):
-                    doc = events[idx]
-                    citation_map[ref_str] = {
-                        "url": doc.get("source_url", ""),
-                        "content_snippet": (doc.get("content", ""))[:200],
-                    }
+        # ── Build citation map for multi-turn tracking ──
+        # Parse which citation numbers the LLM actually used in its response
+        # and map them back to the source documents for follow-up resolution.
+        citation_map = None
+        if is_free_form and ai_content and events:
+            used_refs = set(re.findall(r"\[(\d+)\]", ai_content))
+            if used_refs:
+                citation_map = {}
+                for ref_str in used_refs:
+                    idx = int(ref_str) - 1  # citations are 1-indexed
+                    if 0 <= idx < len(events):
+                        doc = events[idx]
+                        source_url = doc.get("source_url", "")
+                        if not source_url:
+                            fn = doc.get("function", "unknown")
+                            source_url = f"{fn}_internal_QnA_document"
+                        citation_map[ref_str] = {
+                            "url": source_url,
+                            "content_snippet": (doc.get("content", ""))[:200],
+                        }
 
-    return {
-        "ai_content": ai_content,
-        "prompt_used": prompt_used,
-        "citation_map": citation_map,
-        "messages": [response],
-    }
+        return {
+            "ai_content": ai_content,
+            "prompt_used": prompt_used,
+            "citation_map": citation_map,
+            "messages": [response],
+        }
