@@ -6,26 +6,37 @@
 }
 
 /* ── Selected MENA function pill above the textarea ── */
+/* Wrapper centers the inline-flex pill horizontally to match the input. */
 .selected-fn-pill {
   --chip-color: var(--ey-blue);
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 8px;
   padding: 5px 8px 5px 12px;
-  margin: 0 auto 8px;
+  margin: 0 auto 10px;
+  width: fit-content;
   max-width: 820px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   color: var(--chip-color);
-  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  background:
+    linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ey-yellow) 14%, transparent) 0%,
+      color-mix(in srgb, var(--chip-color) 14%, transparent) 50%,
+      color-mix(in srgb, var(--ey-blue) 14%, transparent) 100%
+    ),
+    var(--glass-bg);
   border: 1px solid color-mix(in srgb, var(--chip-color) 55%, transparent);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(14px) saturate(160%);
+  -webkit-backdrop-filter: blur(14px) saturate(160%);
+  /* Layered EY-tinted glow on the glass surface */
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--ey-yellow) 20%, transparent),
-    0 8px 22px -10px var(--chip-color);
-  width: fit-content;
+    0 0 0 1px color-mix(in srgb, var(--ey-yellow) 35%, transparent),
+    0 0 14px color-mix(in srgb, var(--ey-yellow) 22%, transparent),
+    0 0 22px color-mix(in srgb, var(--ey-blue) 22%, transparent),
+    0 10px 26px -12px var(--chip-color);
 
   .dot {
     width: 6px;
