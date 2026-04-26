@@ -8,6 +8,7 @@
       <h1 class="chat-title">{{ headerTitle() }}</h1>
     </div>
     <div class="header-right">
+      <app-export-menu />
       <button class="header-icon-btn" (click)="toggleTheme()" [title]="theme.isDark() ? 'Light mode' : 'Dark mode'">
         <span class="mat-icon">{{ theme.isDark() ? 'light_mode' : 'dark_mode' }}</span>
       </button>

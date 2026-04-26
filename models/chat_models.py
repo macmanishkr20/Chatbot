@@ -60,16 +60,6 @@ class UserChatQuery(BaseModel):
     current_date: str = ""
     preferred_language: Optional[str] = None
 
-    # ── Document export (optional; populated when user invokes export flow) ──
-    export_format: Optional[str] = Field(
-        default=None,
-        description="Requested output format: pptx, xlsx, docx, txt, json, pages, numbers, keynote.",
-    )
-    template_file_id: Optional[str] = Field(
-        default=None,
-        description="ID returned by POST /upload-template when the user uploaded a template.",
-    )
-
 class BusinessExceptionResponse(BaseModel):
     error_code: str | None = None
     text: str | None = None
@@ -115,6 +105,29 @@ class CancelRequest(BaseModel):
     """Request body for POST /chat/cancel — stop an in-flight generation."""
     user_id: str
     chat_session_id: str
+
+
+class ExportMessageItem(BaseModel):
+    """One turn of a conversation to export."""
+    role: str = Field(..., description="user or assistant")
+    content: str = ""
+
+
+class ExportRequest(BaseModel):
+    """Request body for POST /export.
+
+    For ``scope='message'`` populate ``content``. For ``scope='conversation'``
+    populate ``messages`` (the full transcript). PPT/Keynote require
+    ``template_file_id``; Word/Excel accept an optional one.
+    """
+    user_id: str
+    format: str = Field(..., description="pptx, xlsx, docx, txt, json, pages, numbers, keynote")
+    scope: str = Field(..., description="'message' or 'conversation'")
+    content: Optional[str] = None
+    messages: List[ExportMessageItem] = []
+    template_file_id: Optional[str] = None
+    title: Optional[str] = None
+    preferred_language: Optional[str] = "English"
 
 
 class EditMessageRequest(BaseModel):

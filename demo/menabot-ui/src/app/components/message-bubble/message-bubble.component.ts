@@ -6,10 +6,9 @@ import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ThinkingPanelComponent } from '../thinking-panel/thinking-panel.component';
 import { SuggestiveActionsComponent } from '../suggestive-actions/suggestive-actions.component';
 import { ChatService } from '../../services/chat.service';
+import { ExportService } from '../../services/export.service';
 import { AuthService } from '../../services/auth.service';
 import { FeedbackModalComponent } from '../feedback-modal/feedback-modal.component';
-import { TemplateUploadComponent } from '../template-upload/template-upload.component';
-import { DownloadCardComponent } from '../download-card/download-card.component';
 
 @Component({
   selector: 'app-message-bubble',
@@ -21,8 +20,6 @@ import { DownloadCardComponent } from '../download-card/download-card.component'
     ThinkingPanelComponent,
     SuggestiveActionsComponent,
     FeedbackModalComponent,
-    TemplateUploadComponent,
-    DownloadCardComponent,
   ],
   templateUrl: './message-bubble.component.html',
   styleUrl: './message-bubble.component.scss',
@@ -30,6 +27,7 @@ import { DownloadCardComponent } from '../download-card/download-card.component'
 })
 export class MessageBubbleComponent {
   private readonly chat = inject(ChatService);
+  readonly exporter = inject(ExportService);
   readonly auth = inject(AuthService);
 
   /** The message to render. */
@@ -119,6 +117,14 @@ export class MessageBubbleComponent {
 
   copyContent(): void {
     navigator.clipboard.writeText(this.message().content);
+  }
+
+  exportAsWord(): void {
+    this.exporter.exportMessage('docx', this.message().content);
+  }
+
+  exportAsExcel(): void {
+    this.exporter.exportMessage('xlsx', this.message().content);
   }
 
   thumbsUp(): void {

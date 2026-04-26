@@ -35,11 +35,13 @@ from langchain_core.messages import RemoveMessage
 from models.chat_models import (
     CancelRequest,
     EditMessageRequest,
+    ExportRequest,
     FeedbackRequest,
     RegenerateRequest,
     RenameConversationRequest,
     UserChatQuery,
 )
+from services.export_service import ExportError, run_export
 from services.sql_client import SQLChatClient
 
 logger = logging.getLogger(__name__)
@@ -105,9 +107,6 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
     },
     "generate": {
         "Response": "Forming response…"
-    },
-    "export_document": {
-        "Authoring": "Building your document…"
     },
     "persist": {
         "Flow": "Maintaining continuity…"
@@ -233,8 +232,6 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "start_date": query.start_date,
         "end_date": query.end_date,
         "preferred_language": query.preferred_language,
-        "export_format": query.export_format,
-        "template_file_id": query.template_file_id,
     }
 
 
@@ -371,8 +368,6 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 "ai_content": final_state.get("ai_content", []),
                 "suggestive_actions": actions,
                 "conversation_title": final_state.get("conversation_title"),
-                "template_request": final_state.get("template_request"),
-                "download": final_state.get("download"),
             })
     except Exception as exc:
         logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
@@ -441,8 +436,6 @@ async def chat_api(
         current_state["end_date"] = query.end_date
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
-        current_state["export_format"] = query.export_format
-        current_state["template_file_id"] = query.template_file_id
         # Reset per-turn transient fields (preserve citation_map for multi-turn)
         current_state["events"] = []
         current_state["error_info"] = None
@@ -451,8 +444,6 @@ async def chat_api(
         current_state["response"] = None
         current_state["suggestive_actions"] = None
         current_state["conversation_title"] = None
-        current_state["template_request"] = None
-        current_state["download"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -709,7 +700,39 @@ async def edit_message(
     )
 
 
-# ── Document Export: Template Upload & Download ──
+# ── Document Export ──
+#
+# These endpoints are intentionally decoupled from /chat and the LangGraph
+# supervisor — exporting is a UI action, not a conversational intent.
+
+@app.post("/export")
+async def export_document(body: ExportRequest):
+    """Generate a document from a single message or the full conversation.
+
+    PPT/Keynote require an uploaded template; Word/Excel may accept one.
+    Returns a download URL the client can use to fetch the file.
+    """
+    _validate_user(body.user_id)
+    try:
+        result = await run_export(
+            user_id=body.user_id,
+            fmt=body.format,
+            scope=body.scope,
+            content=body.content,
+            messages=[m.model_dump() for m in body.messages] if body.messages else None,
+            template_file_id=body.template_file_id,
+            title=body.title,
+            preferred_language=body.preferred_language or "English",
+        )
+        return result
+    except ExportError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.error("export endpoint failed: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Export failed")
+
+
+# ── Template Upload & Download ──
 
 @app.post("/upload-template")
 async def upload_template(

@@ -56,16 +56,6 @@
         </div>
       }
 
-      <!-- Template upload (assistant requested a template) -->
-      @if (message().templateRequest && !message().isStreaming) {
-        <app-template-upload [request]="message().templateRequest!" />
-      }
-
-      <!-- Download card (assistant generated a document) -->
-      @if (message().download && !message().isStreaming) {
-        <app-download-card [info]="message().download!" />
-      }
-
       <!-- Citations Collapsible -->
       @if (isBot && hasCitations && !message().isStreaming) {
         <div class="citations-section">
@@ -108,6 +98,8 @@
       @if (!message().isStreaming) {
         <div class="message-actions assistant-actions">
           <button class="action-btn" title="Copy" (click)="copyContent()"><span class="mat-icon">content_copy</span></button>
+          <button class="action-btn" title="Export as Word" (click)="exportAsWord()" [disabled]="exporter.busy()"><span class="mat-icon">description</span></button>
+          <button class="action-btn" title="Export as Excel" (click)="exportAsExcel()" [disabled]="exporter.busy()"><span class="mat-icon">table_chart</span></button>
           <button class="action-btn" title="Helpful" (click)="thumbsUp()" [class.active-up]="feedbackGiven() === 'up'" [disabled]="!!feedbackGiven()"><span class="mat-icon filled">thumb_up</span></button>
           <button class="action-btn" title="Not helpful" (click)="thumbsDown()" [class.active-down]="feedbackGiven() === 'down'" [disabled]="!!feedbackGiven()"><span class="mat-icon filled">thumb_down</span></button>
           @if (isLastAssistant()) {

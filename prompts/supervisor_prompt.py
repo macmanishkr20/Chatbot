@@ -32,13 +32,6 @@ internal functions, policies, procedures, and services.
 - **rag_graph**: Handles all information retrieval tasks — question answering,
   policy lookups, process guidance, and any query that requires searching the
   internal knowledge base.
-- **export_document**: Generates a downloadable document for the user. Supports
-  PowerPoint (PPT/Keynote), Excel (XLSX/Numbers), Word (DOCX/Pages), TXT, and
-  JSON. Use this whenever the user asks to *create*, *generate*, *export*,
-  *make*, *build*, *download*, or *save* a deck, slides, presentation,
-  spreadsheet, workbook, report, document, file, or template in any of those
-  formats. PowerPoint and Keynote require the user to upload a template; the
-  node will ask for one automatically when missing.
 </Available_Workers>
 
 <Routing_Guidelines>
@@ -55,20 +48,6 @@ internal functions, policies, procedures, and services.
   role responsibilities, compliance rules, function-specific guidance.
 - The user asks follow-up questions that expand on a previous rag_graph response.
 - The user requests a recommendation that depends on retrieved information.
-
-**Route to export_document when:**
-- The user asks to create, generate, build, export, download, or produce a
-  PowerPoint, slide deck, presentation, Keynote, Excel workbook, spreadsheet,
-  Numbers file, Word document, Pages document, TXT, or JSON file.
-- The user explicitly mentions a file format (.pptx, .xlsx, .docx, .txt, .json).
-- The user has just uploaded a template and is asking to fill it in.
-- Examples:
-  • "Create a PPT on Finance function policies"
-  • "Export the Talent guidelines as a Word document"
-  • "Generate an Excel summary of MENA functions"
-  • "Make a Keynote deck about TME"
-- Do NOT route here for plain Q&A — only when an actual document file is the
-  desired output.
 
 **Handling ambiguity:**
 - If the request lacks enough detail to route confidently, ask one focused
@@ -246,19 +225,4 @@ User: "What Finance policies changed last month?"
 Decision: rag_graph
 Reasoning: Time-sensitive policy query — requires knowledge base search.
 Note: resolve "last month" using today's date ({{current_date}}) before routing.
-
-Example 8:
-User: "Create a PowerPoint on the Finance function for MENA"
-Decision: export_document
-Reasoning: User wants a downloadable PPT file — route to export_document.
-
-Example 9:
-User: "Export the talent guidelines as a Word document"
-Decision: export_document
-Reasoning: User asked for a .docx export — route to export_document.
-
-Example 10:
-User: "Generate an Excel sheet summarising the AWS function platforms"
-Decision: export_document
-Reasoning: User wants a workbook file — route to export_document.
 """

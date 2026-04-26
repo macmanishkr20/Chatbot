@@ -1,0 +1,86 @@
+<div class="export-menu-wrapper">
+  <button
+    class="header-icon-btn"
+    (click)="toggleMenu(); $event.stopPropagation()"
+    [disabled]="!hasMessages() || exporter.busy()"
+    title="Export conversation"
+  >
+    <span class="mat-icon">ios_share</span>
+  </button>
+
+  @if (menuOpen()) {
+    <div class="export-dropdown" (click)="$event.stopPropagation()">
+      <button class="export-item" (click)="pick('docx')">
+        <span class="mat-icon">description</span>
+        <span class="item-text">
+          <span class="item-title">Word</span>
+          <span class="item-desc">Conversation transcript (.docx)</span>
+        </span>
+      </button>
+      <button class="export-item" (click)="pick('xlsx')">
+        <span class="mat-icon">table_chart</span>
+        <span class="item-text">
+          <span class="item-title">Excel</span>
+          <span class="item-desc">Q&amp;A workbook (.xlsx)</span>
+        </span>
+      </button>
+      <button class="export-item" (click)="pick('pptx')">
+        <span class="mat-icon">slideshow</span>
+        <span class="item-text">
+          <span class="item-title">PowerPoint</span>
+          <span class="item-desc">Summary deck (.pptx) — template required</span>
+        </span>
+      </button>
+    </div>
+  }
+</div>
+
+@if (modalOpen()) {
+  <div class="modal-overlay" (click)="onOverlayClick($event)">
+    <div class="modal-card">
+      <h3 class="modal-title">{{ modalTitle() }}</h3>
+
+      <p class="modal-help">
+        @if (templateRequired()) {
+          A PowerPoint template (.pptx) is <strong>required</strong>. The deck will be generated using your template's slide masters and layouts.
+        } @else {
+          You can optionally upload a template ({{ selectedFormat() === 'xlsx' ? '.xlsx' : '.docx' }}) to control the output styling. Leave empty for the default layout.
+        }
+      </p>
+
+      <label class="file-input-label">
+        <input
+          type="file"
+          [accept]="selectedFormat() === 'pptx' ? '.pptx' : (selectedFormat() === 'xlsx' ? '.xlsx' : '.docx')"
+          (change)="onTemplateChosen($event)"
+        />
+        <span class="file-input-button">
+          <span class="mat-icon">upload_file</span>
+          <span>{{ templateFile() ? 'Change template' : 'Choose template' }}</span>
+        </span>
+        @if (templateFile()) {
+          <span class="file-name">{{ templateFile()!.name }}</span>
+          <button type="button" class="file-clear" (click)="clearTemplate(); $event.preventDefault()">
+            <span class="mat-icon">close</span>
+          </button>
+        }
+      </label>
+
+      @if (formError()) {
+        <p class="modal-error">{{ formError() }}</p>
+      }
+
+      <div class="modal-actions">
+        <button class="btn-modal-cancel" (click)="closeModal()" [disabled]="exporter.busy()">Cancel</button>
+        <button class="btn-modal-submit" (click)="submit()" [disabled]="!canSubmit()">
+          @if (exporter.busy()) {
+            <span class="spinner"></span>
+            <span>Exporting…</span>
+          } @else {
+            <span>Export</span>
+          }
+        </button>
+      </div>
+    </div>
+  </div>
+}

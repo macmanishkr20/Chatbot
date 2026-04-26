@@ -19,24 +19,30 @@ export interface FinalEvent {
   suggestive_actions?: SuggestiveAction[];
   conversation_title?: string | null;
   cancelled?: boolean;
-  template_request?: TemplateRequest | null;
-  download?: DownloadInfo | null;
 }
 
-/** Backend asks the user to upload a template before generating a document. */
-export interface TemplateRequest {
-  format: string;       // canonical key: pptx | keynote | xlsx | …
-  extension: string;    // file extension expected for the upload
-  topic: string;        // original user request, replayed after upload
+// ── Document export (decoupled from chat) ──
+
+export type ExportFormat = 'pptx' | 'xlsx' | 'docx' | 'txt' | 'json';
+export type ExportScope = 'message' | 'conversation';
+
+export interface ExportRequestBody {
+  user_id: string;
+  format: ExportFormat;
+  scope: ExportScope;
+  content?: string;
+  messages?: { role: 'user' | 'assistant'; content: string }[];
+  template_file_id?: string;
+  title?: string;
+  preferred_language?: string;
 }
 
-/** Generated-document download payload. */
-export interface DownloadInfo {
+export interface ExportResult {
   file_id: string;
+  url: string;
   filename: string;
   extension: string;
   format: string;
-  url: string;          // path-only — append to API base
   ios_note?: string | null;
 }
 
@@ -89,10 +95,6 @@ export interface ChatMessage {
   isEditing?: boolean;
   editText?: string;
   citations?: Citation[];
-  /** Set when the assistant is asking the user to upload a template. */
-  templateRequest?: TemplateRequest | null;
-  /** Set when the assistant has produced a downloadable document. */
-  download?: DownloadInfo | null;
 }
 
 /** Conversation session from /conversations endpoint. */
@@ -134,9 +136,6 @@ export interface ChatRequest {
   start_date: string;
   end_date: string;
   preferred_language?: string;
-  /** Document export — populated after the user uploads a template. */
-  export_format?: string;
-  template_file_id?: string;
 }
 
 /** Request body for POST /chat/edit. */

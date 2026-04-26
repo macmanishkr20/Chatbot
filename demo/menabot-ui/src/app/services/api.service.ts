@@ -89,7 +89,7 @@ export class ApiService {
     return this.http.get<{ status: string; engine: string }>(`${this.baseUrl}/health`);
   }
 
-  // ── Document Export ──
+  // ── Document Export (decoupled from chat) ──
 
   /** Upload a .pptx / .xlsx / .docx template; returns a template_file_id. */
   uploadTemplate(userId: string, file: File): Observable<UploadTemplateResponse> {
@@ -103,6 +103,15 @@ export class ApiService {
   buildDownloadUrl(relativeUrl: string): string {
     if (!relativeUrl) return '';
     return /^https?:\/\//.test(relativeUrl) ? relativeUrl : `${this.baseUrl}${relativeUrl}`;
+  }
+
+  /** Trigger a document export. */
+  export(body: import('../models/chat.models').ExportRequestBody):
+    Observable<import('../models/chat.models').ExportResult> {
+    return this.http.post<import('../models/chat.models').ExportResult>(
+      `${this.baseUrl}/export`,
+      body,
+    );
   }
 
   // ── Private: SSE stream parser ──
