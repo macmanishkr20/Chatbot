@@ -1,7 +1,8 @@
-import { Component, ChangeDetectionStrategy, inject, signal, ElementRef, ViewChild } from '@angular/core';
+import { Component, ChangeDetectionStrategy, computed, inject, signal, ElementRef, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
+import { MENA_FUNCTIONS } from '../function-chips/function-chips.component';
 
 @Component({
   selector: 'app-chat-input',
@@ -15,6 +16,21 @@ export class ChatInputComponent {
   readonly chat = inject(ChatService);
 
   inputText = signal('');
+
+  /** Currently selected MENA function metadata (for the pill + placeholder). */
+  readonly selectedChip = computed(() => {
+    const code = this.chat.selectedFunction();
+    return code ? MENA_FUNCTIONS.find(c => c.code === code) ?? null : null;
+  });
+
+  readonly placeholder = computed(() => {
+    const chip = this.selectedChip();
+    return chip ? `Ask about ${chip.full}…` : 'Ask me anything...';
+  });
+
+  clearFunction(): void {
+    this.chat.clearFunction();
+  }
 
   @ViewChild('textareaEl') textareaEl!: ElementRef<HTMLTextAreaElement>;
 

@@ -9,7 +9,8 @@
       class="chip"
       [class.selected]="selected() === chip.code"
       [attr.aria-pressed]="selected() === chip.code"
-      [attr.title]="chip.description"
+      [attr.title]="chip.full"
+      [style.--chip-color]="'var(' + chip.colorVar + ')'"
       (click)="onPick(chip)"
     >
       <span class="chip-icon" aria-hidden="true">
@@ -44,6 +45,7 @@
         }
       </span>
       <span class="chip-label">{{ chip.label }}</span>
+      <span class="chip-tooltip" role="tooltip">{{ chip.full }}</span>
     </button>
   }
 </div>

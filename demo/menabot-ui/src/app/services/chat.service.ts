@@ -112,6 +112,12 @@ export class ChatService {
     }
   }
 
+  /** Clear the active function (clicking the selected chip / "x" on pill). */
+  clearFunction(): void {
+    this.selectedFunction.set(null);
+    this.pendingResendQuery = null;
+  }
+
   /** Send a user message and stream the response. */
   async sendMessage(text: string): Promise<void> {
     if (this.isStreaming() || !text.trim()) return;

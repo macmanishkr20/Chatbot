@@ -1,9 +1,28 @@
 <div class="chat-input-bar">
+  @if (selectedChip(); as chip) {
+    <div
+      class="selected-fn-pill"
+      [style.--chip-color]="'var(' + chip.colorVar + ')'"
+      [attr.aria-label]="'Selected function: ' + chip.full"
+    >
+      <span class="dot" aria-hidden="true"></span>
+      <span class="code">{{ chip.code }}</span>
+      <span class="full">{{ chip.full }}</span>
+      <button
+        type="button"
+        class="clear-btn"
+        title="Clear function"
+        aria-label="Clear function"
+        (click)="clearFunction()"
+      >×</button>
+    </div>
+  }
+
   <div class="input-wrapper">
     <textarea
       #textareaEl
       class="chat-textarea"
-      placeholder="Ask me anything..."
+      [attr.placeholder]="placeholder()"
       [ngModel]="inputText()"
       (ngModelChange)="inputText.set($event)"
       (keydown)="onKeydown($event)"

@@ -22,6 +22,23 @@
   --accent-emerald: #34d399;
   --accent-rose: #fb7185;
 
+  /* ── EY brand accents (used as glow halos on glass surfaces) ── */
+  --ey-yellow: #ffe600;
+  --ey-blue:   #2d6bcf;
+  --ey-yellow-glow: rgba(255, 230, 0, 0.45);
+  --ey-blue-glow:   rgba(45, 107, 207, 0.45);
+
+  /* ── Per-MENA-function accent palette (image-3 colors) ── */
+  --fn-aws:     #4a8bff;   /* blue   */
+  --fn-bmc:     #ec4899;   /* pink   */
+  --fn-ci:      #f59e0b;   /* amber  */
+  --fn-finance: #22c55e;   /* green  */
+  --fn-gco:     #8b5cf6;   /* violet */
+  --fn-risk:    #ef4444;   /* red    */
+  --fn-scs:     #14b8a6;   /* teal   */
+  --fn-tme:     #6366f1;   /* indigo */
+  --fn-talent:  #f97316;   /* orange */
+
   /* Brand gradient (used on buttons, focus rings, glow accents) */
   --gradient-brand: linear-gradient(135deg, #8b5cf6 0%, #6366f1 45%, #22d3ee 100%);
   --gradient-brand-soft: linear-gradient(135deg, rgba(139, 92, 246, 0.85), rgba(34, 211, 238, 0.85));
