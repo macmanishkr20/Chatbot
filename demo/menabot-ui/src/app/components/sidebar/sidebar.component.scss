@@ -1,5 +1,26 @@
 :host {
   display: block;
+
+  /* Sidebar stays on EY black canvas regardless of light/dark page theme */
+  --bg-canvas: #0a0a0f;
+  --bg-canvas-2: #14141c;
+  --bg-canvas-3: #1a1a24;
+  --glass-bg: rgba(255, 255, 255, 0.04);
+  --glass-bg-strong: rgba(255, 255, 255, 0.07);
+  --glass-bg-subtle: rgba(255, 255, 255, 0.02);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-soft: rgba(255, 255, 255, 0.05);
+  --glass-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7), 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  --text-primary: #f5f5f7;
+  --text-secondary: #c8c8d0;
+  --text-muted: #8a8a96;
+  --hover-bg: rgba(255, 230, 0, 0.06);
+  --scrollbar-thumb: rgba(255, 230, 0, 0.28);
+  --scrollbar-thumb-hover: rgba(255, 230, 0, 0.5);
+
+  background: #0a0a0f;
+  height: 100%;
 }
 
 .sidebar {
@@ -68,14 +89,12 @@
 .new-chat-btn {
   width: 100%;
   padding: 10px 12px;
-  background: var(--glass-bg-strong);
-  border: 1px solid var(--glass-border-soft);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
+  border: 1px solid rgba(0, 0, 0, 0.15);
   border-radius: 12px;
-  color: var(--text-primary);
+  color: #0a0a0f;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 600;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -84,27 +103,11 @@
   transition: all 0.25s ease;
   letter-spacing: -0.01em;
   position: relative;
-  overflow: hidden;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: var(--gradient-brand);
-    opacity: 0;
-    transition: opacity 0.25s;
-    z-index: -1;
-  }
+  box-shadow: 0 6px 18px -6px rgba(255, 230, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 
   &:hover {
     transform: translateY(-1px);
-    color: #fff;
-    border-color: transparent;
-    box-shadow: 0 12px 28px -10px rgba(255, 230, 0, 0.55);
-
-    &::before {
-      opacity: 1;
-    }
+    box-shadow: 0 12px 28px -8px rgba(255, 230, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   }
 
   &:active {
@@ -161,11 +164,11 @@
 }
 
 .section .section-header .section-icon {
-  color: var(--accent-amber);
+  color: #f97316; /* orange — Pinned */
 }
 
 .conversations-section > .section-header .section-icon {
-  color: var(--accent-cyan);
+  color: #4f8bff; /* blue — Conversations */
 }
 
 .section-chevron {

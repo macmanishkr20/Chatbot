@@ -23,6 +23,26 @@
   padding-bottom: 6px;
 }
 
+.input-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  padding: 4px 0 8px;
+  letter-spacing: 0.01em;
+
+  kbd {
+    background: var(--kbd-bg);
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 10.5px;
+    font-family: 'JetBrains Mono', Consolas, monospace;
+    color: var(--kbd-color);
+    border: 1px solid var(--kbd-border);
+    box-shadow: var(--kbd-glow);
+    font-weight: 600;
+  }
+}
+
 /* ── Header — frosted glass strip ── */
 
 .chat-header {
@@ -316,10 +336,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--gradient-brand);
-  color: #fff;
+  background: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
+  color: #0a0a0f;
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
-  box-shadow: 0 6px 16px -6px rgba(99, 102, 241, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 6px 16px -6px rgba(255, 230, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 }
 
 .prompt-card-text {
