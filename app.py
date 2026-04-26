@@ -380,6 +380,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     "function_required_reason"
                 ),
                 "function_candidates": final_state.get("functions_found") or [],
+                "selected_function": (final_state.get("function") or [None])[0],
             })
     except Exception as exc:
         logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)

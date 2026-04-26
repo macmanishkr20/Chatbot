@@ -1,12 +1,19 @@
 """
-Function-gate prompt — decides whether the user's currently selected MENA
-function matches the function the query is actually about.
+Function-gate prompt — classifies the user query against the MENA function
+catalog. The orchestrating node combines this verdict with the user's UI
+selection (passed in as context); the LLM does NOT decide whether to block.
 
-The MENA functions overlap heavily (e.g. AWS purchase requisitions vs SCS
-sourcing, Talent onboarding vs AWS administrative onboarding logistics).
-Without a deliberate gate the search index returns mixed-function results
-and the answer drifts. We force the user to pick a function up front and
-verify on every subsequent turn.
+The LLM's job is purely descriptive:
+  - mentioned_functions: function codes the query *explicitly* names (by
+    code, full form, or unambiguous keyword). Empty if nothing is named.
+  - candidates: function codes that plausibly fit the query when nothing
+    is explicitly mentioned. Ordered by likelihood.
+  - verdict: "match" (one strong candidate), "ambiguous" (2-4 plausible),
+    "unclassified" (unrelated to any function), or "not_applicable"
+    (greeting / chit-chat / acknowledgement).
+
+The node decides routing using these signals together with the user's
+current selection — see function_gate_node for the full logic.
 """
 
 from prompts._functions import MENA_FUNCTIONS_CATALOG
@@ -15,35 +22,51 @@ from prompts._functions import MENA_FUNCTIONS_CATALOG
 FUNCTION_GATE_PROMPT = f"""\
 <role>
 You are a routing classifier for an internal EY MENA enterprise knowledge
-assistant. Given a user query, you decide which single MENA function the
-query is asking about, using only the catalog below.
+assistant. Given a user query (and the user's currently selected MENA
+function, if any), produce a structured classification.
 </role>
 
 <mena_functions>
 {MENA_FUNCTIONS_CATALOG}
 </mena_functions>
 
-<decision_rules>
-- Pick the function whose "Includes" most directly cover the query.
-- Use "Excludes" to break ties between overlapping functions.
-- If two or more functions are genuinely plausible and the catalog cannot
-  disambiguate, return verdict="ambiguous" with the candidate function
-  codes (2-4 entries, ordered by likelihood).
-- If the query is a greeting, thanks, acknowledgement, or otherwise not a
-  knowledge request, return verdict="not_applicable".
-- If the query is unrelated to any MENA function, return
-  verdict="unclassified".
-- Otherwise return verdict="match" with the chosen function code.
-</decision_rules>
+<task>
+Two independent signals must be produced:
+
+1. mentioned_functions — function codes that the query *explicitly* names
+   in its text. Use ONLY the function codes from the catalog (AWS, BMC,
+   C&I, Finance, GCO, Risk, SCS, TME, Talent). Count an explicit mention
+   when:
+     - the code appears verbatim ("AWS", "GCO", "TME", "C&I" …),
+     - the full form appears (e.g. "Brand Marketing Communications",
+       "Travel, Meetings & Events"), or
+     - a keyword that is *unambiguously* owned by exactly one function's
+       Includes appears (e.g. "purchase requisition" → AWS, "supplier
+       sourcing" → SCS).
+   Do NOT include codes that are merely plausible inferences. If nothing
+   is explicitly named, return an empty list.
+
+2. candidates — when the query does NOT explicitly name a function, list
+   the codes that plausibly fit (1-4, ordered by likelihood) using the
+   Includes/Excludes in the catalog. Empty when mentioned_functions is
+   non-empty or when verdict is "unclassified" / "not_applicable".
+
+Then choose ONE verdict that best summarises the query:
+  - "match"          : exactly one strong candidate (or one explicit mention).
+  - "ambiguous"      : 2+ plausible candidates and no explicit mention.
+  - "unclassified"   : a knowledge question unrelated to any MENA function.
+  - "not_applicable" : greeting, thanks, acknowledgement, chit-chat.
+
+The user's currently selected function is provided as context only. Do
+NOT bias the classification toward it — your job is to describe the query.
+</task>
 
 <output_format>
-Return strictly the structured object with fields:
-- verdict: one of "match" | "ambiguous" | "unclassified" | "not_applicable"
-- function: the function code (e.g. "AWS", "Talent", "GCO") when verdict
-  is "match"; otherwise null.
-- candidates: list of function codes when verdict is "ambiguous";
-  otherwise empty list.
-- reason: one short sentence justifying the verdict, in the user's
-  preferred language.
+Return ONLY the structured object with these fields:
+- verdict: "match" | "ambiguous" | "unclassified" | "not_applicable"
+- mentioned_functions: list[str]  (function codes explicitly named)
+- candidates: list[str]            (plausible codes when nothing explicit)
+- function: str | null             (single best code when verdict="match")
+- reason: str                      (one short sentence)
 </output_format>\
 """

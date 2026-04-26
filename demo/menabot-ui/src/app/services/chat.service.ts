@@ -487,6 +487,9 @@ export class ChatService {
               break;
             }
           }
+        } else if (final.selected_function) {
+          // Gate auto-selected a function from the query text — reflect it in the chip UI.
+          this.selectedFunction.set(final.selected_function);
         }
 
         // Parse suggestive actions — backend may send Python repr strings

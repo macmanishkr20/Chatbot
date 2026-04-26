@@ -40,7 +40,7 @@
   --fn-talent:  #f97316;   /* orange */
 
   /* Brand gradient (used on buttons, focus rings, glow accents) */
-  --gradient-brand: linear-gradient(135deg, #ffe600 0%, #6366f1 45%, #ffe600 100%);
+  --gradient-brand: linear-gradient(135deg, #ffe600 0%, #ffd400 50%, #1a1a24 100%);
   --gradient-brand-soft: linear-gradient(135deg, rgba(255, 230, 0, 0.85), rgba(255, 230, 0, 0.85));
   --gradient-rose: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
 
@@ -81,10 +81,10 @@
   --table-even-bg: rgba(255, 255, 255, 0.45);
   --blockquote-bg: rgba(255, 230, 0, 0.06);
 
-  --kbd-bg: rgba(255, 255, 255, 0.85);
-  --kbd-color: #6366f1;
-  --kbd-border: rgba(99, 102, 241, 0.4);
-  --kbd-glow: 0 0 12px rgba(99, 102, 241, 0.18);
+  --kbd-bg: rgba(255, 230, 0, 0.18);
+  --kbd-color: #1a1a24;
+  --kbd-border: rgba(255, 230, 0, 0.55);
+  --kbd-glow: 0 0 10px rgba(255, 230, 0, 0.3);
 
   --user-msg-bg: var(--bg-user-msg);
   --user-msg-color: #f8fafc;

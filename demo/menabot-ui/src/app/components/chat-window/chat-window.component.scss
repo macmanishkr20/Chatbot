@@ -235,11 +235,11 @@
   align-items: center;
   justify-content: center;
   background: var(--gradient-brand);
-  color: #fff;
+  color: #0a0a0f;
   box-shadow:
-    0 20px 50px -16px rgba(255, 230, 0, 0.55),
-    0 8px 24px -8px rgba(255, 230, 0, 0.35),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    0 14px 36px -16px rgba(255, 230, 0, 0.35),
+    0 6px 18px -8px rgba(255, 230, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
   animation: float-icon 6s ease-in-out infinite;
   position: relative;
 
@@ -250,7 +250,7 @@
     border-radius: inherit;
     background: var(--gradient-brand);
     filter: blur(22px);
-    opacity: 0.5;
+    opacity: 0.3;
     z-index: -1;
   }
 }
@@ -316,7 +316,7 @@
 
     .prompt-card-icon {
       transform: scale(1.08) rotate(-4deg);
-      box-shadow: 0 10px 24px -8px rgba(255, 230, 0, 0.55);
+      box-shadow: 0 6px 14px -8px rgba(255, 230, 0, 0.35);
     }
 
     .prompt-card-arrow {
@@ -339,7 +339,7 @@
   background: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
   color: #0a0a0f;
   transition: all 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
-  box-shadow: 0 6px 16px -6px rgba(255, 230, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 4px 10px -6px rgba(255, 230, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .prompt-card-text {
