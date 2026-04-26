@@ -42,7 +42,7 @@
   font-weight: 800;
   font-size: 11px;
   color: #fff;
-  box-shadow: 0 8px 20px -6px rgba(45, 107, 207, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 8px 20px -6px rgba(255, 230, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   letter-spacing: 0.05em;
   position: relative;
 
@@ -100,7 +100,7 @@
     transform: translateY(-1px);
     color: #fff;
     border-color: transparent;
-    box-shadow: 0 12px 28px -10px rgba(45, 107, 207, 0.55);
+    box-shadow: 0 12px 28px -10px rgba(255, 230, 0, 0.55);
 
     &::before {
       opacity: 1;
@@ -222,9 +222,9 @@
   }
 
   &.active {
-    background: linear-gradient(135deg, rgba(45, 107, 207, 0.15), rgba(255, 230, 0, 0.1));
-    border-color: rgba(45, 107, 207, 0.35);
-    box-shadow: 0 6px 18px -8px rgba(45, 107, 207, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    background: linear-gradient(135deg, rgba(255, 230, 0, 0.15), rgba(255, 230, 0, 0.1));
+    border-color: rgba(255, 230, 0, 0.35);
+    box-shadow: 0 6px 18px -8px rgba(255, 230, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 
     .conv-title {
       color: var(--text-primary);
@@ -288,7 +288,7 @@
   .mat-icon { font-size: 14px; }
 
   &:hover {
-    background: rgba(45, 107, 207, 0.18);
+    background: rgba(255, 230, 0, 0.18);
     color: var(--accent-violet-soft);
     transform: scale(1.05);
   }
@@ -353,7 +353,7 @@
   input {
     width: 100%;
     background: var(--glass-bg-strong);
-    border: 1px solid rgba(45, 107, 207, 0.4);
+    border: 1px solid rgba(255, 230, 0, 0.4);
     border-radius: 8px;
     color: var(--text-primary);
     padding: 7px 10px;
@@ -364,7 +364,7 @@
 
     &:focus {
       border-color: var(--accent-violet);
-      box-shadow: 0 0 0 3px rgba(45, 107, 207, 0.2);
+      box-shadow: 0 0 0 3px rgba(255, 230, 0, 0.2);
     }
   }
 }
@@ -383,7 +383,7 @@
   cursor: pointer;
   font-weight: 600;
   font-size: 12px;
-  box-shadow: 0 4px 12px -4px rgba(45, 107, 207, 0.5);
+  box-shadow: 0 4px 12px -4px rgba(255, 230, 0, 0.5);
 
   .mat-icon { font-size: 14px; }
 }

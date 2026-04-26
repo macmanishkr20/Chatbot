@@ -13,8 +13,8 @@
 
 :root {
   /* ── Brand accent stops (shared across themes) ── */
-  --accent-violet: #2d6bcf;
-  --accent-violet-soft: #5b8de0;
+  --accent-violet: #ffe600;
+  --accent-violet-soft: #fff066;
   --accent-cyan: #ffe600;
   --accent-cyan-soft: #fff066;
   --accent-pink: #f472b6;
@@ -24,24 +24,24 @@
 
   /* ── EY brand accents (used as glow halos on glass surfaces) ── */
   --ey-yellow: #ffe600;
-  --ey-blue:   #2d6bcf;
+  --ey-blue:   #ffe600;
   --ey-yellow-glow: rgba(255, 230, 0, 0.45);
-  --ey-blue-glow:   rgba(45, 107, 207, 0.45);
+  --ey-blue-glow:   rgba(255, 230, 0, 0.45);
 
   /* ── Per-MENA-function accent palette (image-3 colors) ── */
   --fn-aws:     #4a8bff;   /* blue   */
   --fn-bmc:     #ec4899;   /* pink   */
   --fn-ci:      #f59e0b;   /* amber  */
   --fn-finance: #22c55e;   /* green  */
-  --fn-gco:     #2d6bcf;   /* violet */
+  --fn-gco:     #ffe600;   /* violet */
   --fn-risk:    #ef4444;   /* red    */
   --fn-scs:     #14b8a6;   /* teal   */
   --fn-tme:     #6366f1;   /* indigo */
   --fn-talent:  #f97316;   /* orange */
 
   /* Brand gradient (used on buttons, focus rings, glow accents) */
-  --gradient-brand: linear-gradient(135deg, #2d6bcf 0%, #6366f1 45%, #ffe600 100%);
-  --gradient-brand-soft: linear-gradient(135deg, rgba(45, 107, 207, 0.85), rgba(255, 230, 0, 0.85));
+  --gradient-brand: linear-gradient(135deg, #ffe600 0%, #6366f1 45%, #ffe600 100%);
+  --gradient-brand-soft: linear-gradient(135deg, rgba(255, 230, 0, 0.85), rgba(255, 230, 0, 0.85));
   --gradient-rose: linear-gradient(135deg, #f472b6 0%, #fb7185 100%);
 
   /* ── Light theme (default) ── */
@@ -63,7 +63,7 @@
   --glass-shadow-lg: 0 30px 80px -20px rgba(76, 29, 149, 0.35), 0 12px 40px -12px rgba(15, 23, 42, 0.12);
   --glass-blur: blur(24px) saturate(180%);
 
-  --bg-user-msg: linear-gradient(135deg, #6366f1 0%, #2d6bcf 60%, #d946ef 100%);
+  --bg-user-msg: linear-gradient(135deg, #6366f1 0%, #ffe600 60%, #d946ef 100%);
   --bg-assistant-msg: rgba(255, 255, 255, 0.65);
   --bg-input: rgba(255, 255, 255, 0.65);
 
@@ -74,12 +74,12 @@
 
   --border-header: rgba(148, 163, 184, 0.18);
   --border-msg: rgba(148, 163, 184, 0.22);
-  --hover-bg: rgba(45, 107, 207, 0.08);
+  --hover-bg: rgba(255, 230, 0, 0.08);
 
   --code-bg: rgba(15, 23, 42, 0.92);
-  --table-header-bg: rgba(45, 107, 207, 0.08);
+  --table-header-bg: rgba(255, 230, 0, 0.08);
   --table-even-bg: rgba(255, 255, 255, 0.45);
-  --blockquote-bg: rgba(45, 107, 207, 0.06);
+  --blockquote-bg: rgba(255, 230, 0, 0.06);
 
   --kbd-bg: rgba(255, 255, 255, 0.85);
   --kbd-color: #6366f1;
@@ -91,17 +91,27 @@
   --user-msg-border: rgba(255, 255, 255, 0.25);
   --user-msg-glow: 0 12px 32px -8px rgba(99, 102, 241, 0.45);
 
-  --scrollbar-thumb: rgba(45, 107, 207, 0.35);
-  --scrollbar-thumb-hover: rgba(45, 107, 207, 0.6);
+  --scrollbar-thumb: rgba(255, 230, 0, 0.35);
+  --scrollbar-thumb-hover: rgba(255, 230, 0, 0.6);
 
-  --focus-ring: 0 0 0 3px rgba(45, 107, 207, 0.25), 0 0 0 1px rgba(45, 107, 207, 0.6);
+  --focus-ring: 0 0 0 3px rgba(255, 230, 0, 0.25), 0 0 0 1px rgba(255, 230, 0, 0.6);
 }
 
-/* ── Dark theme ── */
+/* ── Dark theme — EY black + yellow ── */
 [data-theme="dark"] {
-  --bg-canvas: #07060f;
-  --bg-canvas-2: #0d0a26;
-  --bg-canvas-3: #061021;
+  /* EY signature black canvas (#2e2e38 / #1a1a24) with deep blacks */
+  --bg-canvas: #0a0a0f;
+  --bg-canvas-2: #14141c;
+  --bg-canvas-3: #1a1a24;
+
+  /* Yellow is the only accent on glass — replace blue/violet leftovers */
+  --accent-violet: #ffe600;
+  --accent-violet-soft: #fff066;
+  --accent-cyan: #ffe600;
+  --accent-cyan-soft: #fff066;
+
+  --gradient-brand: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
+  --gradient-brand-soft: linear-gradient(135deg, rgba(255, 230, 0, 0.85), rgba(255, 200, 0, 0.7));
 
   --glass-bg: rgba(255, 255, 255, 0.04);
   --glass-bg-strong: rgba(255, 255, 255, 0.07);
@@ -109,41 +119,41 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-soft: rgba(255, 255, 255, 0.05);
   --glass-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  --glass-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.6), 0 4px 16px -4px rgba(0, 0, 0, 0.4);
-  --glass-shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, 0.7), 0 12px 40px -12px rgba(45, 107, 207, 0.12);
+  --glass-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.7), 0 4px 16px -4px rgba(0, 0, 0, 0.5);
+  --glass-shadow-lg: 0 30px 80px -20px rgba(0, 0, 0, 0.8), 0 12px 40px -12px rgba(255, 230, 0, 0.12);
 
-  --bg-user-msg: linear-gradient(135deg, #6366f1 0%, #2d6bcf 60%, #d946ef 100%);
+  --bg-user-msg: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
   --bg-assistant-msg: rgba(255, 255, 255, 0.04);
   --bg-input: rgba(255, 255, 255, 0.04);
 
-  --text-primary: #f1f5f9;
-  --text-secondary: #cbd5e1;
-  --text-muted: #94a3b8;
-  --text-inverse: #0f172a;
+  --text-primary: #f5f5f7;
+  --text-secondary: #c8c8d0;
+  --text-muted: #8a8a96;
+  --text-inverse: #0a0a0f;
 
   --border-header: rgba(255, 255, 255, 0.07);
   --border-msg: rgba(255, 255, 255, 0.08);
-  --hover-bg: rgba(255, 255, 255, 0.06);
+  --hover-bg: rgba(255, 230, 0, 0.06);
 
-  --code-bg: rgba(7, 6, 15, 0.85);
-  --table-header-bg: rgba(45, 107, 207, 0.18);
+  --code-bg: rgba(0, 0, 0, 0.6);
+  --table-header-bg: rgba(255, 230, 0, 0.1);
   --table-even-bg: rgba(255, 255, 255, 0.025);
-  --blockquote-bg: rgba(45, 107, 207, 0.1);
+  --blockquote-bg: rgba(255, 230, 0, 0.06);
 
-  --kbd-bg: rgba(99, 102, 241, 0.12);
-  --kbd-color: #c4b5fd;
-  --kbd-border: rgba(167, 139, 250, 0.45);
-  --kbd-glow: 0 0 12px rgba(167, 139, 250, 0.35);
+  --kbd-bg: rgba(255, 230, 0, 0.1);
+  --kbd-color: #ffe600;
+  --kbd-border: rgba(255, 230, 0, 0.4);
+  --kbd-glow: 0 0 12px rgba(255, 230, 0, 0.25);
 
   --user-msg-bg: var(--bg-user-msg);
-  --user-msg-color: #f8fafc;
-  --user-msg-border: rgba(255, 255, 255, 0.18);
-  --user-msg-glow: 0 16px 40px -10px rgba(99, 102, 241, 0.55);
+  --user-msg-color: #0a0a0f;
+  --user-msg-border: rgba(0, 0, 0, 0.15);
+  --user-msg-glow: 0 16px 40px -10px rgba(255, 230, 0, 0.5);
 
-  --scrollbar-thumb: rgba(167, 139, 250, 0.3);
-  --scrollbar-thumb-hover: rgba(167, 139, 250, 0.55);
+  --scrollbar-thumb: rgba(255, 230, 0, 0.28);
+  --scrollbar-thumb-hover: rgba(255, 230, 0, 0.5);
 
-  --focus-ring: 0 0 0 3px rgba(167, 139, 250, 0.3), 0 0 0 1px rgba(167, 139, 250, 0.6);
+  --focus-ring: 0 0 0 3px rgba(255, 230, 0, 0.28), 0 0 0 1px rgba(255, 230, 0, 0.6);
 }
 
 /* ==========================================================================
@@ -173,7 +183,7 @@ body::before {
   inset: -10vmax;
   z-index: -2;
   background:
-    radial-gradient(40vmax 40vmax at 12% 18%, rgba(45, 107, 207, 0.55), transparent 60%),
+    radial-gradient(40vmax 40vmax at 12% 18%, rgba(255, 230, 0, 0.55), transparent 60%),
     radial-gradient(38vmax 38vmax at 88% 22%, rgba(255, 230, 0, 0.45), transparent 60%),
     radial-gradient(46vmax 46vmax at 72% 90%, rgba(244, 114, 182, 0.4), transparent 60%),
     radial-gradient(34vmax 34vmax at 18% 82%, rgba(99, 102, 241, 0.4), transparent 60%);
@@ -184,11 +194,11 @@ body::before {
 
 [data-theme="dark"] body::before {
   background:
-    radial-gradient(42vmax 42vmax at 12% 18%, rgba(45, 107, 207, 0.45), transparent 60%),
-    radial-gradient(38vmax 38vmax at 88% 22%, rgba(255, 230, 0, 0.32), transparent 60%),
-    radial-gradient(46vmax 46vmax at 72% 90%, rgba(217, 70, 239, 0.32), transparent 60%),
-    radial-gradient(34vmax 34vmax at 18% 82%, rgba(56, 189, 248, 0.28), transparent 60%);
-  opacity: 0.95;
+    radial-gradient(42vmax 42vmax at 12% 18%, rgba(255, 230, 0, 0.22), transparent 60%),
+    radial-gradient(38vmax 38vmax at 88% 22%, rgba(255, 230, 0, 0.18), transparent 60%),
+    radial-gradient(46vmax 46vmax at 72% 90%, rgba(255, 212, 0, 0.16), transparent 60%),
+    radial-gradient(34vmax 34vmax at 18% 82%, rgba(255, 230, 0, 0.14), transparent 60%);
+  opacity: 0.9;
 }
 
 /* Subtle grid + noise overlay for tactile "premium" feel */
@@ -231,7 +241,7 @@ button, input, textarea, select {
 }
 
 ::selection {
-  background: rgba(45, 107, 207, 0.35);
+  background: rgba(255, 230, 0, 0.35);
   color: inherit;
 }
 
