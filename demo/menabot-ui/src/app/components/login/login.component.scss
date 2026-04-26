@@ -3,67 +3,83 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #111113;
+  background: transparent;
   position: relative;
   overflow: hidden;
-  font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
 }
 
-// Animated gradient orbs
+/* Drifting accent orbs (layered on top of body aurora for extra depth) */
 .orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.5;
-  animation: float 8s ease-in-out infinite;
+  filter: blur(90px);
+  opacity: 0.7;
+  animation: float 9s ease-in-out infinite;
+  pointer-events: none;
 }
 
 .orb-1 {
-  width: 400px;
-  height: 400px;
-  background: radial-gradient(circle, #ffe600 0%, transparent 70%);
-  top: -100px;
-  left: -100px;
+  width: 420px;
+  height: 420px;
+  background: radial-gradient(circle, var(--accent-violet) 0%, transparent 70%);
+  top: -120px;
+  left: -120px;
   animation-delay: 0s;
 }
 
 .orb-2 {
-  width: 350px;
-  height: 350px;
-  background: radial-gradient(circle, #2d6bcf 0%, transparent 70%);
-  bottom: -80px;
-  right: -80px;
+  width: 380px;
+  height: 380px;
+  background: radial-gradient(circle, var(--accent-cyan) 0%, transparent 70%);
+  bottom: -100px;
+  right: -100px;
   animation-delay: -3s;
 }
 
 .orb-3 {
-  width: 250px;
-  height: 250px;
-  background: radial-gradient(circle, #ffe600 0%, transparent 70%);
+  width: 280px;
+  height: 280px;
+  background: radial-gradient(circle, var(--accent-pink) 0%, transparent 70%);
   top: 50%;
-  right: 20%;
-  opacity: 0.25;
+  right: 18%;
+  opacity: 0.4;
   animation-delay: -5s;
 }
 
 @keyframes float {
   0%, 100% { transform: translate(0, 0) scale(1); }
-  33% { transform: translate(30px, -20px) scale(1.05); }
-  66% { transform: translate(-20px, 15px) scale(0.95); }
+  33%      { transform: translate(36px, -24px) scale(1.06); }
+  66%      { transform: translate(-22px, 18px) scale(0.94); }
 }
 
-// Glass card
+/* ── Glass card ── */
 .login-card {
   position: relative;
   z-index: 1;
   width: 100%;
-  max-width: 420px;
-  padding: 40px 36px;
-  background: rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 20px;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.4);
+  max-width: 440px;
+  padding: 44px 38px 36px;
+  background: var(--glass-bg-strong);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 24px;
+  box-shadow: var(--glass-inner-highlight), 0 40px 100px -20px rgba(7, 6, 15, 0.55);
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.55), transparent 50%, rgba(34, 211, 238, 0.4));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+  }
 }
 
 .card-header {
@@ -72,77 +88,96 @@
 }
 
 .logo-icon {
-  width: 48px;
-  height: 48px;
-  background: #ffe600;
-  border-radius: 12px;
+  width: 56px;
+  height: 56px;
+  background: var(--gradient-brand);
+  border-radius: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 16px;
-  color: #18181b;
-  margin-bottom: 16px;
+  font-size: 17px;
+  color: #fff;
+  margin-bottom: 18px;
+  box-shadow: 0 16px 36px -10px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.04em;
+  position: relative;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border-radius: inherit;
+    background: var(--gradient-brand);
+    filter: blur(20px);
+    opacity: 0.55;
+    z-index: -1;
+  }
 }
 
 .card-title {
-  font-size: 22px;
-  font-weight: 600;
-  color: #f4f4f5;
-  margin: 0 0 6px;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 8px;
   letter-spacing: -0.02em;
+  background: var(--gradient-brand);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
 }
 
 .card-subtitle {
   font-size: 14px;
-  color: #71717a;
+  color: var(--text-secondary);
   margin: 0;
 }
 
-// Form
+/* Form */
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 18px;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
 }
 
 .form-label {
-  font-size: 13px;
-  font-weight: 500;
-  color: #a1a1aa;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
 .form-input {
   width: 100%;
-  padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  color: #f4f4f5;
+  padding: 13px 15px;
+  background: var(--glass-bg-subtle);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid var(--glass-border-soft);
+  border-radius: 12px;
+  color: var(--text-primary);
   font-size: 14px;
   font-family: inherit;
   outline: none;
-  transition: all 0.2s;
+  transition: all 0.22s;
 
-  &::placeholder {
-    color: #52525b;
-  }
+  &::placeholder { color: var(--text-muted); }
 
   &:focus {
-    border-color: #ffe600;
-    box-shadow: 0 0 0 3px rgba(255, 230, 0, 0.1);
+    border-color: var(--accent-violet);
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.18);
+    background: var(--glass-bg);
   }
 }
 
 .form-error {
-  font-size: 12px;
-  color: #ef4444;
+  font-size: 12.5px;
+  color: #fb7185;
   margin-top: 2px;
 }
 
@@ -152,21 +187,37 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  padding: 12px;
-  background: #ffe600;
-  color: #18181b;
+  padding: 13px;
+  background: var(--gradient-brand);
+  color: #fff;
   border: none;
-  border-radius: 10px;
-  font-size: 14px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-size: 14.5px;
+  font-weight: 650;
   font-family: inherit;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.22s;
+  box-shadow: 0 12px 28px -8px rgba(139, 92, 246, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+  position: relative;
+  letter-spacing: -0.005em;
+
+  &::after {
+    content: '';
+    position: absolute;
+    inset: -3px;
+    border-radius: inherit;
+    background: var(--gradient-brand);
+    filter: blur(16px);
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.25s;
+  }
 
   &:hover {
-    background: #ffd900;
-    transform: translateY(-1px);
-    box-shadow: 0 4px 16px rgba(255, 230, 0, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 18px 36px -10px rgba(139, 92, 246, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+
+    &::after { opacity: 0.7; }
   }
 
   &:active {
@@ -177,6 +228,6 @@
 .card-footer {
   text-align: center;
   font-size: 12px;
-  color: #3f3f46;
-  margin: 24px 0 0;
+  color: var(--text-muted);
+  margin: 26px 0 0;
 }
