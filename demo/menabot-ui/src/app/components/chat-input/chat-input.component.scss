@@ -108,7 +108,7 @@
 
   &:focus-within {
     transform: translateY(-1px);
-    box-shadow: var(--glass-inner-highlight), var(--glass-shadow-lg), 0 0 0 4px rgba(139, 92, 246, 0.12);
+    box-shadow: var(--glass-inner-highlight), var(--glass-shadow-lg), 0 0 0 4px rgba(45, 107, 207, 0.12);
 
     &::before {
       opacity: 1;
@@ -153,7 +153,7 @@
   justify-content: center;
   flex-shrink: 0;
   transition: all 0.2s cubic-bezier(0.2, 0.8, 0.25, 1);
-  box-shadow: 0 8px 22px -6px rgba(139, 92, 246, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  box-shadow: 0 8px 22px -6px rgba(45, 107, 207, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.35);
   position: relative;
 
   &::after {
@@ -170,7 +170,7 @@
 
   &:hover:not(:disabled) {
     transform: translateY(-2px) scale(1.04);
-    box-shadow: 0 14px 32px -8px rgba(139, 92, 246, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+    box-shadow: 0 14px 32px -8px rgba(45, 107, 207, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.4);
 
     &::after { opacity: 0.7; }
   }

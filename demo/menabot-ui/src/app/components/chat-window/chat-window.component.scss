@@ -76,7 +76,7 @@
     background: var(--hover-bg);
     color: var(--text-primary);
     transform: translateY(-1px);
-    box-shadow: 0 6px 14px -6px rgba(139, 92, 246, 0.35);
+    box-shadow: 0 6px 14px -6px rgba(45, 107, 207, 0.35);
   }
 
   &:active {
@@ -148,7 +148,7 @@
   cursor: default;
   flex-shrink: 0;
   border: 1.5px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 6px 18px -6px rgba(139, 92, 246, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 18px -6px rgba(45, 107, 207, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
   letter-spacing: 0.02em;
 }
 
@@ -217,8 +217,8 @@
   background: var(--gradient-brand);
   color: #fff;
   box-shadow:
-    0 20px 50px -16px rgba(139, 92, 246, 0.55),
-    0 8px 24px -8px rgba(34, 211, 238, 0.35),
+    0 20px 50px -16px rgba(45, 107, 207, 0.55),
+    0 8px 24px -8px rgba(255, 230, 0, 0.35),
     inset 0 1px 0 rgba(255, 255, 255, 0.45);
   animation: float-icon 6s ease-in-out infinite;
   position: relative;
@@ -276,7 +276,7 @@
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(135deg, rgba(139, 92, 246, 0.45), rgba(34, 211, 238, 0.35), transparent 60%);
+    background: linear-gradient(135deg, rgba(45, 107, 207, 0.45), rgba(255, 230, 0, 0.35), transparent 60%);
     -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
     -webkit-mask-composite: xor;
             mask-composite: exclude;
@@ -296,7 +296,7 @@
 
     .prompt-card-icon {
       transform: scale(1.08) rotate(-4deg);
-      box-shadow: 0 10px 24px -8px rgba(139, 92, 246, 0.55);
+      box-shadow: 0 10px 24px -8px rgba(45, 107, 207, 0.55);
     }
 
     .prompt-card-arrow {
