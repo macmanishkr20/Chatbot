@@ -1,0 +1,49 @@
+@if (reason(); as r) {
+  <div class="chips-reason">{{ r }}</div>
+}
+
+<div class="chips-row" [class.highlighted]="highlighted()">
+  @for (chip of chips; track trackByCode($index, chip)) {
+    <button
+      type="button"
+      class="chip"
+      [class.selected]="selected() === chip.code"
+      [attr.aria-pressed]="selected() === chip.code"
+      [attr.title]="chip.description"
+      (click)="onPick(chip)"
+    >
+      <span class="chip-icon" aria-hidden="true">
+        @switch (chip.icon) {
+          @case ('home') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8v10a2 2 0 0 1-2 2h-4v-7H9v7H5a2 2 0 0 1-2-2V11z"/></svg>
+          }
+          @case ('megaphone') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11v2l13 5V6L3 11zM7 19a3 3 0 0 0 6 0"/></svg>
+          }
+          @case ('user-plus') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-3.5 3.5-6 7-6s7 2.5 7 6M19 8v6M16 11h6"/></svg>
+          }
+          @case ('dollar') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 6H9.5a3 3 0 0 0 0 6h5a3 3 0 0 1 0 6H6"/></svg>
+          }
+          @case ('building') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="1"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg>
+          }
+          @case ('shield') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/></svg>
+          }
+          @case ('box') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7l9-4 9 4-9 4-9-4zM3 7v10l9 4 9-4V7M12 11v10"/></svg>
+          }
+          @case ('globe') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>
+          }
+          @case ('person') {
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-7 8-7s8 3 8 7"/></svg>
+          }
+        }
+      </span>
+      <span class="chip-label">{{ chip.label }}</span>
+    </button>
+  }
+</div>

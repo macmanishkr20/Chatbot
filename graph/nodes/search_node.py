@@ -41,21 +41,31 @@ async def search_node(state: RAGState) -> dict:
             "error_info": {"error_code": "NO_QUERY", "text": "No query to search."},
         }
 
-    odata_filter = rewritten_query.get("filter") or None
+    base_filter = rewritten_query.get("filter") or None
 
     user_functions = state.get("function", [])
     if user_functions:
         fn_filter = " or ".join(f"function eq '{f}'" for f in user_functions)
-        if odata_filter:
-            odata_filter = f"({odata_filter}) and ({fn_filter})"
-        else:
-            odata_filter = fn_filter
+        base_filter = f"({base_filter}) and ({fn_filter})" if base_filter else fn_filter
+
+    def _with_content_type(filter_expr: str | None, content_type: str) -> str:
+        ct_filter = f"content_type eq '{content_type}'"
+        return f"({filter_expr}) and ({ct_filter})" if filter_expr else ct_filter
+
+    requested_ct = (state.get("content_type") or "qna_pair").strip() or "qna_pair"
+    fallback_chain = [requested_ct]
+    if requested_ct == "qna_pair":
+        fallback_chain.append("document")
 
     search_service = SearchService()
-
-    all_results = await search_service.unified_search(
-        rewritten_query, embedded_query, odata_filter=odata_filter
-    )
+    all_results: list = []
+    for ct in fallback_chain:
+        odata_filter = _with_content_type(base_filter, ct)
+        all_results = await search_service.unified_search(
+            rewritten_query, embedded_query, odata_filter=odata_filter
+        )
+        if all_results:
+            break
 
     if not all_results:
         empty_detail = BUSINESS_EXCEPTION_DETAILS.get("empty_events", {})

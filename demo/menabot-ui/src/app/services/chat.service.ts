@@ -54,6 +54,18 @@ export class ChatService {
   /** Loading state for conversation list. */
   readonly conversationsLoading = signal(false);
 
+  /** Currently selected MENA function code (e.g. 'AWS', 'Talent'). */
+  readonly selectedFunction = signal<string | null>(null);
+
+  /** Glow / shimmer the function chips below the input. */
+  readonly chipsHighlighted = signal(false);
+
+  /** Optional reason text the backend gave for asking to (re)select. */
+  readonly functionPromptReason = signal<string | null>(null);
+
+  /** Query to automatically resend after the user picks a function. */
+  private pendingResendQuery: string | null = null;
+
   /** Error message (null = no error). */
   readonly error = signal<string | null>(null);
 
@@ -81,6 +93,23 @@ export class ChatService {
     this.conversationTitle.set(null);
     this.error.set(null);
     this.userMsgCounter = 0;
+    this.selectedFunction.set(null);
+    this.chipsHighlighted.set(true);
+    this.functionPromptReason.set(null);
+    this.pendingResendQuery = null;
+  }
+
+  /** Called by the function-chips component when the user picks a chip. */
+  selectFunction(code: string): void {
+    this.selectedFunction.set(code);
+    this.chipsHighlighted.set(false);
+    this.functionPromptReason.set(null);
+
+    const pending = this.pendingResendQuery;
+    this.pendingResendQuery = null;
+    if (pending && !this.isStreaming()) {
+      void this.sendMessage(pending);
+    }
   }
 
   /** Send a user message and stream the response. */
@@ -102,6 +131,7 @@ export class ChatService {
 
     this.messages.update(msgs => [...msgs, userMsg]);
 
+    const fn = this.selectedFunction();
     await this.streamResponse({
       input_type: 'ask',
       user_input: text.trim(),
@@ -109,11 +139,12 @@ export class ChatService {
       user_id: this.userId(),
       chat_session_id: this.activeSessionId(),
       chat_id: this.activeChatId() ? String(this.activeChatId()) : undefined,
-      function: [],
+      function: fn ? [fn] : [],
       sub_function: [],
       source_url: [],
       start_date: '',
       end_date: '',
+      content_type: 'qna_pair',
     });
   }
 
@@ -143,17 +174,19 @@ export class ChatService {
     this.messages.set(kept);
     this.userMsgCounter = messageIndex + 1;
 
+    const fn = this.selectedFunction();
     await this.streamResponse(undefined, {
       user_id: this.userId(),
       chat_session_id: this.activeSessionId()!,
       message_index: messageIndex,
       new_input: newText.trim(),
       is_free_form: true,
-      function: [],
+      function: fn ? [fn] : [],
       sub_function: [],
       source_url: [],
       start_date: '',
       end_date: '',
+      content_type: 'qna_pair',
     });
   }
 
@@ -329,6 +362,7 @@ export class ChatService {
       source_url: string[];
       start_date: string;
       end_date: string;
+      content_type?: 'qna_pair' | 'document';
     },
     editBody?: {
       user_id: string;
@@ -341,6 +375,7 @@ export class ChatService {
       source_url: string[];
       start_date: string;
       end_date: string;
+      content_type?: 'qna_pair' | 'document';
     },
     regenBody?: {
       user_id: string;
@@ -434,6 +469,19 @@ export class ChatService {
 
         if (final.chat_id) this.activeChatId.set(final.chat_id);
         if (final.conversation_title) this.conversationTitle.set(final.conversation_title);
+
+        if (final.requires_function_selection) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set(final.function_required_reason ?? null);
+          // Stash the user's last query so we can auto-resend after they pick.
+          const msgs = this.messages();
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'user') {
+              this.pendingResendQuery = msgs[i].content;
+              break;
+            }
+          }
+        }
 
         // Parse suggestive actions — backend may send Python repr strings
         const parsedActions = this.parseSuggestiveActions(final.suggestive_actions);

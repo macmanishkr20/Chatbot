@@ -96,6 +96,9 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
     "load_memory": {
         "Recall": "Reconnecting context…"
     },
+    "function_gate": {
+        "Routing": "Confirming MENA function…"
+    },
     "rewrite": {
         "Focus": "Clarifying focus…"
     },
@@ -232,6 +235,8 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "start_date": query.start_date,
         "end_date": query.end_date,
         "preferred_language": query.preferred_language,
+        "content_type": query.content_type or "qna_pair",
+        "requires_function_selection": False,
     }
 
 
@@ -368,6 +373,13 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 "ai_content": final_state.get("ai_content", []),
                 "suggestive_actions": actions,
                 "conversation_title": final_state.get("conversation_title"),
+                "requires_function_selection": bool(
+                    final_state.get("requires_function_selection")
+                ),
+                "function_required_reason": final_state.get(
+                    "function_required_reason"
+                ),
+                "function_candidates": final_state.get("functions_found") or [],
             })
     except Exception as exc:
         logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
@@ -436,6 +448,7 @@ async def chat_api(
         current_state["end_date"] = query.end_date
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
+        current_state["content_type"] = query.content_type or "qna_pair"
         # Reset per-turn transient fields (preserve citation_map for multi-turn)
         current_state["events"] = []
         current_state["error_info"] = None
@@ -444,6 +457,8 @@ async def chat_api(
         current_state["response"] = None
         current_state["suggestive_actions"] = None
         current_state["conversation_title"] = None
+        current_state["requires_function_selection"] = False
+        current_state["function_required_reason"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -601,6 +616,7 @@ async def edit_message(
             "start_date": body.start_date,
             "end_date": body.end_date,
             "preferred_language": body.preferred_language,
+            "content_type": body.content_type or "qna_pair",
             # Ensure transient fields are reset just like a normal graph entry.
             "events": [],
             "error_info": None,
@@ -612,6 +628,8 @@ async def edit_message(
             "citation_map": None,
             "is_ambiguous": False,
             "pending_ambiguous_query": None,
+            "requires_function_selection": False,
+            "function_required_reason": None,
         }
 
     if not current_state or not current_state.get("messages"):
@@ -680,6 +698,7 @@ async def edit_message(
         "start_date": body.start_date,
         "end_date": body.end_date,
         "preferred_language": body.preferred_language,
+        "content_type": body.content_type or "qna_pair",
         "input_type": "ask",
         # Reset all transient fields
         "events": [],
@@ -692,6 +711,8 @@ async def edit_message(
         "citation_map": None,
         "is_ambiguous": False,
         "pending_ambiguous_query": None,
+        "requires_function_selection": False,
+        "function_required_reason": None,
     }
 
     return StreamingResponse(

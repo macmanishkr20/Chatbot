@@ -15,12 +15,13 @@ import { ThemeService } from '../../services/theme.service';
 import { MessageBubbleComponent } from '../message-bubble/message-bubble.component';
 import { ChatInputComponent } from '../chat-input/chat-input.component';
 import { ExportMenuComponent } from '../export-menu/export-menu.component';
+import { FunctionChipsComponent } from '../function-chips/function-chips.component';
 import { SuggestiveAction } from '../../models/chat.models';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, MessageBubbleComponent, ChatInputComponent, ExportMenuComponent],
+  imports: [CommonModule, MessageBubbleComponent, ChatInputComponent, ExportMenuComponent, FunctionChipsComponent],
   templateUrl: './chat-window.component.html',
   styleUrl: './chat-window.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

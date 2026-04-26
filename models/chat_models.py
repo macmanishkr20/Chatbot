@@ -59,6 +59,7 @@ class UserChatQuery(BaseModel):
     end_date: str = ""
     current_date: str = ""
     preferred_language: Optional[str] = None
+    content_type: str = "qna_pair"
 
 class BusinessExceptionResponse(BaseModel):
     error_code: str | None = None
@@ -157,6 +158,7 @@ class EditMessageRequest(BaseModel):
     start_date: str = ""
     end_date: str = ""
     preferred_language: Optional[str] = None
+    content_type: str = "qna_pair"
 
 
 

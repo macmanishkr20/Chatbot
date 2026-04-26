@@ -19,6 +19,9 @@ export interface FinalEvent {
   suggestive_actions?: SuggestiveAction[];
   conversation_title?: string | null;
   cancelled?: boolean;
+  requires_function_selection?: boolean;
+  function_required_reason?: string | null;
+  function_candidates?: string[];
 }
 
 // ── Document export (decoupled from chat) ──
@@ -136,6 +139,7 @@ export interface ChatRequest {
   start_date: string;
   end_date: string;
   preferred_language?: string;
+  content_type?: 'qna_pair' | 'document';
 }
 
 /** Request body for POST /chat/edit. */
@@ -150,6 +154,7 @@ export interface EditRequest {
   source_url: string[];
   start_date: string;
   end_date: string;
+  content_type?: 'qna_pair' | 'document';
 }
 
 /** Request body for POST /chat/regenerate. */

@@ -20,9 +20,17 @@ from graph.nodes.embed_node import embed_node
 from graph.nodes.search_node import search_node
 from graph.nodes.generate_node import generate_node
 from graph.nodes.persist_node import persist_node
+from graph.nodes.function_gate_node import function_gate_node
 
 
 # ── Conditional Routing ──
+
+def _after_function_gate(state: RAGState) -> str:
+    """Short-circuit when the user must (re)select a MENA function."""
+    if state.get("requires_function_selection"):
+        return "persist"
+    return "rewrite"
+
 
 def _after_search(state: RAGState) -> str:
     """Route after search: short-circuit on ambiguity or empty results with error."""
@@ -40,6 +48,7 @@ def build_rag_graph(checkpointer: Any = None, memory_store: Any = None) -> State
     graph = StateGraph(RAGState)
 
     graph.add_node("load_memory", load_memory_node)
+    graph.add_node("function_gate", function_gate_node)
     graph.add_node("rewrite", rewrite_node)
     graph.add_node("embed", embed_node)
     graph.add_node("search", search_node)
@@ -49,7 +58,15 @@ def build_rag_graph(checkpointer: Any = None, memory_store: Any = None) -> State
 
     graph.set_entry_point("load_memory")
 
-    graph.add_edge("load_memory", "rewrite")
+    graph.add_edge("load_memory", "function_gate")
+    graph.add_conditional_edges(
+        "function_gate",
+        _after_function_gate,
+        {
+            "persist": "persist",
+            "rewrite": "rewrite",
+        },
+    )
     graph.add_edge("rewrite", "embed")
     graph.add_edge("embed", "search")
     graph.add_conditional_edges(
