@@ -23,20 +23,9 @@
   transition: filter 0.4s ease;
 }
 
-/* ── EY-tinted aurora glow when the user must (re)select ── */
-.chips-row.highlighted {
-  filter:
-    drop-shadow(0 0 10px var(--ey-yellow-glow))
-    drop-shadow(0 0 18px var(--ey-blue-glow));
-
-  .chip {
-    animation: chipPulse 2.4s ease-in-out infinite;
-
-    &::before {
-      opacity: 1;
-      animation: chipShimmer 3.2s linear infinite;
-    }
-  }
+/* ── Subtle highlight when the user must (re)select — no glow ring ── */
+.chips-row.highlighted .chip {
+  border-color: var(--glass-border);
 }
 
 .chip {
@@ -61,30 +50,6 @@
   transition: transform 0.18s ease, border-color 0.22s, box-shadow 0.22s, background 0.22s, color 0.22s;
   isolation: isolate;
 
-  /* moving aurora ring (visible when row is highlighted) — uses EY brand stops */
-  &::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    border-radius: inherit;
-    padding: 1px;
-    background: conic-gradient(
-      from 0deg,
-      transparent 0deg,
-      var(--ey-yellow) 90deg,
-      var(--ey-blue) 180deg,
-      var(--chip-color) 270deg,
-      transparent 360deg
-    );
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-            mask-composite: exclude;
-    opacity: 0;
-    pointer-events: none;
-    z-index: -1;
-    transition: opacity 0.3s ease;
-  }
-
   /* per-chip hover border + colored halo */
   &:hover {
     transform: translateY(-1px);
@@ -107,8 +72,6 @@
       0 10px 24px -10px var(--chip-color),
       inset 0 1px 0 rgba(255, 255, 255, 0.15);
     animation: none;
-
-    &::before { opacity: 0; }
 
     .chip-icon { color: var(--chip-color); }
   }
@@ -153,19 +116,3 @@
   z-index: 10;
 }
 
-@keyframes chipPulse {
-  0%, 100% {
-    box-shadow:
-      0 0 0 0 transparent,
-      0 6px 16px -10px var(--chip-color);
-  }
-  50% {
-    box-shadow:
-      0 0 0 4px color-mix(in srgb, var(--ey-yellow) 22%, transparent),
-      0 10px 22px -8px var(--ey-blue-glow);
-  }
-}
-
-@keyframes chipShimmer {
-  to { transform: rotate(360deg); }
-}

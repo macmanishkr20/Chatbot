@@ -170,6 +170,11 @@ html, body {
   height: 100%;
 }
 
+/* Render the app at the density of ~80% browser zoom by default. */
+html {
+  zoom: 0.8;
+}
+
 body {
   font-family: 'Söhne', -apple-system, BlinkMacSystemFont, 'Inter', "Segoe UI", 'Helvetica Neue', sans-serif;
   background: var(--bg-canvas);
