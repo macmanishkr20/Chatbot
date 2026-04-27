@@ -236,7 +236,7 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "start_date": query.start_date,
         "end_date": query.end_date,
         "preferred_language": query.preferred_language,
-        "content_type": query.content_type or "qna_pair",
+        "content_type": query.content_type or "qa_pair",
         "requires_function_selection": False,
     }
 
@@ -482,7 +482,7 @@ async def chat_api(
         current_state["end_date"] = query.end_date
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
-        current_state["content_type"] = query.content_type or "qna_pair"
+        current_state["content_type"] = query.content_type or "qa_pair"
         # Reset per-turn transient fields (preserve citation_map for multi-turn)
         current_state["events"] = []
         current_state["error_info"] = None
@@ -651,7 +651,7 @@ async def edit_message(
             "start_date": body.start_date,
             "end_date": body.end_date,
             "preferred_language": body.preferred_language,
-            "content_type": body.content_type or "qna_pair",
+            "content_type": body.content_type or "qa_pair",
             # Ensure transient fields are reset just like a normal graph entry.
             "events": [],
             "error_info": None,
@@ -733,7 +733,7 @@ async def edit_message(
         "start_date": body.start_date,
         "end_date": body.end_date,
         "preferred_language": body.preferred_language,
-        "content_type": body.content_type or "qna_pair",
+        "content_type": body.content_type or "qa_pair",
         "input_type": "ask",
         # Reset all transient fields
         "events": [],

@@ -141,7 +141,7 @@ export interface ChatRequest {
   start_date: string;
   end_date: string;
   preferred_language?: string;
-  content_type?: 'qna_pair' | 'document';
+  content_type?: 'qa_pair' | 'document';
 }
 
 /** Request body for POST /chat/edit. */
@@ -156,7 +156,7 @@ export interface EditRequest {
   source_url: string[];
   start_date: string;
   end_date: string;
-  content_type?: 'qna_pair' | 'document';
+  content_type?: 'qa_pair' | 'document';
 }
 
 /** Request body for POST /chat/regenerate. */

@@ -55,9 +55,9 @@ async def search_node(state: RAGState) -> dict:
         ct_filter = f"content_type eq '{content_type}'"
         return f"({filter_expr}) and ({ct_filter})" if filter_expr else ct_filter
 
-    requested_ct = (state.get("content_type") or "qna_pair").strip() or "qna_pair"
+    requested_ct = (state.get("content_type") or "qa_pair").strip() or "qa_pair"
     fallback_chain = [requested_ct]
-    if requested_ct == "qna_pair":
+    if requested_ct == "qa_pair":
         fallback_chain.append("document")
 
     search_service = SearchService()

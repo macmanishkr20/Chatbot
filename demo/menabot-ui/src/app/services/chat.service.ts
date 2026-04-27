@@ -150,7 +150,7 @@ export class ChatService {
       source_url: [],
       start_date: '',
       end_date: '',
-      content_type: 'qna_pair',
+      content_type: 'qa_pair',
     });
   }
 
@@ -196,7 +196,7 @@ export class ChatService {
       source_url: [],
       start_date: '',
       end_date: '',
-      content_type: 'qna_pair',
+      content_type: 'qa_pair',
     });
   }
 
@@ -372,7 +372,7 @@ export class ChatService {
       source_url: string[];
       start_date: string;
       end_date: string;
-      content_type?: 'qna_pair' | 'document';
+      content_type?: 'qa_pair' | 'document';
     },
     editBody?: {
       user_id: string;
@@ -385,7 +385,7 @@ export class ChatService {
       source_url: string[];
       start_date: string;
       end_date: string;
-      content_type?: 'qna_pair' | 'document';
+      content_type?: 'qa_pair' | 'document';
     },
     regenBody?: {
       user_id: string;

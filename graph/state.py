@@ -32,7 +32,7 @@ class RAGState(TypedDict, total=False):
     start_date: str
     end_date: str
     preferred_language: str | None
-    content_type: str  # "qna_pair" (default) | "document" — search index filter
+    content_type: str  # "qa_pair" (default) | "document" — search index filter
 
     # ── Function gate (selection enforcement before search) ──
     requires_function_selection: bool
