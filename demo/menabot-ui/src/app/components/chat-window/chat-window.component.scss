@@ -113,10 +113,6 @@
   text-overflow: ellipsis;
   margin: 0;
   letter-spacing: -0.01em;
-  background: var(--gradient-brand);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
 }
 
 .header-icon-btn {
@@ -158,8 +154,8 @@
   width: 36px;
   height: 36px;
   border-radius: 50%;
-  background: var(--gradient-brand);
-  color: #fff;
+  background: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
+  color: #0a0a0f;
   font-size: 13px;
   font-weight: 700;
   display: flex;
@@ -167,8 +163,8 @@
   justify-content: center;
   cursor: default;
   flex-shrink: 0;
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
-  box-shadow: 0 6px 18px -6px rgba(255, 230, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  border: 1.5px solid rgba(0, 0, 0, 0.15);
+  box-shadow: 0 4px 12px -6px rgba(255, 230, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.35);
   letter-spacing: 0.02em;
 }
 
@@ -234,12 +230,13 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--gradient-brand);
-  color: #0a0a0f;
+  /* Default (light theme): premium charcoal canvas with yellow sparkle */
+  background: linear-gradient(135deg, #1a1a24 0%, #0a0a0f 100%);
+  color: #ffe600;
   box-shadow:
-    0 14px 36px -16px rgba(255, 230, 0, 0.35),
-    0 6px 18px -8px rgba(255, 230, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+    0 18px 40px -18px rgba(26, 26, 36, 0.45),
+    0 8px 20px -10px rgba(26, 26, 36, 0.25),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
   animation: float-icon 6s ease-in-out infinite;
   position: relative;
 
@@ -248,10 +245,26 @@
     position: absolute;
     inset: -4px;
     border-radius: inherit;
+    background: radial-gradient(circle, rgba(255, 230, 0, 0.45), transparent 70%);
+    filter: blur(18px);
+    opacity: 0.5;
+    z-index: -1;
+  }
+}
+
+/* Dark theme: keep the bright yellow welcome tile */
+:host-context([data-theme="dark"]) .welcome-icon {
+  background: var(--gradient-brand);
+  color: #0a0a0f;
+  box-shadow:
+    0 14px 36px -16px rgba(255, 230, 0, 0.35),
+    0 6px 18px -8px rgba(255, 230, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.35);
+
+  &::after {
     background: var(--gradient-brand);
     filter: blur(22px);
     opacity: 0.3;
-    z-index: -1;
   }
 }
 
@@ -336,9 +349,16 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  /* Default (light theme): charcoal tile with yellow icon — clean enterprise */
+  background: linear-gradient(135deg, #1a1a24 0%, #0a0a0f 100%);
+  color: #ffe600;
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
+  box-shadow: 0 4px 10px -6px rgba(26, 26, 36, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+:host-context([data-theme="dark"]) .prompt-card-icon {
   background: linear-gradient(135deg, #ffe600 0%, #ffd400 100%);
   color: #0a0a0f;
-  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
   box-shadow: 0 4px 10px -6px rgba(255, 230, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
