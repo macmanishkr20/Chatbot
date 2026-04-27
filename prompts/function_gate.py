@@ -30,25 +30,42 @@ function, if any), produce a structured classification.
 {MENA_FUNCTIONS_CATALOG}
 </mena_functions>
 
+<function_name_mapping>
+Strictly adhere to this mapping — use the right-side value as the function
+code in your output (mentioned_functions, candidates, function fields).
+- "MENA Risk Function"                              => "Risk Management"
+- "C&I"                                             => "Clients & Industries"
+- "SCS"                                             => "Supply Chain Services"
+- "TME"                                             => "Travel, Meetings & Events (TME)"
+- "Talent"                                          => "Talent"
+- "Finance function"                                => "Finance"
+- "MENA Administrative and Workplace Services (AWS)"=> "AWS"
+- "CBS MENA General Counsel Office"                 => "GCO"
+- "Brand Marketing Communications"                  => "BMC"
+</function_name_mapping>
+
 <task>
 Two independent signals must be produced:
 
 1. mentioned_functions — function codes that the query *explicitly* names
-   in its text. Use ONLY the function codes from the catalog (AWS, BMC,
-   C&I, Finance, GCO, Risk, SCS, TME, Talent). Count an explicit mention
-   when:
-     - the code appears verbatim ("AWS", "GCO", "TME", "C&I" …),
+   in its text. Use ONLY the mapped values from <function_name_mapping>
+   (e.g. "Risk Management", "Clients & Industries", "Supply Chain Services",
+   "Travel, Meetings & Events (TME)", "Talent", "Finance", "AWS", "GCO",
+   "BMC"). Count an explicit mention when:
+     - the mapped code or its left-side alias appears verbatim
+       ("AWS", "GCO", "TME", "C&I", "Finance", "Risk", "SCS" …),
      - the full form appears (e.g. "Brand Marketing Communications",
        "Travel, Meetings & Events"), or
      - a keyword that is *unambiguously* owned by exactly one function's
        Includes appears (e.g. "purchase requisition" → AWS, "supplier
-       sourcing" → SCS).
-   Do NOT include codes that are merely plausible inferences. If nothing
-   is explicitly named, return an empty list.
+       sourcing" → Supply Chain Services).
+   Always output the **mapped value** (right-side of the mapping), not the
+   alias. Do NOT include codes that are merely plausible inferences. If
+   nothing is explicitly named, return an empty list.
 
 2. candidates — when the query does NOT explicitly name a function, list
-   the codes that plausibly fit (1-4, ordered by likelihood) using the
-   Includes/Excludes in the catalog. Empty when mentioned_functions is
+   the mapped values that plausibly fit (1-4, ordered by likelihood) using
+   the Includes/Excludes in the catalog. Empty when mentioned_functions is
    non-empty or when verdict is "unclassified" / "not_applicable".
 
 Then choose ONE verdict that best summarises the query:
@@ -64,9 +81,9 @@ NOT bias the classification toward it — your job is to describe the query.
 <output_format>
 Return ONLY the structured object with these fields:
 - verdict: "match" | "ambiguous" | "unclassified" | "not_applicable"
-- mentioned_functions: list[str]  (function codes explicitly named)
-- candidates: list[str]            (plausible codes when nothing explicit)
-- function: str | null             (single best code when verdict="match")
+- mentioned_functions: list[str]  (mapped function values explicitly named)
+- candidates: list[str]            (mapped values when nothing explicit)
+- function: str | null             (single best mapped value when verdict="match")
 - reason: str                      (one short sentence)
 </output_format>\
 """

@@ -37,6 +37,7 @@ class RAGState(TypedDict, total=False):
     # ── Function gate (selection enforcement before search) ──
     requires_function_selection: bool
     function_required_reason: str | None  # message shown to user when re-selection is required
+    function_hint: str | None  # non-blocking hint suggesting user select a function
 
     # ── Validation ──
     is_greeting: bool

@@ -32,6 +32,7 @@ from graph.context_manager import trim_messages_to_budget
 from graph.nodes.supervisor import get_graph
 from graph.state import RAGState
 from langchain_core.messages import RemoveMessage
+from prompts._functions import SEARCH_TO_CHIP
 from models.chat_models import (
     CancelRequest,
     EditMessageRequest,
@@ -271,6 +272,16 @@ def sse_format(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
 
+def _to_chip_code(value: str | None) -> str | None:
+    """Convert a search-index function value to its frontend chip code.
+    E.g. "Risk Management" → "Risk", "Finance" → "Finance".
+    Returns as-is if already a chip code or unknown.
+    """
+    if not value:
+        return value
+    return SEARCH_TO_CHIP.get(value, value)
+
+
 async def _init_graph():
     """Initialise the compiled graph (idempotent)."""
     global graph
@@ -294,6 +305,9 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
     Supports cancellation via _cancel_signals[thread_id].
     """
     seen_nodes: set[str] = set()
+    # Track function auto-selected by function_gate inside the sub-graph,
+    # since aget_state on the parent graph may not reflect sub-graph changes.
+    auto_selected_function: list[str] | None = None
 
     async for chunk in graph.astream(
         state,
@@ -310,6 +324,13 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
 
         if mode == "updates":
             for node in data.keys():
+                node_data = data.get(node, {})
+
+                # Capture function auto-selected by function_gate
+                if node == "function_gate" and node_data.get("function"):
+                    auto_selected_function = node_data["function"]
+                    logger.info("function_gate auto-selected: %s", auto_selected_function)
+
                 if node and node not in seen_nodes:
                     seen_nodes.add(node)
                     thought_entry = _NODE_THOUGHT.get(node)
@@ -326,7 +347,6 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     # completed update contains ai_content with the actual reply.
                     # Deliver it as a single content event via "updates" mode.
                     if node == "Supervisor":
-                        node_data = data.get("Supervisor", {})
                         respond_content = node_data.get("ai_content")
                         if respond_content:
                             yield sse_format({
@@ -357,6 +377,12 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
         state_snapshot = await graph.aget_state(config)
         if state_snapshot:
             final_state = state_snapshot.values
+            logger.info(
+                "Final state: function=%s, functions_found=%s, requires_function_selection=%s",
+                final_state.get("function"),
+                final_state.get("functions_found"),
+                final_state.get("requires_function_selection"),
+            )
             raw_actions = final_state.get("suggestive_actions") or []
             actions = []
             for a in raw_actions:
@@ -379,8 +405,15 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 "function_required_reason": final_state.get(
                     "function_required_reason"
                 ),
+                "function_hint": final_state.get("function_hint"),
                 "function_candidates": final_state.get("functions_found") or [],
-                "selected_function": (final_state.get("function") or [None])[0],
+                "selected_function": _to_chip_code(
+                    (
+                        final_state.get("function")
+                        or auto_selected_function
+                        or [None]
+                    )[0]
+                ),
             })
     except Exception as exc:
         logger.error("Failed to emit final SSE event: %s", exc, exc_info=True)
@@ -460,6 +493,7 @@ async def chat_api(
         current_state["conversation_title"] = None
         current_state["requires_function_selection"] = False
         current_state["function_required_reason"] = None
+        current_state["function_hint"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -631,8 +665,8 @@ async def edit_message(
             "pending_ambiguous_query": None,
             "requires_function_selection": False,
             "function_required_reason": None,
+            "function_hint": None,
         }
-
     if not current_state or not current_state.get("messages"):
         logger.warning(
             "edit: no checkpoint messages for thread_id=%s; treating edit as new turn",
@@ -714,6 +748,7 @@ async def edit_message(
         "pending_ambiguous_query": None,
         "requires_function_selection": False,
         "function_required_reason": None,
+        "function_hint": None,
     }
 
     return StreamingResponse(

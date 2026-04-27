@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage
 
 from graph.state import RAGState
 from config import AMBIGUITY_SCORE_RATIO, BUSINESS_EXCEPTION_DETAILS, TOP_K
+from prompts._functions import CHIP_TO_SEARCH
 from services.search_client import SearchService
 
 
@@ -45,7 +46,9 @@ async def search_node(state: RAGState) -> dict:
 
     user_functions = state.get("function", [])
     if user_functions:
-        fn_filter = " or ".join(f"function eq '{f}'" for f in user_functions)
+        # Map chip codes to search-index values (e.g. "Risk" → "Risk Management")
+        search_fns = [CHIP_TO_SEARCH.get(f, f) for f in user_functions]
+        fn_filter = " or ".join(f"function eq '{f}'" for f in search_fns)
         base_filter = f"({base_filter}) and ({fn_filter})" if base_filter else fn_filter
 
     def _with_content_type(filter_expr: str | None, content_type: str) -> str:

@@ -142,3 +142,24 @@ MENA_FUNCTIONS_CATALOG = """\
     • Legal employment disputes (owned by GCO)
     • External marketing or employer branding campaigns (owned by BMC)"
 """
+
+# ── Function name mapping ──
+# Left: UI chip code (used by frontend & state["function"] from user selection)
+# Right: Azure Search index value (used in OData filters)
+#
+# The function_gate LLM outputs the *search value* (right side).
+# The frontend sends the *chip code* (left side).
+
+CHIP_TO_SEARCH: dict[str, str] = {
+    "Risk":    "Risk Management",
+    "C&I":     "Clients & Industries",
+    "SCS":     "Supply Chain Services",
+    "TME":     "Travel, Meetings & Events (TME)",
+    "Talent":  "Talent",
+    "Finance": "Finance",
+    "AWS":     "AWS",
+    "GCO":     "GCO",
+    "BMC":     "BMC",
+}
+
+SEARCH_TO_CHIP: dict[str, str] = {v: k for k, v in CHIP_TO_SEARCH.items()}

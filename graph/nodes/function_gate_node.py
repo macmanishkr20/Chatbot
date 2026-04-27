@@ -16,8 +16,9 @@ Routing principles (UI selection is authoritative):
    is when the query *explicitly* names a different function — then we
    ask the user to pick one of the two.
 4. With no selection: a single explicit mention or a single confident
-   candidate is auto-selected; multiple candidates trigger ambiguity;
-   nothing classifiable triggers the first-turn prompt.
+   candidate is auto-selected; multiple explicit mentions block for
+   disambiguation; otherwise the search proceeds without a filter and
+   a non-blocking hint is shown suggesting the user select a function.
 
 Greetings / unrelated knowledge questions skip the gate entirely.
 """
@@ -34,6 +35,7 @@ from pydantic import BaseModel, Field
 from config import AZURE_OPENAI_API_VERSION, AZURE_OPENAI_KEY
 from graph.state import RAGState
 from prompts.function_gate import FUNCTION_GATE_PROMPT
+from prompts._functions import CHIP_TO_SEARCH, SEARCH_TO_CHIP
 from services.openai_client import get_llm_model
 
 logger = logging.getLogger(__name__)
@@ -90,13 +92,37 @@ _CONFLICT_MESSAGE_TEMPLATE = (
     "Please pick the single function you want to ask about."
 )
 
+_HINT_MESSAGE = (
+    "Tip: Selecting a MENA function will help me give you a more accurate "
+    "and focused answer."
+)
+
+_HINT_AMBIGUOUS_TEMPLATE = (
+    "Tip: This question could relate to multiple functions ({candidates}). "
+    "Selecting a specific MENA function will help me give you a more "
+    "accurate answer."
+)
+
 
 def _norm(code: str | None) -> str:
     return (code or "").strip().lower()
 
 
 def _eq(a: str | None, b: str | None) -> bool:
-    return _norm(a) == _norm(b) and bool(_norm(a))
+    """Compare two function identifiers that may be in different formats
+    (chip code vs search value). E.g. _eq("Risk", "Risk Management") → True.
+    """
+    na, nb = _norm(a), _norm(b)
+    if not na or not nb:
+        return False
+    if na == nb:
+        return True
+    # Check if one is a chip code and the other is its search value
+    search_a = _norm(CHIP_TO_SEARCH.get(a or "", ""))
+    search_b = _norm(CHIP_TO_SEARCH.get(b or "", ""))
+    chip_a = _norm(SEARCH_TO_CHIP.get(a or "", ""))
+    chip_b = _norm(SEARCH_TO_CHIP.get(b or "", ""))
+    return na == search_b or na == chip_b or nb == search_a or nb == chip_a
 
 
 async def function_gate_node(state: RAGState) -> dict:
@@ -172,7 +198,7 @@ async def function_gate_node(state: RAGState) -> dict:
     if len(mentioned) == 1:
         return _auto_select(mentioned[0])
 
-    # Multiple explicit mentions → ambiguous.
+    # Multiple explicit mentions → still block (genuine conflict in query).
     if len(mentioned) > 1:
         return _block_for_selection(
             _AMBIGUOUS_MESSAGE_TEMPLATE.format(candidates=", ".join(mentioned)),
@@ -183,20 +209,28 @@ async def function_gate_node(state: RAGState) -> dict:
     if verdict.verdict == "match" and suggested:
         return _auto_select(suggested)
 
+    # Ambiguous or undetected — proceed with search (no filter) but hint
+    # the user that selecting a function would improve results.
     if verdict.verdict == "ambiguous" and candidates:
-        return _block_for_selection(
-            _AMBIGUOUS_MESSAGE_TEMPLATE.format(candidates=", ".join(candidates)),
+        return _hint_and_proceed(
+            _HINT_AMBIGUOUS_TEMPLATE.format(candidates=", ".join(candidates)),
             candidates=candidates,
         )
 
-    return _block_for_selection(_FIRST_TURN_MESSAGE)
+    return _hint_and_proceed(_HINT_MESSAGE)
 
 
 def _auto_select(code: str) -> dict:
-    """Auto-select a function derived from the query and proceed."""
+    """Auto-select a function derived from the query and proceed.
+
+    ``code`` is the search-index value output by the LLM (e.g. "Risk Management").
+    state["function"] stores the search value for OData filter correctness.
+    """
+    # Resolve to search value if a chip code was somehow passed
+    search_val = CHIP_TO_SEARCH.get(code, code)
     return {
-        "function": [code],
-        "functions_found": [code],
+        "function": [search_val],
+        "functions_found": [search_val],
         "requires_function_selection": False,
     }
 
@@ -210,4 +244,14 @@ def _block_for_selection(message: str, candidates: list[str] | None = None) -> d
         "function_required_reason": message,
         "functions_found": candidates or [],
         "response": {"message": message, "intent": "FUNCTION_SELECT"},
+    }
+
+
+def _hint_and_proceed(hint: str, candidates: list[str] | None = None) -> dict:
+    """Non-blocking: let the search proceed without a function filter,
+    but signal the frontend to highlight chips and show a hint."""
+    return {
+        "requires_function_selection": False,
+        "function_hint": hint,
+        "functions_found": candidates or [],
     }

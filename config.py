@@ -6,6 +6,8 @@ import os
 import json
 from dotenv import load_dotenv
 
+from helpers.keyvaultmanager import get_secret
+
 load_dotenv()
 
 
@@ -127,3 +129,6 @@ TITLE_MAX_LENGTH = int(os.getenv("TITLE_MAX_LENGTH", "60"))
 
 # ── Input validation ──
 MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))
+
+# InsightsConnectionString
+APPLICATIONINSIGHTS_CONNECTION_STRING = get_secret("APPLICATIONINSIGHTS-CONNECTION-STRING")
