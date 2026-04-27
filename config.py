@@ -10,7 +10,6 @@ from helpers.keyvaultmanager import get_secret
 
 load_dotenv()
 
-
 # ──────────────────────────── Environment ────────────────────────────
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "LOCAL")
