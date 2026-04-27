@@ -21,6 +21,7 @@ export interface FinalEvent {
   cancelled?: boolean;
   requires_function_selection?: boolean;
   function_required_reason?: string | null;
+  function_hint?: string | null;
   function_candidates?: string[];
   selected_function?: string | null;
 }

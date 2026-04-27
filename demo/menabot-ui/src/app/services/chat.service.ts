@@ -168,6 +168,10 @@ export class ChatService {
     const editPos = msgs.indexOf(editedUserMsg);
     if (editPos === -1) return;
 
+    // Compute the backend-aligned index: count user messages up to and
+    // including the edited one (0-based) within the current conversation.
+    const backendIndex = msgs.slice(0, editPos + 1).filter(m => m.role === 'user').length - 1;
+
     // Truncate: keep messages before the edited one, replace it
     const kept = msgs.slice(0, editPos);
     const updatedUserMsg: ChatMessage = {
@@ -178,13 +182,13 @@ export class ChatService {
     kept.push(updatedUserMsg);
 
     this.messages.set(kept);
-    this.userMsgCounter = messageIndex + 1;
+    this.userMsgCounter = backendIndex + 1;
 
     const fn = this.selectedFunction();
     await this.streamResponse(undefined, {
       user_id: this.userId(),
       chat_session_id: this.activeSessionId()!,
-      message_index: messageIndex,
+      message_index: backendIndex,
       new_input: newText.trim(),
       is_free_form: true,
       function: fn ? [fn] : [],
@@ -492,6 +496,12 @@ export class ChatService {
           this.selectedFunction.set(final.selected_function);
         }
 
+        // Non-blocking hint: highlight chips and show tip, but don't block the response
+        if (final.function_hint && !final.requires_function_selection && !final.selected_function) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set(final.function_hint);
+        }
+
         // Parse suggestive actions — backend may send Python repr strings
         const parsedActions = this.parseSuggestiveActions(final.suggestive_actions);
 
@@ -502,7 +512,10 @@ export class ChatService {
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
             // If no content was streamed, use ai_content from final event
             const content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : m.content);
-            const citations = this.parseCitations(content);
+            // Use the complete ai_content from the backend for citation parsing
+            // because m.content may be incomplete due to the drip animation buffer.
+            const citationSource = typeof final.ai_content === 'string' ? final.ai_content : content;
+            const citations = this.parseCitations(citationSource);
             return {
               ...m,
               content,
