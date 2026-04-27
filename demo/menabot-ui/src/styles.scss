@@ -63,7 +63,7 @@
   --glass-shadow-lg: 0 30px 80px -20px rgba(76, 29, 149, 0.35), 0 12px 40px -12px rgba(15, 23, 42, 0.12);
   --glass-blur: blur(24px) saturate(180%);
 
-  --bg-user-msg: linear-gradient(135deg, #4f8bff 0%, #2563eb 100%);
+  --bg-user-msg: linear-gradient(135deg, #dbeafe 0%, #c7ddff 100%);
   --bg-assistant-msg: rgba(255, 255, 255, 0.65);
   --bg-input: rgba(255, 255, 255, 0.65);
 
@@ -87,9 +87,12 @@
   --kbd-glow: 0 0 10px rgba(255, 230, 0, 0.3);
 
   --user-msg-bg: var(--bg-user-msg);
-  --user-msg-color: #f8fafc;
-  --user-msg-border: rgba(255, 255, 255, 0.25);
-  --user-msg-glow: 0 12px 32px -6px rgba(37, 99, 235, 0.5), 0 0 0 1px rgba(79, 139, 255, 0.4);
+  --user-msg-color: #1e3a8a;
+  --user-msg-border: rgba(59, 130, 246, 0.25);
+  --user-msg-glow: 0 4px 14px -6px rgba(59, 130, 246, 0.25), 0 0 0 1px rgba(59, 130, 246, 0.15);
+
+  --link-accent: #0ea5e9;
+  --link-accent-soft: #38bdf8;
 
   --scrollbar-thumb: rgba(255, 230, 0, 0.35);
   --scrollbar-thumb-hover: rgba(255, 230, 0, 0.6);
@@ -125,6 +128,9 @@
   --bg-user-msg: linear-gradient(135deg, #4f8bff 0%, #2563eb 100%);
   --bg-assistant-msg: rgba(255, 255, 255, 0.04);
   --bg-input: rgba(255, 255, 255, 0.04);
+
+  --link-accent: #38bdf8;
+  --link-accent-soft: #7dd3fc;
 
   --text-primary: #f5f5f7;
   --text-secondary: #c8c8d0;

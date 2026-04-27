@@ -31,7 +31,7 @@
 .thinking-icon {
   font-size: 14px;
   animation: spin 2s linear infinite;
-  color: var(--accent-violet-soft);
+  color: #94a3b8;
 
   .mat-icon { font-size: 14px; }
 }
@@ -42,11 +42,11 @@
 
 .completed .thinking-icon {
   animation: none;
-  color: var(--accent-emerald);
+  color: #94a3b8;
 }
 
 .completed .thinking-label {
-  color: var(--accent-emerald);
+  color: var(--text-primary);
 }
 
 .thinking-label {
@@ -91,16 +91,16 @@
   align-items: flex-start;
   gap: 10px;
   padding: 4px 0;
-  color: var(--text-muted);
+  color: var(--text-primary);
   transition: color 0.2s;
 
   &.running {
-    color: var(--accent-violet);
+    color: var(--text-primary);
     font-weight: 500;
   }
 
   &.done {
-    color: var(--text-secondary);
+    color: var(--text-primary);
   }
 }
 
@@ -118,14 +118,14 @@
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid var(--accent-violet);
+  border: 2px solid #38bdf8;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .checkmark {
-  color: var(--accent-emerald);
+  color: #38bdf8;
   font-size: 13px;
   font-weight: 700;
 
