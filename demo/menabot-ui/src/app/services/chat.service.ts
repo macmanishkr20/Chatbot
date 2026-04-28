@@ -624,11 +624,13 @@ export class ChatService {
     );
 
     if (this.contentQueue) {
-      // Adaptive pacing: slow when buffer is small (smooth feel),
-      // fast when buffer is large (catch up to backend).
-      const delay = this.contentQueue.length > 200 ? 50
-                  : this.contentQueue.length > 80  ? 65
-                  : 85;
+      // Adaptive pacing: keep visible motion but minimise perceived lag.
+      // Aggressively catch up when the buffer grows so we stay near the
+      // backend's stream rate (Claude-style).
+      const delay = this.contentQueue.length > 200 ? 0
+                  : this.contentQueue.length > 80  ? 8
+                  : this.contentQueue.length > 30  ? 16
+                  : 22;
       this.dripTimerId = setTimeout(() => this.dripTick(), delay);
     }
   }

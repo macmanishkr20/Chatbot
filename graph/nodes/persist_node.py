@@ -8,10 +8,15 @@ only writes the structured records the frontend needs.
 
 Also emits an AIMessage into LangGraph messages for checkpoint persistence.
 """
+import asyncio
 import json
 import logging
 
 from langchain_core.messages import AIMessage
+
+# Strong references for fire-and-forget background tasks (e.g. title gen)
+# so the GC doesn't drop them while they're still running.
+_BG_TASKS: set[asyncio.Task] = set()
 
 logger = logging.getLogger(__name__)
 
@@ -207,20 +212,32 @@ async def persist_node(state: RAGState) -> dict:
             await _save_ai_content(ai_content, app_query, scc)
 
         # ── Auto-generate conversation title for new conversations ──
-        # Same UX as Claude/ChatGPT: title appears after the first exchange.
+        # Same UX as Claude/ChatGPT: fire-and-forget so the user sees the
+        # answer immediately; the sidebar refreshes once the title lands.
         conversation_title = None
         if is_new_conversation and ai_content:
-            try:
-                conversation_title = await generate_title(
-                    state.get("user_input", ""), ai_content
+            async def _bg_title(user_input: str, ai_text: str, chat_id: str, user_id: str) -> None:
+                try:
+                    title = await generate_title(user_input, ai_text)
+                    await scc.upsert_chat({
+                        "id": chat_id,
+                        "title": title,
+                        "userId": user_id,
+                    })
+                except Exception as exc:
+                    logger.warning("Background title generation failed: %s", exc)
+
+            task = asyncio.create_task(
+                _bg_title(
+                    state.get("user_input", ""),
+                    ai_content,
+                    app_query.chat_id,
+                    app_query.user_id,
                 )
-                await scc.upsert_chat({
-                    "id": app_query.chat_id,
-                    "title": conversation_title,
-                    "userId": app_query.user_id,
-                })
-            except Exception as e:
-                logger.warning("Title generation failed: %s", e)
+            )
+            # Keep a reference so the task isn't garbage-collected mid-flight.
+            _BG_TASKS.add(task)
+            task.add_done_callback(_BG_TASKS.discard)
 
         return {
             "chat_id": app_query.chat_id,

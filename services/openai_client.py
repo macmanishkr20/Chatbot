@@ -148,7 +148,7 @@ def get_tokens_count(input_data, model_name: str) -> int:
 
 # ── Retry Decorators ──
 
-def retry_with_llm_backoff(base_delay: float = 1.0, max_retries: int = 3):
+def retry_with_llm_backoff(base_delay: float = 0.25, max_retries: int = 3):
     """Async retry decorator for LLM calls with fallback across deployments."""
     def decorator(func):
         @wraps(func)
@@ -174,7 +174,7 @@ def retry_with_llm_backoff(base_delay: float = 1.0, max_retries: int = 3):
     return decorator
 
 
-def retry_with_embedding_backoff(base_delay: float = 1.0, max_retries: int = 3):
+def retry_with_embedding_backoff(base_delay: float = 0.25, max_retries: int = 3):
     """Sync retry decorator for embedding calls with fallback across deployments."""
     def decorator(func):
         @wraps(func)
