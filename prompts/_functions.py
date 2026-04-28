@@ -65,6 +65,7 @@ MENA_FUNCTIONS_CATALOG = """\
     • Cost accounting (GDS, EYG, travel, insurance)
     • Tax documentation, VAT, TRN, bank guarantees
     • IRD reports, financial dashboards
+    • T&E policy ownership but not travel booking execution (TME / AWS)
  
     Excludes:
     • Legal contract review or interpretation (GCO)
