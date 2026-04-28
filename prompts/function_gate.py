@@ -33,9 +33,9 @@ function, if any), produce a structured classification.
 <function_name_mapping>
 Strictly adhere to this mapping — use the right-side value as the function
 code in your output (mentioned_functions, candidates, function fields).
-- "MENA Risk Function"                              => "Risk Management"
-- "C&I"                                             => "Clients & Industries"
-- "SCS"                                             => "Supply Chain Services"
+- "MENA Risk Function"                              => "Risk"
+- "Clients & Industries"                            => "C&I"
+- "Supply Chain Services"                           => "SCS"
 - "Travel, Meetings & Events (TME)"                 => "TME"
 - "Talent"                                          => "Talent"
 - "Finance function"                                => "Finance"
@@ -49,7 +49,7 @@ Two independent signals must be produced:
 
 1. mentioned_functions — function codes that the query *explicitly* names
    in its text. Use ONLY the mapped values from <function_name_mapping>
-   (e.g. "Risk Management", "Clients & Industries", "Supply Chain Services",
+   (e.g. "Risk", "C&I", "SCS",
    "TME", "Talent", "Finance", "AWS", "GCO",
    "BMC"). Count an explicit mention when:
      - the mapped code or its left-side alias appears verbatim
@@ -58,7 +58,7 @@ Two independent signals must be produced:
        "Travel, Meetings & Events"), or
      - a keyword that is *unambiguously* owned by exactly one function's
        Includes appears (e.g. "purchase requisition" → AWS, "supplier
-       sourcing" → Supply Chain Services).
+       sourcing" → SCS).
    Always output the **mapped value** (right-side of the mapping), not the
    alias. Do NOT include codes that are merely plausible inferences. If
    nothing is explicitly named, return an empty list.

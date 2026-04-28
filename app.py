@@ -279,7 +279,7 @@ def sse_format(payload: dict) -> str:
 
 def _to_chip_code(value: str | None) -> str | None:
     """Convert a search-index function value to its frontend chip code.
-    E.g. "Risk Management" → "Risk", "Finance" → "Finance".
+    E.g. "Risk" → "Risk Management", "Finance" → "Finance".
     Returns as-is if already a chip code or unknown.
     """
     if not value:

@@ -65,7 +65,7 @@ def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
   statement, e.g. "... approval is required within 5 business days [1]."
 - When a source has a real HTTP/HTTPS URL, always include it as a markdown
   hyperlink in the answer text near the citation reference, e.g.
-  "... as outlined in the [invoice policy](https://ey.com/mena/finance/invoice-policy) [1]."
+  "... as outlined in the [invoice policy](https://sites.ey.com/mena/finance/invoice-policy) [1]."
   This is mandatory for all HTTP/HTTPS source URLs.
 - Citation block: list only the references you actually used inline,
   under a "Citations:" heading, one per line — [N] <source_url>.
@@ -76,12 +76,12 @@ def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
 </citation_format>
 
 <example>
-Invoices must be submitted within 30 days of the service date as per the [invoice policy](https://ey.com/mena/finance/invoice-policy) [1].
+Invoices must be submitted within 30 days of the service date as per the [invoice policy](https://sites.ey.com/mena/finance/invoice-policy) [1].
 Late submissions require manager approval [2].
 The approval SLA is five business days [3].
 
 Citations:
-[1] https://ey.com/mena/finance/invoice-policy
+[1] https://sites.ey.com/mena/finance/invoice-policy
 [2][3] Finance_internal_QnA_Document.
 </example>
 

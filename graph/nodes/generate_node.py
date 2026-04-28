@@ -1,5 +1,6 @@
 import json
 import re
+from collections import OrderedDict
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import AzureChatOpenAI
@@ -142,6 +143,56 @@ def _get_llm(llm_model: str, tools: list | None) -> AzureChatOpenAI:
     return llm
 
 
+def _rebuild_citations_block(ai_content: str, events: list) -> str:
+    """Replace the LLM-generated Citations block with one built from actual source_url values.
+
+    This ensures citations are deterministic and always reflect the search
+    result's ``source_url`` field, regardless of LLM non-determinism.
+    """
+    if not events:
+        return ai_content
+
+    # Collect all [N] references used in the answer text
+    used_refs = sorted(set(re.findall(r"\[(\d+)\]", ai_content)), key=int)
+    if not used_refs:
+        return ai_content
+
+    # Map each ref to its source_url (with fallback)
+    ref_to_url: dict[str, str] = {}
+    for ref_str in used_refs:
+        idx = int(ref_str) - 1  # citations are 1-indexed
+        if 0 <= idx < len(events):
+            doc = events[idx]
+            source_url = (doc.get("source_url") or "").strip()
+            if not source_url:
+                fn = (doc.get("function") or "unknown").strip()
+                source_url = f"{fn}_internal_QnA_document"
+            ref_to_url[ref_str] = source_url
+
+    if not ref_to_url:
+        return ai_content
+
+    # Group refs that share the same URL
+    url_to_refs: OrderedDict[str, list[str]] = OrderedDict()
+    for ref_str in used_refs:
+        url = ref_to_url.get(ref_str)
+        if url:
+            url_to_refs.setdefault(url, []).append(ref_str)
+
+    # Build new citations block
+    citation_lines = []
+    for url, refs in url_to_refs.items():
+        refs_label = "".join(f"[{r}]" for r in refs)
+        citation_lines.append(f"{refs_label} {url}")
+
+    new_block = "Citations:\n" + "\n".join(citation_lines)
+
+    # Strip old LLM-generated Citations block (case-insensitive, from "Citations:" to end)
+    stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
+
+    return f"{stripped}\n\n{new_block}"
+
+
 async def _generate_response(
     events: list,
     state: RAGState,
@@ -198,6 +249,10 @@ async def _generate_response(
             ai_content = json.dumps(response.tool_calls[0]["args"])
         else:
             ai_content = response.content or ""
+
+        # ── Rebuild Citations block from actual source_url values ──
+        if is_free_form and ai_content and events:
+            ai_content = _rebuild_citations_block(ai_content, events)
 
         # ── Build citation map for multi-turn tracking ──
         citation_map = None

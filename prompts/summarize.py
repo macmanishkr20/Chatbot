@@ -45,8 +45,8 @@ its key points.
 </output_format>
 
 <example>
-- Invoice submissions must be completed within 30 days of the service date. | [https://ey.com/mena/finance/invoice-policy]
-- Late submissions require written manager approval and a reason code. | [https://ey.com/mena/finance/approval-guidelines]
+- Invoice submissions must be completed within 30 days of the service date. | [https://sites.ey.com/mena/finance/invoice-policy]
+- Late submissions require written manager approval and a reason code. | [https://sites.ey.com/mena/finance/approval-guidelines]
 - User selected Finance function (was ambiguous between Finance and GCO).
 </example>\
 """

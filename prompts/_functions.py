@@ -166,15 +166,15 @@ MENA_FUNCTIONS_CATALOG = """\
 # The frontend sends the *chip code* (left side).
 
 CHIP_TO_SEARCH: dict[str, str] = {
-    "Risk":    "Risk Management",
-    "C&I":     "Clients & Industries",
-    "SCS":     "Supply Chain Services",
-    "TME":     "Travel, Meetings & Events (TME)",
-    "Talent":  "Talent",
-    "Finance": "Finance",
-    "AWS":     "AWS",
-    "GCO":     "GCO",
-    "BMC":     "BMC",
+    "Risk Management":                     "Risk",
+    "Clients & Industries":                "C&I",
+    "Supply Chain Services":               "SCS",
+    "Travel, Meetings & Events (TME)":     "TME",
+    "Talent":                              "Talent",
+    "Finance":                             "Finance",
+    "AWS":                                 "AWS",
+    "GCO":                                 "GCO",
+    "BMC":                                 "BMC",
 }
 
 SEARCH_TO_CHIP: dict[str, str] = {v: k for k, v in CHIP_TO_SEARCH.items()}

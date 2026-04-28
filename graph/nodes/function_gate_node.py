@@ -223,7 +223,7 @@ async def function_gate_node(state: RAGState) -> dict:
 def _auto_select(code: str) -> dict:
     """Auto-select a function derived from the query and proceed.
 
-    ``code`` is the search-index value output by the LLM (e.g. "Risk Management").
+    ``code`` is the search-index value output by the LLM (e.g. "Risk", "C&I").
     state["function"] stores the search value for OData filter correctness.
     """
     # Resolve to search value if a chip code was somehow passed
