@@ -1,4 +1,4 @@
-"""
+﻿"""
 MenaBot Application Entry Point.
 FastAPI with LangGraph RAG pipeline.
 
@@ -11,6 +11,7 @@ SSE event types emitted by /chat:
   {"type": "final",    "chat_id": ...,    "message_id": ..., "ai_content": [...]}
 """
 
+import asyncio
 import json
 import logging
 import os
@@ -44,6 +45,7 @@ from models.chat_models import (
 )
 from services.export_service import ExportError, run_export
 from services.sql_client import SQLChatClient
+from services.telemetry import setup_azure_telemetry
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +111,9 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
     "search": {
         "Relevance": "Finding relevance…"
     },
+    "multi_function_search": {
+        "Deep Search": "Searching across multiple functions…"
+    },
     "generate": {
         "Response": "Forming response…"
     },
@@ -138,6 +143,7 @@ _FILE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup/shutdown."""
+    setup_azure_telemetry(app)
     await _init_graph()
     yield
 
@@ -245,7 +251,7 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
 _EY_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)?ey\.com$")
 
 
-def _has_gds_domain(user_id: str) -> bool:
+def validate_domain(user_id: str) -> bool:
     """Validate that the incoming user ID belongs to an EY domain."""
     return bool(_EY_EMAIL_RE.match(user_id.strip().lower()))
 
@@ -254,7 +260,7 @@ def _validate_user(user_id: str) -> None:
     """Common user validation — raises HTTPException on failure."""
     if not user_id:
         raise HTTPException(status_code=400, detail="UserId is not provided")
-    if not _has_gds_domain(user_id):
+    if not validate_domain(user_id):
         raise HTTPException(status_code=400, detail="UserId must be an EY email (e.g. @gds.ey.com, @ae.ey.com)")
 
 
@@ -271,7 +277,6 @@ def _sanitize_input(text: str) -> str:
 def sse_format(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
-
 def _to_chip_code(value: str | None) -> str | None:
     """Convert a search-index function value to its frontend chip code.
     E.g. "Risk Management" → "Risk", "Finance" → "Finance".
@@ -280,7 +285,6 @@ def _to_chip_code(value: str | None) -> str | None:
     if not value:
         return value
     return SEARCH_TO_CHIP.get(value, value)
-
 
 async def _init_graph():
     """Initialise the compiled graph (idempotent)."""
@@ -309,12 +313,30 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
     # since aget_state on the parent graph may not reflect sub-graph changes.
     auto_selected_function: list[str] | None = None
 
+    # ── Side-channel for real-time deep search status delivery ──
+    # The multi_function_search_node pushes status messages here as they
+    # happen.  We drain the queue between graph chunks for near-real-time
+    # delivery to the frontend (instead of batching at node completion).
+    deep_search_queue: asyncio.Queue = asyncio.Queue()
+    config["configurable"]["_deep_search_queue"] = deep_search_queue
+
     async for chunk in graph.astream(
         state,
         config=config,
         stream_mode=["messages", "updates"],
         subgraphs=True,
     ):
+        # ── Drain deep search queue (real-time status delivery) ──
+        while not deep_search_queue.empty():
+            try:
+                status = deep_search_queue.get_nowait()
+                yield sse_format({
+                    "type": "deep_search",
+                    "content": status,
+                    "node": "multi_function_search",
+                })
+            except asyncio.QueueEmpty:
+                break
         # ── Check cancellation ──
         if _cancel_signals.pop(thread_id, False):
             yield sse_format({"type": "final", "cancelled": True})
@@ -355,6 +377,11 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                                 "node": "Supervisor",
                             })
 
+                # ── Multi-function search: thought event for deep search ──
+                # Status messages are delivered in real-time via the
+                # asyncio.Queue side-channel (drained at the top of this loop).
+                # Nothing to emit here from updates mode.
+
         elif mode == "messages":
             chunk_msg, metadata = data
             node = metadata.get("langgraph_node")
@@ -371,6 +398,18 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
 
             if chunk_msg.content and node in _STREAMABLE_NODES:
                 yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+
+    # ── Drain any remaining deep search status messages ──
+    while not deep_search_queue.empty():
+        try:
+            status = deep_search_queue.get_nowait()
+            yield sse_format({
+                "type": "deep_search",
+                "content": status,
+                "node": "multi_function_search",
+            })
+        except asyncio.QueueEmpty:
+            break
 
     # ── Final event ──
     try:
@@ -507,7 +546,6 @@ async def chat_api(
         _stream_graph(state, config, thread_id),
         media_type="text/event-stream",
     )
-
 
 # ── Stop Generation ──
 
