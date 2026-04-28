@@ -10,8 +10,8 @@ import { ThemeService } from './services/theme.service';
   styles: [`
     :host {
       display: block;
-      height: 100vh;
-      width: 100vw;
+      height: 100%;
+      width: 100%;
     }
   `],
   changeDetection: ChangeDetectionStrategy.OnPush,

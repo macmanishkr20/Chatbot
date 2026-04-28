@@ -42,6 +42,15 @@
         />
       }
 
+      <!-- Deep search panel (collapsible, below thinking) -->
+      @if (message().deepSearchSteps && message().deepSearchSteps!.length > 0) {
+        <app-deep-search-panel
+          [steps]="message().deepSearchSteps!"
+          [collapsed]="message().deepSearchCollapsed ?? false"
+          [isSearching]="message().isStreaming ?? false"
+        />
+      }
+
       <!-- Content -->
       @if (message().content) {
         <div class="assistant-content" [class.streaming]="message().isStreaming" [innerHTML]="displayContent | markdown"></div>

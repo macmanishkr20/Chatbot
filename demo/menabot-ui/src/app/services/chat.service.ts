@@ -5,6 +5,7 @@ import {
   ChatMessage,
   Citation,
   Conversation,
+  DeepSearchEvent,
   FinalEvent,
   SSEEvent,
   SuggestiveAction,
@@ -121,6 +122,9 @@ export class ChatService {
   /** Send a user message and stream the response. */
   async sendMessage(text: string): Promise<void> {
     if (this.isStreaming() || !text.trim()) return;
+
+    // Clear any stale pending resend — user is sending a new query
+    this.pendingResendQuery = null;
 
     // Ensure we have a session
     if (!this.activeSessionId()) {
@@ -404,6 +408,8 @@ export class ChatService {
       content: '',
       thinkingSteps: [],
       thinkingCollapsed: false,
+      deepSearchSteps: [],
+      deepSearchCollapsed: false,
       isStreaming: true,
       timestamp: new Date(),
     };
@@ -439,7 +445,7 @@ export class ChatService {
       this.messages.update(msgs =>
         msgs.map(m =>
           m.id === assistantMsg.id
-            ? { ...m, isStreaming: false, thinkingCollapsed: true }
+            ? { ...m, isStreaming: false, thinkingCollapsed: true, deepSearchCollapsed: true }
             : m
         )
       );
@@ -473,6 +479,18 @@ export class ChatService {
         break;
       }
 
+      case 'deep_search': {
+        const dsEvent = event as DeepSearchEvent;
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.id !== assistantId) return m;
+            const steps = [...(m.deepSearchSteps ?? []), dsEvent.content];
+            return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
+          })
+        );
+        break;
+      }
+
       case 'final': {
         const final = event as FinalEvent;
         if (final.cancelled) return;
@@ -502,6 +520,25 @@ export class ChatService {
           this.functionPromptReason.set(final.function_hint);
         }
 
+        // Highlight chips when LLM couldn't answer — nudge user to pick a function
+        const noAnswerInFinal =
+          (typeof final.ai_content === 'string' && final.ai_content.trim().startsWith('[NO_ANSWER]'));
+        // Also check the last streamed content for [NO_ANSWER]
+        const lastMsg = this.messages().find(m => m.id === assistantId);
+        const noAnswerInStream = lastMsg?.content?.trim().startsWith('[NO_ANSWER]') ?? false;
+        if ((noAnswerInFinal || noAnswerInStream) && !this.selectedFunction()) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set('Please select a function to help me search more precisely.');
+          // Stash the user's last query so selecting a chip auto-resends it
+          const allMsgs = this.messages();
+          for (let i = allMsgs.length - 1; i >= 0; i--) {
+            if (allMsgs[i].role === 'user') {
+              this.pendingResendQuery = allMsgs[i].content;
+              break;
+            }
+          }
+        }
+
         // Parse suggestive actions — backend may send Python repr strings
         const parsedActions = this.parseSuggestiveActions(final.suggestive_actions);
 
@@ -511,7 +548,26 @@ export class ChatService {
             // Mark all remaining steps as done
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
             // If no content was streamed, use ai_content from final event
-            const content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : m.content);
+            let content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : m.content);
+
+            // ── Replace [NO_ANSWER] responses with a polite suggestion ──
+            // The LLM prefixes with [NO_ANSWER] when retrieved documents
+            // don't cover the query.  Check BOTH the streamed content
+            // (m.content — still has the raw prefix) and final.ai_content.
+            // The backend may have already replaced ai_content, but the
+            // streamed m.content retains the original [NO_ANSWER] text.
+            const hasNoAnswer =
+              content.trim().startsWith('[NO_ANSWER]') ||
+              (typeof final.ai_content === 'string' && final.ai_content.trim().startsWith('[NO_ANSWER]'));
+            if (hasNoAnswer) {
+              const fnCandidates = final.function_candidates ?? [];
+              const fnHint = fnCandidates.length > 0 ? ` (${fnCandidates.join(', ')})` : '';
+              content =
+                `I wasn't able to find a specific answer for your query in the available documents${fnHint}. ` +
+                'To help me get you the best result, could you please select the specific function ' +
+                'your question relates to? This will allow me to search more precisely.';
+            }
+
             // Use the complete ai_content from the backend for citation parsing
             // because m.content may be incomplete due to the drip animation buffer.
             const citationSource = typeof final.ai_content === 'string' ? final.ai_content : content;

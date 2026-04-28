@@ -58,7 +58,13 @@ export interface UploadTemplateResponse {
   size: number;
 }
 
-export type SSEEvent = ThoughtEvent | ContentEvent | FinalEvent;
+export interface DeepSearchEvent {
+  type: 'deep_search';
+  node: string;
+  content: string;
+}
+
+export type SSEEvent = ThoughtEvent | ContentEvent | DeepSearchEvent | FinalEvent;
 
 /** Suggestive action button from the Supervisor. */
 export interface SuggestiveAction {
@@ -91,6 +97,8 @@ export interface ChatMessage {
   userMessageIndex?: number;
   thinkingSteps?: ThinkingStep[];
   thinkingCollapsed?: boolean;
+  deepSearchSteps?: string[];
+  deepSearchCollapsed?: boolean;
   suggestiveActions?: SuggestiveAction[];
   chatId?: string | number | null;
   messageId?: string | null;

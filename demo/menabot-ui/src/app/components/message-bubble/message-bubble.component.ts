@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { ChatMessage, Citation, SuggestiveAction } from '../../models/chat.models';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ThinkingPanelComponent } from '../thinking-panel/thinking-panel.component';
+import { DeepSearchPanelComponent } from '../deep-search-panel/deep-search-panel.component';
 import { SuggestiveActionsComponent } from '../suggestive-actions/suggestive-actions.component';
 import { ChatService } from '../../services/chat.service';
 import { ExportService } from '../../services/export.service';
@@ -18,6 +19,7 @@ import { FeedbackModalComponent } from '../feedback-modal/feedback-modal.compone
     FormsModule,
     MarkdownPipe,
     ThinkingPanelComponent,
+    DeepSearchPanelComponent,
     SuggestiveActionsComponent,
     FeedbackModalComponent,
   ],
@@ -58,6 +60,12 @@ export class MessageBubbleComponent {
    */
   get displayContent(): string {
     let raw = this.message().content;
+
+    // Strip [NO_ANSWER] prefix — the LLM uses this as an internal signal
+    // that the retrieved documents don't cover the query. It must never
+    // be shown to the user (handled fully on the final event, but also
+    // stripped here to prevent it flashing during token-by-token streaming).
+    raw = raw.replace(/^\s*\[NO_ANSWER\]\s*/i, '');
 
     // Strip embedded JSON objects
     raw = raw.replace(/\{[\s\S]*?\}/g, (match) => {
