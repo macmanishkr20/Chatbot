@@ -22,7 +22,8 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from config import (
-    AZURE_OPENAI_API_VERSION,
+    AZURE_OPENAI_CHAT_API_VERSION,
+    AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
 from graph.rag_graph import build_rag_graph
@@ -96,7 +97,8 @@ class SupervisorGraph:
         self.llm = AzureChatOpenAI(
             azure_deployment=get_llm_model("events"),
             api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_API_VERSION,
+            api_version=AZURE_OPENAI_CHAT_API_VERSION,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
             temperature=0.3,
             max_tokens=None,
             timeout=None,

@@ -50,6 +50,7 @@ class UserChatQuery(BaseModel):
         description="Configuration options for the request",
     )
     message_id: str | None = None
+    channel_type: int = 0  # 0 or 1
 
     # Filters
     function: List[str] = []

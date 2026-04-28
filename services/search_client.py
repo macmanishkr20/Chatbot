@@ -47,7 +47,7 @@ class SearchService:
 
         vector_query = VectorizedQuery(
             vector=embedded_query,
-            k=DISCOVERY_TOP_K,
+            k_nearest_neighbors=DISCOVERY_TOP_K,
             fields=AZURE_SEARCH_VECTOR_FIELD,
         )
 

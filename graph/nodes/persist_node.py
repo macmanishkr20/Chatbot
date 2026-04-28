@@ -31,6 +31,7 @@ from services.openai_client import (
 )
 from graph.nodes.title_node import generate_title
 from services.sql_client import SQLChatClient
+from services.telemetry import get_tracer_span
 
 
 # ───────────────── Helpers ─────────────────
@@ -123,108 +124,111 @@ async def persist_node(state: RAGState) -> dict:
     The checkpointer/Store handle LLM context; this node only writes
     the structured rows the frontend APIs (``/conversations``) need.
     """
-    # Track whether this is a brand-new conversation (no chat_id yet).
-    # If so, we'll auto-generate a title after saving AI content.
-    is_new_conversation = state.get("chat_id") is None
+    with get_tracer_span("persist_node"):
+        # Track whether this is a brand-new conversation (no chat_id yet).
+        # If so, we'll auto-generate a title after saving AI content.
+        is_new_conversation = state.get("chat_id") is None
 
-    app_query = _build_app_query(state)
+        app_query = _build_app_query(state)
 
-    rewritten_query = state.get("rewritten_query")
-    prompt_used = state.get("prompt_used")
-    error_info = state.get("error_info")
-    events = state.get("events", [])
+        rewritten_query = state.get("rewritten_query")
+        prompt_used = state.get("prompt_used")
+        error_info = state.get("error_info")
+        events = state.get("events", [])
 
-    if rewritten_query:
-        app_query.rewritten_query = rewritten_query
-    if error_info:
-        app_query.error_info = BusinessExceptionResponse(**error_info)
-    if prompt_used:
-        app_query.prompt = prompt_used
+        if rewritten_query:
+            app_query.rewritten_query = rewritten_query
+        if error_info:
+            app_query.error_info = BusinessExceptionResponse(**error_info)
+        if prompt_used:
+            app_query.prompt = prompt_used
 
-    # Connect to SQL
-    try:
-        scc = SQLChatClient()
-        await scc.connect()
-        await scc.ensure()
-    except Exception as e:
-        logger.error("persist_node: SQL connection failed: %s", e, exc_info=True)
-        return {}
-
-    # Create conversation + message row
-    try:
-        new_message, _ = await scc.message_list_update(app_query, [])
-
-        if new_message:
-            app_query.id = new_message.id
-            app_query.chat_id = new_message.chat_id
-            app_query.message_id = new_message.message_id
-    except Exception as e:
-        logger.error("persist_node: message_list_update failed: %s", e, exc_info=True)
-        return {}
-
-    # Error with no events — short-circuit
-    if error_info and not events:
-        error_text = error_info.get("text", "No relevant events found.")
-        return {
-            "chat_id": app_query.chat_id,
-            "message_id": app_query.message_id,
-            "messages": [AIMessage(content=error_text)],
-            "response": {"error": error_info},
-        }
-
-    # Ambiguity — save the disambiguation message to SQL as free-form
-    if state.get("is_ambiguous"):
-        ambiguity_response = state.get("response") or {}
-        ambiguity_text = ambiguity_response.get("message", "")
-        if ambiguity_text:
-            app_query.ai_content_free_form = ambiguity_text
-            app_query.is_free_form = True
-            llm_model = get_llm_model("rewrite_query")
-            try:
-                summarized = await _summarize_prompt(
-                    app_query.user_input, llm_model=llm_model
-                )
-                app_query.summurized_prompt = summarized
-            except Exception:
-                app_query.summurized_prompt = app_query.user_input[:500]
-            await scc.save_ai_content_free_form(app_query)
-            await scc.save_ai_content(app_query)
-        return {
-            "chat_id": app_query.chat_id,
-            "message_id": app_query.message_id,
-            "ai_content": ambiguity_text,
-            "messages": [AIMessage(content=ambiguity_text)],
-            "response": ambiguity_response,
-        }
-
-    # Save AI content to SQL
-    ai_content = state.get("ai_content") or ""
-    if ai_content:
-        await _save_ai_content(ai_content, app_query, scc)
-
-    # ── Auto-generate conversation title for new conversations ──
-    # Same UX as Claude/ChatGPT: title appears after the first exchange.
-    conversation_title = None
-    if is_new_conversation and ai_content:
+        # Connect to SQL
         try:
-            conversation_title = await generate_title(
-                state.get("user_input", ""), ai_content
-            )
-            await scc.upsert_chat({
-                "id": app_query.chat_id,
-                "title": conversation_title,
-                "userId": app_query.user_id,
-            })
+            scc = SQLChatClient()
+            await scc.connect()
+            await scc.ensure()
         except Exception as e:
-            logger.warning("Title generation failed: %s", e)
+            logger.error("persist_node: SQL connection failed: %s", e, exc_info=True)
+            return {}
 
-    return {
-        "chat_id": app_query.chat_id,
-        "message_id": app_query.message_id,
-        "ai_content": ai_content,
-        "conversation_title": conversation_title,
-        "response": {
+        # Create conversation + message row
+        try:
+            new_message, _ = await scc.message_list_update(app_query, [])
+
+            if new_message:
+                app_query.id = new_message.id
+                app_query.chat_id = new_message.chat_id
+                app_query.message_id = new_message.message_id
+        except Exception as e:
+            logger.error("persist_node: message_list_update failed: %s", e, exc_info=True)
+            return {}
+
+        # Error with no events — short-circuit
+        if error_info and not events:
+            error_text = error_info.get("text", "No relevant events found.")
+            return {
+                "chat_id": app_query.chat_id,
+                "message_id": app_query.message_id,
+                "messages": [AIMessage(content=error_text)],
+                "response": {"error": error_info},
+            }
+
+        # Ambiguity — save the disambiguation message to SQL as free-form
+        # Only applies if is_ambiguous is set AND no ai_content was produced
+        # (i.e. multi_function_search_node did not resolve it).
+        if state.get("is_ambiguous") and not state.get("ai_content"):
+            ambiguity_response = state.get("response") or {}
+            ambiguity_text = ambiguity_response.get("message", "")
+            if ambiguity_text:
+                app_query.ai_content_free_form = ambiguity_text
+                app_query.is_free_form = True
+                llm_model = get_llm_model("rewrite_query")
+                try:
+                    summarized = await _summarize_prompt(
+                        app_query.user_input, llm_model=llm_model
+                    )
+                    app_query.summurized_prompt = summarized
+                except Exception:
+                    app_query.summurized_prompt = app_query.user_input[:500]
+                await scc.save_ai_content_free_form(app_query)
+                await scc.save_ai_content(app_query)
+            return {
+                "chat_id": app_query.chat_id,
+                "message_id": app_query.message_id,
+                "ai_content": ambiguity_text,
+                "messages": [AIMessage(content=ambiguity_text)],
+                "response": ambiguity_response,
+            }
+
+        # Save AI content to SQL
+        ai_content = state.get("ai_content") or ""
+        if ai_content:
+            await _save_ai_content(ai_content, app_query, scc)
+
+        # ── Auto-generate conversation title for new conversations ──
+        # Same UX as Claude/ChatGPT: title appears after the first exchange.
+        conversation_title = None
+        if is_new_conversation and ai_content:
+            try:
+                conversation_title = await generate_title(
+                    state.get("user_input", ""), ai_content
+                )
+                await scc.upsert_chat({
+                    "id": app_query.chat_id,
+                    "title": conversation_title,
+                    "userId": app_query.user_id,
+                })
+            except Exception as e:
+                logger.warning("Title generation failed: %s", e)
+
+        return {
             "chat_id": app_query.chat_id,
             "message_id": app_query.message_id,
-        },
-    }
+            "ai_content": ai_content,
+            "conversation_title": conversation_title,
+            "response": {
+                "chat_id": app_query.chat_id,
+                "message_id": app_query.message_id,
+            },
+        }

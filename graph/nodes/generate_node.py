@@ -142,18 +142,16 @@ def _get_llm(llm_model: str, tools: list | None) -> AzureChatOpenAI:
     return llm
 
 
-async def generate_node(state: RAGState) -> dict:
-    """Generate AI response using AzureChatOpenAI with real-time token streaming.
+async def _generate_response(
+    events: list,
+    state: RAGState,
+    streaming: bool = True,
+) -> tuple[str, str, dict | None, object]:
+    """Core generation logic reusable by generate_node and multi_function_search_node.
 
-    Uses LangChain's AzureChatOpenAI so that stream_mode='messages' in LangGraph
-    automatically captures and streams each token to the client.
-
-    Conversation context comes from:
-      - **Checkpoint messages** (short-term, this thread)
-      - **user_memories** (long-term, from Store)
+    Returns (ai_content, prompt_used, citation_map, response_message).
     """
     with get_tracer_span("generate_node"):
-        events = state.get("events", [])
         is_free_form = state.get("is_free_form", False)
         rewritten_query = state.get("rewritten_query", {})
         sub_function = state.get("sub_function", "")
@@ -162,9 +160,6 @@ async def generate_node(state: RAGState) -> dict:
         langgraph_messages = state.get("messages", [])
         user_memories = state.get("user_memories", [])
         prior_citation_map = state.get("citation_map")
-
-        if not events and not state.get("error_info"):
-            return {"messages": [AIMessage(content="No Data Available")]}
 
         tools, system_template, user_template = _get_tools_and_templates(
             events, is_free_form, rewritten_query, sub_function
@@ -181,6 +176,21 @@ async def generate_node(state: RAGState) -> dict:
         prompt_used = user_template
 
         llm = _get_llm(llm_model, tools)
+        if not streaming:
+            # Non-streaming variant — used for intermediate checks in multi-function search
+            llm = AzureChatOpenAI(
+                azure_deployment=llm_model,
+                api_key=AZURE_OPENAI_KEY,
+                api_version=AZURE_OPENAI_CHAT_API_VERSION,
+                azure_endpoint=AZURE_OPENAI_ENDPOINT,
+                temperature=AZURE_OPENAI_TEMPERATURE,
+                max_tokens=int(MAX_TOKENS),
+                streaming=False,
+                max_retries=2,
+            )
+            if tools:
+                llm = llm.bind_tools(tools, tool_choice={"type": "function", "function": {"name": "json_object"}})
+
         response = await llm.ainvoke(messages)
 
         # Extract content — for tool calls, get the arguments JSON
@@ -190,8 +200,6 @@ async def generate_node(state: RAGState) -> dict:
             ai_content = response.content or ""
 
         # ── Build citation map for multi-turn tracking ──
-        # Parse which citation numbers the LLM actually used in its response
-        # and map them back to the source documents for follow-up resolution.
         citation_map = None
         if is_free_form and ai_content and events:
             used_refs = set(re.findall(r"\[(\d+)\]", ai_content))
@@ -209,6 +217,43 @@ async def generate_node(state: RAGState) -> dict:
                             "url": source_url,
                             "content_snippet": (doc.get("content", ""))[:200],
                         }
+
+        return ai_content, prompt_used, citation_map, response
+
+
+async def generate_node(state: RAGState) -> dict:
+    """Generate AI response using AzureChatOpenAI with real-time token streaming.
+
+    Uses LangChain's AzureChatOpenAI so that stream_mode='messages' in LangGraph
+    automatically captures and streams each token to the client.
+
+    Conversation context comes from:
+      - **Checkpoint messages** (short-term, this thread)
+      - **user_memories** (long-term, from Store)
+    """
+    with get_tracer_span("generate_node"):
+        events = state.get("events", [])
+
+        if not events and not state.get("error_info"):
+            return {"messages": [AIMessage(content="No Data Available")]}
+
+        ai_content, prompt_used, citation_map, response = await _generate_response(
+            events, state, streaming=True,
+        )
+
+        # ── Strip [NO_ANSWER] prefix — replace with a helpful fallback ──
+        # The LLM may respond with [NO_ANSWER] when the retrieved documents
+        # don't cover the query.  This must never reach the user verbatim.
+        if (ai_content or "").strip().startswith("[NO_ANSWER]"):
+            functions_found = state.get("functions_found", [])
+            fn_hint = f" ({', '.join(functions_found)})" if functions_found else ""
+            ai_content = (
+                "I wasn't able to find a specific answer for your query in the "
+                f"available documents{fn_hint}. To help me get you the best result, "
+                "could you please select the specific function your question "
+                "relates to? This will allow me to search more precisely."
+            )
+            response = AIMessage(content=ai_content)
 
         return {
             "ai_content": ai_content,

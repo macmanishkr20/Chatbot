@@ -5,7 +5,7 @@ Rewrite node — query rewriting, filter extraction, and filter parsing (ASK-onl
 import datetime
 import json
 import re
-
+from services.telemetry import get_tracer_span
 from graph.state import RAGState
 from prompts.rewrite import (
     REWRITE_QUERY_FILTER_SYSTEM_PROMPT,
@@ -188,74 +188,78 @@ async def rewrite_node(state: RAGState) -> dict:
     ASK-only rewrite node: rewrite query and extract structured search filter.
     Also handles ambiguity resolution from a previous turn.
     """
-    updates = {}
 
-    # ── Ambiguity resolution ──
-    # If the previous turn was ambiguous, check if the user is selecting a function.
-    pending = state.get("pending_ambiguous_query")
-    if pending and state.get("is_ambiguous"):
-        user_input = state.get("user_input", "")
-        functions_found = state.get("functions_found", [])
+    # START REWRITE NODE SPAN
+    with get_tracer_span("rewrite_node"):
 
-        # First check if an explicit function filter was provided via the API
-        explicit_functions = state.get("function", [])
-        matched_fn = None
-        if explicit_functions:
-            for ef in explicit_functions:
-                for fn in functions_found:
-                    if ef.strip().lower() == fn.strip().lower():
-                        matched_fn = fn
+        updates = {}
+
+        # ── Ambiguity resolution ──
+        # If the previous turn was ambiguous, check if the user is selecting a function.
+        pending = state.get("pending_ambiguous_query")
+        if pending and state.get("is_ambiguous"):
+            user_input = state.get("user_input", "")
+            functions_found = state.get("functions_found", [])
+
+            # First check if an explicit function filter was provided via the API
+            explicit_functions = state.get("function", [])
+            matched_fn = None
+            if explicit_functions:
+                for ef in explicit_functions:
+                    for fn in functions_found:
+                        if ef.strip().lower() == fn.strip().lower():
+                            matched_fn = fn
+                            break
+                    if matched_fn:
                         break
-                if matched_fn:
-                    break
 
         # Then try to match from user input text
-        if not matched_fn and user_input:
-            matched_fn = _match_function(user_input, functions_found)
+            if not matched_fn and user_input:
+                matched_fn = _match_function(user_input, functions_found)
 
-        if matched_fn:
-            # Restore the original user_input so persist_node saves the real question
-            original_user_input = pending.get("user_input", "")
-            result = {
-                "rewritten_query": pending["rewritten_query"],
-                "function": [matched_fn],
-                "is_ambiguous": False,
-                "pending_ambiguous_query": None,
-                "functions_found": [matched_fn],
+            if matched_fn:
+                # Restore the original user_input so persist_node saves the real question
+                original_user_input = pending.get("user_input", "")
+                result = {
+                    "rewritten_query": pending["rewritten_query"],
+                    "function": [matched_fn],
+                    "is_ambiguous": False,
+                    "pending_ambiguous_query": None,
+                    "functions_found": [matched_fn],
+                }
+                if original_user_input:
+                    result["user_input"] = original_user_input
+                return result
+            # No match — user is asking a new question; clear ambiguity and fall through
+
+        # Always clear ambiguity state when proceeding with normal rewrite
+        updates["is_ambiguous"] = False
+        updates["pending_ambiguous_query"] = None
+
+        input_type = state.get("input_type", "ask")
+        user_input = state.get("user_input", "")
+        start_date = state.get("start_date", "")
+        source_url = state.get("source_url", [])
+        llm_model = get_llm_model("rewrite_query")
+
+        # ASK-only
+        if input_type == "ask":
+            query_with_filter = {
+                "query": user_input,
+                "filter": {
+                    "timeframe": start_date,
+                    "source_url": source_url,
+                },
             }
-            if original_user_input:
-                result["user_input"] = original_user_input
-            return result
-        # No match — user is asking a new question; clear ambiguity and fall through
 
-    # Always clear ambiguity state when proceeding with normal rewrite
-    updates["is_ambiguous"] = False
-    updates["pending_ambiguous_query"] = None
+            rewritten_query = await _rewrite_filters_query(query_with_filter, llm_model)
 
-    input_type = state.get("input_type", "ask")
-    user_input = state.get("user_input", "")
-    start_date = state.get("start_date", "")
-    source_url = state.get("source_url", [])
-    llm_model = get_llm_model("rewrite_query")
+            #Parse and sanitize filters
+            structured_filter = filter_to_vector(
+                rewritten_query.get("filter", "NO_FILTER")
+            )
+            rewritten_query["filter"] = structured_filter.get("filter")
 
-    # ASK-only
-    if input_type == "ask":
-        query_with_filter = {
-            "query": user_input,
-            "filter": {
-                "timeframe": start_date,
-                "source_url": source_url,
-            },
-        }
+            updates["rewritten_query"] = rewritten_query
 
-        rewritten_query = await _rewrite_filters_query(query_with_filter, llm_model)
-
-        #Parse and sanitize filters
-        structured_filter = filter_to_vector(
-            rewritten_query.get("filter", "NO_FILTER")
-        )
-        rewritten_query["filter"] = structured_filter.get("filter")
-
-        updates["rewritten_query"] = rewritten_query
-
-    return updates
+        return updates

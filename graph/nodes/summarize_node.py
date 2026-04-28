@@ -16,6 +16,7 @@ from services.openai_client import (
     get_llm_model,
     prepare_model_args,
 )
+from services.telemetry import get_tracer_span
 
 # After this many messages in state, trigger summarization.
 _SUMMARIZE_THRESHOLD = 10
@@ -38,46 +39,50 @@ _SUMMARIZE_SYSTEM = (
 
 async def summarize_node(state: RAGState) -> dict:
     """Summarize older messages when context grows too large."""
-    messages = state.get("messages", [])
 
-    # Not enough messages to warrant summarization
-    if len(messages) <= _SUMMARIZE_THRESHOLD:
-        return {}
+    # START SUMMARIZE NODE SPAN
+    with get_tracer_span("summarize_node"):
 
-    existing_summary = state.get("summary", "")
+        messages = state.get("messages", [])
 
-    # Build the prompt for summarization
-    messages_to_summarize = messages[:-_KEEP_RECENT]
-    summary_prompt = "Summarize the following conversation"
-    if existing_summary:
-        summary_prompt += f", building on this existing summary:\n{existing_summary}\n\n"
-    else:
-        summary_prompt += ":\n\n"
+        # Not enough messages to warrant summarization
+        if len(messages) <= _SUMMARIZE_THRESHOLD:
+            return {}
 
-    for msg in messages_to_summarize:
-        role = getattr(msg, "type", "unknown")
-        content = getattr(msg, "content", str(msg))
-        summary_prompt += f"{role}: {content}\n"
+        existing_summary = state.get("summary", "")
 
-    # Call LLM to produce summary
-    llm_model = get_llm_model("rewrite_query")
-    client = create_async_client(llm_model=llm_model)
+        # Build the prompt for summarization
+        messages_to_summarize = messages[:-_KEEP_RECENT]
+        summary_prompt = "Summarize the following conversation"
+        if existing_summary:
+            summary_prompt += f", building on this existing summary:\n{existing_summary}\n\n"
+        else:
+            summary_prompt += ":\n\n"
 
-    llm_messages = [
-        {"role": "system", "content": _SUMMARIZE_SYSTEM},
-        {"role": "user", "content": summary_prompt},
-    ]
-    model_args = prepare_model_args(
-        llm_messages, False, False, None, None, "text", llm_model
-    )
-    response = await client.chat.completions.create(**model_args)
-    new_summary = response.choices[0].message.content.strip()
+        for msg in messages_to_summarize:
+            role = getattr(msg, "type", "unknown")
+            content = getattr(msg, "content", str(msg))
+            summary_prompt += f"{role}: {content}\n"
 
-    # Remove old messages from state, keep only recent ones.
-    # LangGraph's RemoveMessage tells the add_messages reducer to drop them.
-    delete_messages = [RemoveMessage(id=m.id) for m in messages_to_summarize]
+        # Call LLM to produce summary
+        llm_model = get_llm_model("rewrite_query")
+        client = create_async_client(llm_model=llm_model)
 
-    return {
-        "summary": new_summary,
-        "messages": delete_messages,
-    }
+        llm_messages = [
+            {"role": "system", "content": _SUMMARIZE_SYSTEM},
+            {"role": "user", "content": summary_prompt},
+        ]
+        model_args = prepare_model_args(
+            llm_messages, False, False, None, None, "text", llm_model
+        )
+        response = await client.chat.completions.create(**model_args)
+        new_summary = response.choices[0].message.content.strip()
+
+        # Remove old messages from state, keep only recent ones.
+        # LangGraph's RemoveMessage tells the add_messages reducer to drop them.
+        delete_messages = [RemoveMessage(id=m.id) for m in messages_to_summarize]
+
+        return {
+            "summary": new_summary,
+            "messages": delete_messages,
+        }

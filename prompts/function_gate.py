@@ -36,7 +36,7 @@ code in your output (mentioned_functions, candidates, function fields).
 - "MENA Risk Function"                              => "Risk Management"
 - "C&I"                                             => "Clients & Industries"
 - "SCS"                                             => "Supply Chain Services"
-- "TME"                                             => "Travel, Meetings & Events (TME)"
+- "Travel, Meetings & Events (TME)"                 => "TME"
 - "Talent"                                          => "Talent"
 - "Finance function"                                => "Finance"
 - "MENA Administrative and Workplace Services (AWS)"=> "AWS"
@@ -50,7 +50,7 @@ Two independent signals must be produced:
 1. mentioned_functions — function codes that the query *explicitly* names
    in its text. Use ONLY the mapped values from <function_name_mapping>
    (e.g. "Risk Management", "Clients & Industries", "Supply Chain Services",
-   "Travel, Meetings & Events (TME)", "Talent", "Finance", "AWS", "GCO",
+   "TME", "Talent", "Finance", "AWS", "GCO",
    "BMC"). Count an explicit mention when:
      - the mapped code or its left-side alias appears verbatim
        ("AWS", "GCO", "TME", "C&I", "Finance", "Risk", "SCS" …),

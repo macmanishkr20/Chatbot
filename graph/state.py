@@ -26,6 +26,7 @@ class RAGState(TypedDict, total=False):
     chat_id: str | None
     chat_session_id: str | None   # LangGraph thread key — must round-trip to SQL for edit/regen
     message_id: str | None
+    channel_type: int
     function: list[str]
     sub_function: list[str]
     source_url: list[str]
@@ -49,6 +50,8 @@ class RAGState(TypedDict, total=False):
     functions_found: list[str]
     is_ambiguous: bool
     pending_ambiguous_query: dict | None  # Original query context saved during ambiguity
+    needs_multi_search: bool  # True when search found multiple functions, triggers iterative search
+    multi_search_status: list[str]  # Status messages from iterative multi-function search (streamed via updates mode)
 
     # ── Search results ──
     events: list

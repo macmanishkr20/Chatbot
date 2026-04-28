@@ -21,6 +21,7 @@ from graph.nodes.search_node import search_node
 from graph.nodes.generate_node import generate_node
 from graph.nodes.persist_node import persist_node
 from graph.nodes.function_gate_node import function_gate_node
+from graph.nodes.multi_function_search_node import multi_function_search_node
 
 
 # ── Conditional Routing ──
@@ -33,12 +34,19 @@ def _after_function_gate(state: RAGState) -> str:
 
 
 def _after_search(state: RAGState) -> str:
-    """Route after search: short-circuit on ambiguity or empty results with error."""
-    if state.get("is_ambiguous"):
-        return "persist"
+    """Route after search: multi-function iterative search, short-circuit on empty, or generate."""
+    if state.get("needs_multi_search"):
+        return "multi_function_search"
     if state.get("error_info") and not state.get("events"):
         return "persist"
     return "generate"
+
+
+def _after_multi_search(state: RAGState) -> str:
+    """Route after multi-function search: generate (found results) or persist (all exhausted)."""
+    if state.get("events") and not state.get("error_info"):
+        return "generate"
+    return "persist"
 
 
 # ── Graph Builder ──
@@ -55,6 +63,7 @@ def build_rag_graph(checkpointer: Any = None, memory_store: Any = None) -> State
     graph.add_node("generate", generate_node)
     graph.add_node("persist", persist_node)
     graph.add_node("save_memory", save_memory_node)
+    graph.add_node("multi_function_search", multi_function_search_node)
 
     graph.set_entry_point("load_memory")
 
@@ -75,6 +84,15 @@ def build_rag_graph(checkpointer: Any = None, memory_store: Any = None) -> State
         {
             "persist": "persist",
             "generate": "generate",
+            "multi_function_search": "multi_function_search",
+        },
+    )
+    graph.add_conditional_edges(
+        "multi_function_search",
+        _after_multi_search,
+        {
+            "generate": "generate",
+            "persist": "persist",
         },
     )
     graph.add_edge("generate", "persist")

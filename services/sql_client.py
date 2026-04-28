@@ -5,14 +5,28 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import uuid
 
 import pyodbc
 
 logger = logging.getLogger(__name__)
 
-from config import AZURE_SQL_CHECKPOINT_TABLE, MSSQL_CONNECTION_STRING
+# from azure.identity import ClientSecretCredential, DefaultAzureCredential
+from azure.identity import DefaultAzureCredential
+
+from config import (
+    AZURE_SQL_CHECKPOINT_TABLE,
+    AZURE_SQL_DATABASE,
+    AZURE_SQL_DRIVER,
+    AZURE_SQL_MANAGED_IDENTITY_CLIENT_ID,
+    AZURE_SQL_SERVER,
+    AZURE_SQL_USE_MANAGED_IDENTITY,
+    MSSQL_CONNECTION_STRING,
+    ENVIRONMENT,
+    ENVIRONMENT_FOR_SQL
+)
+
 from models.chat_models import (
     ApplicationChatQuery,
     ConversationChatMessage,
@@ -36,8 +50,71 @@ class SQLChatClient:
         return cls._instance
 
     def __init__(self):
-        self.connection_string = MSSQL_CONNECTION_STRING
+        self.environment = ENVIRONMENT
+        self.environment_for_sql = ENVIRONMENT_FOR_SQL
+        self.explicit_mi_flag = AZURE_SQL_USE_MANAGED_IDENTITY
+        self.server = AZURE_SQL_SERVER
+        self.database = AZURE_SQL_DATABASE
+        self.driver = AZURE_SQL_DRIVER
+        self.managed_identity_client_id = AZURE_SQL_MANAGED_IDENTITY_CLIENT_ID
         self.checkpoint_table = AZURE_SQL_CHECKPOINT_TABLE
+
+        self._credential: Optional[object] = None
+
+        # Auto-detect auth mode:
+        has_connection_string = bool(MSSQL_CONNECTION_STRING)
+        is_local = (self.environment_for_sql or "").upper() == "LOCAL"
+
+
+        if self.explicit_mi_flag:
+            self.use_managed_identity = True
+        elif has_connection_string and is_local:
+            self.use_managed_identity = False
+        else:
+            self.use_managed_identity = False
+
+        if self.use_managed_identity:
+            logger.info("Using managed identity for Azure SQL authentication.")
+            self.connection_string = (
+                self._build_managed_identity_connection_string()  
+            )
+            self._credential = self._build_credential()
+        else:
+            self.connection_string = MSSQL_CONNECTION_STRING
+
+        if not self.connection_string:
+            raise ValueError(
+                "Azure SQL connection settings are missing. "
+                "Set MSSQL_CONNECTION_STRING or enable AZURE_SQL_USE_MANAGED_IDENTITY with "
+                "AZURE_SQL_SERVER and AZURE_SQL_DATABASE."
+            )
+
+
+    def _build_credential(self):
+        """Build Azure AD credential for SQL auth."""
+        client_id = os.getenv("AZURE_CLIENT_ID", "").strip()
+        return DefaultAzureCredential()  
+    
+    def _build_managed_identity_connection_string(self) -> str:
+        if not self.server or not self.database:
+            raise ValueError(
+                "AZURE_SQL_SERVER and AZURE_SQL_DATABASE are required when "
+                "AZURE_SQL_USE_MANAGED_IDENTITY=true."
+            )
+
+        server = self.server
+        if not server.lower().startswith("tcp:"):
+            server = f"tcp:{server}"
+
+        return (
+            f"Driver={{{self.driver}}};"
+            f"Server={server};"
+            f"Database={self.database};"
+            "Authentication=ActiveDirectoryMsi;"
+            "Encrypt=yes;"
+            "TrustServerCertificate=no;"
+            "Connection Timeout=30;"
+        )
 
     def get_connection_string(self) -> str:
         """Return the configured Azure SQL connection string."""
@@ -66,7 +143,7 @@ class SQLChatClient:
                         UserId           NVARCHAR(256) NOT NULL,
                         Title            NVARCHAR(1000) NULL,
                         ChatSessionId    NVARCHAR(256) NULL,
-                        ChannelType      INT NOT NULL DEFAULT 0,
+                        ChannelType      INT NOT NULL ,
                         ConversationType NVARCHAR(50) NULL,
                         IsActive         BIT NOT NULL DEFAULT 1,
                         IsDeleted        BIT NOT NULL DEFAULT 0,
@@ -138,7 +215,7 @@ class SQLChatClient:
                     query.user_id,
                     query.user_input,
                     query.chat_session_id,
-                    0,
+                    query.channel_type,
                     str(query.conversation_type.value),
                     now,
                     query.user_id,
