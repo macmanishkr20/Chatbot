@@ -1,0 +1,8 @@
+<span
+  class="app-svg-icon"
+  [class]="cssClass()"
+  [attr.aria-label]="ariaLabel() || null"
+  [attr.role]="ariaLabel() ? 'img' : null"
+  [attr.aria-hidden]="ariaLabel() ? null : 'true'"
+  [innerHTML]="safeIcon()"
+></span>

@@ -1,0 +1,58 @@
+:host {
+  display: block;
+}
+
+::-webkit-scrollbar {
+  width: 10px !important;
+  background-color: #3a3a4a;
+}
+::-webkit-scrollbar-thumb {
+  background-color: #747480;
+  border-radius: 15px;
+}
+
+.font-family {
+  font-family: EYInterstate !important;
+  font-size: small;
+}
+
+.pivacy-consent {
+  overflow-y: scroll;
+  height: 60vh;
+}
+
+.privacy-modal-content {
+  background-color: #2e2e38 !important;
+  color: #fff;
+}
+
+.unordered-list {
+  list-style-type: disc;
+}
+
+.tbl-row {
+  width: 20%;
+  word-break: break-word;
+}
+.tbl-hdr-color {
+  background-color: #ffe600 !important;
+  color: black !important;
+}
+
+.separation {
+  border-bottom: 1px solid white;
+  margin: 0 auto;
+  width: 50% !important;
+}
+.rbcontainer__checkmark:after {
+  background-color: #ffe600;
+}
+
+.rbcontainer__checkmark {
+  border: 0.09rem solid #fff;
+  background: transparent;
+}
+
+.pia-rb {
+  accent-color: #ffe600;
+}

@@ -1,0 +1,329 @@
+// ─── Global dark base for ALL ng-select instances ───────────────────────────
+.ng-select {
+  // Bootstrap validation state
+  &.is-invalid .ng-select-container {
+    border-color: var(--bs-form-invalid-border-color, #dc3545) !important;
+  }
+  .ng-select-container {
+    background-color: inherit !important;
+    border-color: $select-border-color !important;
+    color: $app-font-inverse-color !important;
+
+    .ng-value-container {
+      .ng-placeholder {
+        color: rgba(255, 255, 255, 0.45) !important;
+      }
+
+      .ng-value {
+        color: $app-font-inverse-color !important;
+      }
+
+      // Search input — override default theme white background
+      .ng-input > input {
+        background-color: transparent !important;
+        color: $app-font-inverse-color !important;
+        caret-color: $app-font-inverse-color !important;
+      }
+    }
+
+    .ng-arrow-wrapper .ng-arrow {
+      border-top-color: rgba(255, 255, 255, 0.65) !important;
+    }
+
+    .ng-clear-wrapper {
+      color: rgba(255, 255, 255, 0.65) !important;
+
+      &:hover {
+        color: $app-font-inverse-color !important;
+      }
+    }
+  }
+
+  &.ng-select-opened > .ng-select-container {
+    background-color: inherit !important;
+
+    .ng-arrow-wrapper .ng-arrow {
+      border-bottom-color: rgba(255, 255, 255, 0.65) !important;
+      border-top-color: transparent !important;
+    }
+  }
+
+  &.ng-select-focused:not(.ng-select-opened) > .ng-select-container {
+    border-color: lighten($select-border-color, 15%) !important;
+    box-shadow: 0 0 0 0.15rem rgba(100, 98, 103, 0.35) !important;
+  }
+
+  .ng-dropdown-panel {
+    background-color: $app-secondary-color !important;
+    border-color: $select-border-color !important;
+
+    .ng-dropdown-panel-items {
+      .ng-option {
+        background-color: $app-secondary-color !important;
+        color: $app-font-inverse-color !important;
+
+        &.ng-option-hover,
+        &.ng-option-marked {
+          background-color: $menu-hover-color !important;
+          color: $app-font-inverse-color !important;
+        }
+
+        &.ng-option-selected {
+          background-color: $menu-color !important;
+          color: $app-font-inverse-color !important;
+          font-weight: 600;
+        }
+
+        &.ng-option-selected.ng-option-hover,
+        &.ng-option-selected.ng-option-marked {
+          background-color: $menu-hover-color !important;
+        }
+
+        &.ng-option-disabled {
+          color: rgba(255, 255, 255, 0.35) !important;
+        }
+      }
+
+      .ng-optgroup {
+        background-color: $app-secondary-color !important;
+        color: rgba(255, 255, 255, 0.6) !important;
+
+        &.ng-option-marked {
+          background-color: $menu-hover-color !important;
+        }
+
+        &.ng-option-selected {
+          background-color: $menu-color !important;
+          color: $app-font-inverse-color !important;
+        }
+      }
+    }
+
+    .ng-dropdown-header,
+    .ng-dropdown-footer {
+      background-color: $app-secondary-color !important;
+      color: $app-font-inverse-color !important;
+      border-color: $select-border-color !important;
+    }
+  }
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+.ng-select.dash-small-dark {
+  &.read {
+    .ng-select-container {
+      min-width: 6rem;
+      width: auto;
+
+      background-color: transparent;
+      border: 0 solid transparent;
+      outline: none;
+
+      .ng-value-container .ng-value {
+        background-color: transparent !important;
+      }
+    }
+
+    &.ng-select-focused {
+      &:not(.ng-select-opened) > .ng-select-container {
+        border-color: 0 solid transparent;
+        box-shadow: none;
+      }
+    }
+    .ng-dropdown-panel {
+      width: auto;
+      border-radius: 0;
+      border: 0 solid transparent;
+      background-color: $menu-color;
+
+      .ng-option {
+        background-color: $menu-color;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: small;
+        :hover {
+          color: white;
+        }
+        &.ng-option-selected {
+          background-color: $menu-color;
+          // font-size: small;
+          color: white;
+        }
+      }
+    }
+
+    .ng-value-label {
+      color: $app-font-inverse-color;
+      opacity: 0.8;
+      font-size: small;
+    }
+  }
+
+  .ng-select-container {
+    //   border-bottom: 1px solid $select-border-color;
+
+    .ng-value-container .ng-value {
+      background-color: $select-pill-bg !important;
+    }
+  }
+
+  .ng-select-multiple {
+  }
+
+  .ng-clear-wrapper .ng-clear {
+    color: white;
+  }
+
+  &.ng-select-focused {
+    .ng-select-container {
+      &:after {
+        border-bottom: 1px solid $select-border-color;
+      }
+
+      &.ng-appearance-outline {
+        &:after,
+        &:hover:after {
+          border-bottom: 1px solid $select-border-color;
+        }
+      }
+    }
+  }
+
+  .ng-arrow-wrapper .ng-arrow {
+    color: white;
+  }
+}
+
+.ng-select.dash-full {
+  &.read,
+  &.no-padding {
+    // Set padding to 0 if .no-padding, else 0.5rem
+    padding-left: 0.5rem !important;
+    padding-right: 0.5rem !important;
+
+    &.no-padding {
+      padding-left: 0rem !important;
+      padding-right: 0rem !important;
+    }
+
+    .ng-select-container {
+      min-width: 6rem;
+      min-height: 42px;
+      margin-top: 2px;
+      // width: auto;
+
+      background-color: transparent;
+      border: 0 solid transparent;
+      border: thin solid $select-border-color;
+      border-radius: 4px;
+
+      outline: none;
+
+      .ng-value-container .ng-value {
+        background-color: transparent !important;
+      }
+    }
+
+    &.ng-select-focused {
+      &:not(.ng-select-opened) > .ng-select-container {
+        border: 0 solid transparent;
+        border: thin solid $select-border-color;
+        box-shadow: none;
+      }
+    }
+    .ng-dropdown-panel {
+      // width: auto;
+      background-color: $menu-color;
+      border-radius: 4px;
+      border: 0 solid transparent;
+
+      .ng-option {
+        background-color: $menu-color;
+        color: rgba(255, 255, 255, 0.5);
+        font-size: 1rem;
+        :hover {
+          color: white;
+        }
+        &.ng-option-selected {
+          background-color: $menu-color;
+          // font-size: small;
+          color: white;
+        }
+      }
+    }
+
+    .ng-value-label {
+      color: $app-font-inverse-color;
+      opacity: 0.8;
+      font-size: 1rem;
+    }
+  }
+
+  .ng-select-container {
+    // &:after {
+    //   border-bottom: 1px solid red;
+    // }
+    .ng-value-container .ng-value {
+      background-color: $select-pill-bg !important;
+    }
+  }
+
+  .ng-select-multiple {
+    color: white;
+  }
+
+  .ng-clear-wrapper .ng-clear {
+    color: white;
+  }
+
+  &.ng-select-focused {
+    .ng-select-container {
+      &:after {
+        border: 1px solid $select-border-color;
+      }
+
+      &.ng-appearance-outline {
+        &:after,
+        &:hover:after {
+          border-bottom: 1px solid $select-border-color;
+        }
+      }
+    }
+  }
+
+  .ng-arrow-wrapper .ng-arrow {
+    color: white;
+  }
+}
+
+.ng-select.dash-small {
+  &.read {
+    .ng-select-container {
+      min-width: 8rem;
+      width: auto;
+    }
+  }
+}
+
+.ng-select.ng-select-disabled .ng-arrow-wrapper {
+  display: none !important;
+}
+
+.ng-value-icon {
+  color: white;
+  border-right: 0px !important;
+}
+
+// Dark-themed ng-select for use on dark backgrounds (e.g. feedback form)
+// Inherits all dark styles from the global .ng-select base above.
+.ng-select.feedback-dark {
+  font-size: 0.8rem;
+
+  .ng-select-container {
+    min-height: 31px;
+  }
+
+  .ng-dropdown-panel .ng-dropdown-panel-items .ng-option {
+    font-size: 0.8rem;
+  }
+}
+

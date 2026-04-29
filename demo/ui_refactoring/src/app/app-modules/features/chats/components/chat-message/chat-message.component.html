@@ -1,0 +1,87 @@
+<!-- Container: make sure parent has Bootstrap container/spacing as needed -->
+<div class="w-100 app-font-sm">
+    <!-- Row for avatar + bubble -->
+    <div class="d-flex gap-2 align-items-start my-2" [ngClass]="{'flex-row-reverse': isUser()}">
+
+        <!-- Avatar -->
+        @if(!isUser()) {
+        <app-svg-icon name="logo" cssClass="rounded-circle object-fit-cover flex-shrink-0 avatar"
+            [ariaLabel]="(message.name || 'Assistant') + ' avatar'"></app-svg-icon>
+
+        }
+
+
+        <!-- Message bubble & meta -->
+        <div class="message-wrapper d-flex flex-column"
+            [ngClass]="{'align-items-end': isUser(), 'align-items-start': !isUser()}">
+
+            <!-- The bubble itself -->
+            <!-- <span class="text-muted app-font-sm">{{ getTimeStamp() }}</span> -->
+            <div class="chat-bubble d-inline-block rounded-2 p-2 text-wrap
+                text-break">
+
+                <!-- Message content -->
+                <div class="text-white app-font-sm pre-wrap gap-2 d-flex justify-content-start align-items-start">
+                    @if(message.avatarUrl || isUser()){
+                    @if(userImage) {
+                    <img [src]="userImage" [alt]="(message.name || 'You') + ' avatar'"
+                        class="rounded-circle object-fit-cover flex-shrink-0 user-avatar" />
+                    } @else {
+                    <div class="rounded-circle bg-secondary d-inline-flex align-items-center 
+                            justify-content-center text-dark fw-semibold" style="width:32px;height:32px;">
+                        {{ userInitials }}
+                    </div>
+                    }
+                    }
+                    <div class="markdown-body" [innerHTML]="message.content | safeMarkdown"></div>
+
+                </div>
+
+                <!-- Action buttons at bottom-left -->
+                @if (showActions(message)) {
+                <div class="message-actions d-flex align-items-center gap-1 mt-2 pt-2">
+                    <button type="button" class="btn btn-sm btn-link text-light p-1" title="Like"
+                        (click)="onLike(message)" [disabled]="message.hasFeedback">
+                        @if(!message.hasFeedback || !message.isLiked){
+                        <app-svg-icon name="thumps-up-outline"
+                            [ariaLabel]="(message.isLiked && message.hasFeedback) ? 'Liked' : 'Like'"></app-svg-icon>
+                        }
+
+                        @if(message.isLiked && message.hasFeedback) {
+                        <app-svg-icon name="thumps-up-filled" [ariaLabel]="'Liked'"></app-svg-icon>
+                        }
+                        <!-- <i class="bi" [ngClass]="{'bi-hand-thumbs-up': !message.isLiked || !message.hasFeedback, 
+                                       'bi-hand-thumbs-up-fill': message.isLiked && message.hasFeedback}"></i> -->
+                    </button>
+                    <button type="button" class="btn btn-sm btn-link text-light p-1" title="Dislike"
+                        (click)="onDislike()" [disabled]="message.hasFeedback">
+                        @if(!message.hasFeedback || message.isLiked){
+                        <app-svg-icon name="thumps-down-outline"
+                            [ariaLabel]="(!message.isLiked && message.hasFeedback) ? 'Disliked' : 'Dislike'"></app-svg-icon>
+                        }
+                        @if(!message.isLiked && message.hasFeedback) {
+                        <app-svg-icon name="thumps-down-filled" [ariaLabel]="'Disliked'"></app-svg-icon>
+                        }
+                        <!-- <i class="bi" [ngClass]="{'bi-hand-thumbs-down': message.isLiked || !message.hasFeedback, 
+                                       'bi-hand-thumbs-down-fill': !message.isLiked && message.hasFeedback}"></i> -->
+                    </button>
+                </div>
+                }
+
+            </div>
+
+            <!-- Feedback popup template (opened via NgbModal) -->
+            <ng-template #feedbackModalTpl let-modal>
+                <div class="feedback-modal-body">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <h5 class="feedback-modal-title m-0">Feedback</h5>
+                        <button type="button" class="feedback-modal-close" aria-label="Close" (click)="modal.dismiss()">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <p class="feedback-modal-subtitle">Your feedback helps us improve this experience.</p>
+                    <app-message-feedback-form [messageId]="message.messageId" [rating]="feedbackRating"
+                        [config]="feedbackConfig" (submit)="modal.close($event)" (skip)="modal.dismiss()">
+                    </app-message-feedback-form>
+                </div>
+            </ng-template>

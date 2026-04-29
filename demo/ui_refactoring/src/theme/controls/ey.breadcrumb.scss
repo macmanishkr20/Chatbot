@@ -1,0 +1,16 @@
+.breadcrumb {
+    font-size: 11px;
+    background-color: transparent;
+    color: $white;
+    padding: 10px 0 !important;
+    
+    .router-link-active {
+        color: $primary-color;
+    }
+
+    li:last-child {
+        .router-link-active {
+            color: $white;
+        }
+    }
+}

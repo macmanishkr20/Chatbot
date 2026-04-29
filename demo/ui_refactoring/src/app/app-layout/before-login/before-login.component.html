@@ -1,0 +1,27 @@
+<div class="full-screen-background">
+  <div class="half-screen">
+    <div class="left-bottom-content">
+     
+    </div>
+  </div>
+  <div class="half-screen">
+    <div class="middle-content">
+
+      <div class="text-center mt-2">
+        @if (!loggedIn) {
+          <!-- Uncomment if you need manual login -->
+        <!-- <button
+          value="Launch"
+          class="launchbutton"
+          (click)="onLaunch()"
+          [disabled]="disabled"
+        >
+          Launch >
+        </button> -->
+        } @else { 
+          <router-outlet></router-outlet>
+        }
+      </div>
+    </div>
+  </div>
+</div>

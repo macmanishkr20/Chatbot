@@ -1,0 +1,30 @@
+:host {
+  display: block;
+}
+
+.summary-card {
+  background-color: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 0.75rem 0.5rem;
+}
+
+.summary-value {
+  font-size: 1.4rem;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.summary-label {
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  margin-top: 0.2rem;
+}
+
+.dash-panel {
+  background-color: #1a1a2e;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+

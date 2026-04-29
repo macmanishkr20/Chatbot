@@ -1,0 +1,24 @@
+@if (!user?.isAuthenticated) {
+  <app-before-login class="h-100" [title]="title"></app-before-login>
+} @else {
+  <div
+    id="app-after-login"
+  [ngClass]="{
+    'app-no-bg': !user?.isAuthenticated,
+    'app-after-login': user?.isAuthenticated
+  }"
+    class="d-flex flex-column h-100"
+    >
+    @if (user?.isAuthenticated) {
+      <div>
+        <app-no-menu [title]="title"></app-no-menu>
+      </div>
+    }
+    <div class="flex-grow-1 overflow-hidden" style="min-height: 0">
+      @if (!isIframe) {
+        <router-outlet></router-outlet>
+      }
+    </div>
+  </div>
+
+}

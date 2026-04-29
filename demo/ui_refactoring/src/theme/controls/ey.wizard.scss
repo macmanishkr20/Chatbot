@@ -1,0 +1,26 @@
+aw-wizard.small-circle {
+
+  aw-wizard-navigation-bar ul.steps-indicator li a .label{
+    text-transform: inherit;
+  }
+
+  aw-wizard-navigation-bar.horizontal ul.steps-indicator li {
+    .step-indicator {
+      width: 36px;
+      height: 36px;
+      line-height: 28px;
+    }
+
+    &.navigable a:hover .step-indicator {
+      width: 36px;
+      height: 36px;
+      line-height: 28px;
+    }
+
+    &:not(:last-child):after {
+      width: calc(100% - 36px);
+      left: calc(50% + 12px);
+      top: -32px;
+    }
+  }
+}

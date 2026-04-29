@@ -1,0 +1,26 @@
+@if (isLaunchClicked) {
+  <app-after-login [title]="title"></app-after-login>
+}
+@if (!isLaunchClicked) {
+  <div class="content">
+    <div class="full-screen-background">
+      <div class="justify-content-center align-items-center d-flex h-100">
+        <div class="middle-content">
+          <div class="logo"></div>
+          <br />
+          <p class="platform-title">{{title}}</p>
+          <div class="separator"></div>
+          <br />
+          <p class="description">
+            Your new AI buddy for quick, reliable Business Enablement answers. <br /><br />
+          </p>
+          <div class="text-center mt-5">
+            <button value="Chat" class="launchbutton" (click)="onLaunch()">
+             Chat now
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+}

@@ -1,0 +1,13 @@
+<div class="d-flex flex-column gap-2">
+  @if (title()) {
+    <p class="mb-0 title">{{ title() }}</p>
+  }
+  @if (hasData()) {
+    <div class="position-relative chart-height">
+      <canvas baseChart [data]="chartData()" [type]="chartTypes.Pie" [options]="chartOptions"></canvas>
+    </div>
+  } @else {
+    <div class="d-flex align-items-center justify-content-center chart-height">
+      No data available</div>
+  }
+</div>

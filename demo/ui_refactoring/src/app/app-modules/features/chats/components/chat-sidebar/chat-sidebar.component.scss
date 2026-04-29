@@ -1,0 +1,316 @@
+@use "./../../../../../../theme/app" as *;
+
+:host {
+    display: block;
+    height: 100%;
+    overflow: hidden;
+}
+
+.chat-container {
+        display: flex;
+        width: 100%;
+        height: 100%;
+        min-height: 0;
+        font-size: 0.75rem;
+    }
+
+
+.sidebar {
+  position: relative;
+  inset: 0 auto 0 0;         /* left edge */
+  width: $chat-sidebar-w;
+  min-width: $chat-sidebar-w;  /* prevent shrinking */
+  max-width: $chat-sidebar-w;  /* hard-limit the content width */
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;              /* ensure no growth beyond 225px */
+  z-index: 1040;                 /* below modals */
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+/* Top & bottom bars stay fixed within sidebar layout via flex */
+.sidebar-top,
+.sidebar-bottom {
+  flex: 0 0 auto;
+}
+
+/* Collapse/expand toggle — match nav-item icon alignment & show pointer */
+.sidebar-toggle {
+  background: transparent;
+  padding: 0.25rem;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 0.25rem;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.06);
+  }
+}
+
+.brand-name,
+.user-name{
+  /* ellipsis for long names */
+  min-width: 0;
+  max-width: 100%;
+  display: inline-block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The scrollable middle area */
+.sidebar-scroll {
+  flex: 1 1 auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  width: 100%;
+
+  ul {
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  /* Custom scrollbar styling */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.25);
+    }
+  }
+}
+
+/* Common row styling */
+.nav-row,
+.section-summary,
+.child-link,
+.grandchild-link {
+  color: var(--bs-gray-300);
+  text-decoration: none;
+  transition: background-color .15s ease, color .15s ease;
+}
+
+.nav-row:hover,
+.section-summary:hover,
+.child-link:hover,
+.grandchild-link:hover {
+  color: var(--bs-light);
+  background-color: rgba(var(--bs-light-rgb), .1) !important;
+}
+
+/* Active link styling - brighter hover effect */
+.nav-link.active {
+  color: #fff !important;
+  background-color: rgba(var(--bs-light-rgb), .15) !important;
+  position: relative;
+
+  /* Left accent border with cyan-glow gradient (UX spec):
+     7% #23232F, 45% #32FFFF, 97% #23232F */
+  &::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    border-radius: 2px;
+    background: linear-gradient(to bottom,
+      #23232F 7%,
+      #32FFFF 45%,
+      #23232F 97%);
+    pointer-events: none;
+  }
+}
+
+.nav-link.active i {
+  opacity: 1 !important;
+}
+
+/* Remove default list styles */
+li {
+  margin-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+.mb-1 {
+  margin-left: 0 !important;
+}
+
+/* Level-specific colors for better hierarchy */
+.child-link {
+  color: var(--bs-gray-300);
+  font-size: 0.75rem;
+}
+
+.child-link i {
+  opacity: .7;
+}
+
+.grandchild-link {
+  color: var(--bs-gray-400);
+  font-size: 0.75rem;
+}
+
+.grandchild-link i {
+  opacity: .6;
+  font-size: 0.75rem;
+}
+
+/* Nav link and summary styling */
+.nav-link,
+.section-summary {
+  padding-left: 0.5rem !important;
+  padding-right: 0.5rem !important;
+  cursor: pointer;
+
+  /* Icons stay visible */
+  i.bi {
+    flex-shrink: 0;
+  }
+
+  /* Text truncates properly */
+  .text-truncate {
+    flex: 1 1 0;
+    min-width: 0;
+    width: 9.25rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}
+
+/* Conversation list — no inner scroll; sidebar-scroll handles all scrolling */
+.conversation-list {
+  overflow: visible;
+  padding-left: 0;
+  margin-left: 0;
+
+  ul {
+    padding-left: 0;
+    margin-left: 0;
+  }
+
+  li {
+    padding-left: 0 !important;
+    margin-left: 0 !important;
+  }
+}
+
+/* Remove default marker for <summary> */
+.section-summary::-webkit-details-marker { display: none; }
+summary::-webkit-details-marker { display: none; }
+
+/* Chevron rotation when open - works for all section levels */
+.chevron {
+  transition: transform .2s ease;
+  flex-shrink: 0;
+}
+
+details[open] > summary .chevron {
+  transform: rotate(90deg);
+}
+
+/* Nested section styling */
+.nested-section {
+  border: none;
+}
+
+/* Ensure lists don't overflow */
+.nav.flex-column {
+  padding-left: 0;
+  margin-left: 0;
+}
+
+.child-summary {
+  cursor: pointer;
+}
+
+.section-summary {
+  cursor: pointer;
+}
+
+/* COLLAPSE STATE (no JS): icon-only rail */
+#navCollapse:checked ~ .sidebar {
+  width: $chat-sidebar-cw;
+  max-width: $chat-sidebar-cw;
+  min-width: $chat-sidebar-cw;
+  font-size: 0.875rem; /* slightly larger for icon-only */
+}
+
+/* Hide all text labels when collapsed */
+#navCollapse:checked ~ .sidebar .label-text,
+#navCollapse:checked ~ .sidebar .brand-name,
+#navCollapse:checked ~ .sidebar .user-meta,
+#navCollapse:checked ~ .sidebar .section .chevron,
+#navCollapse:checked ~ .sidebar .sidebar-avatar{
+  display: none !important;
+}
+
+/* Center icons when collapsed */
+#navCollapse:checked ~ .sidebar .nav-link,
+#navCollapse:checked ~ .sidebar .section-summary {
+  justify-content: center;
+  padding-right: 0.5rem;
+  padding-left: 0.5rem !important;
+}
+
+/* Prevent child lists from showing while collapsed */
+#navCollapse:checked ~ .sidebar .section > ul,
+#navCollapse:checked ~ .sidebar .conversation-list {
+  display: none !important;
+}
+
+/* Animate collapse icon to indicate state */
+.collapse-icon {
+  transition: transform .2s ease;
+}
+#navCollapse:checked ~ .sidebar .collapse-icon {
+  transform: rotate(180deg);
+}
+
+/* When collapsed, center the toggle label in the top bar to align with nav icons */
+#navCollapse:checked ~ .sidebar .sidebar-top {
+  justify-content: center;
+}
+#navCollapse:checked ~ .sidebar .sidebar-top label {
+  margin-left: 0 !important; // override ms-auto
+}
+
+/* Accessibility/focus - Remove outline on click */
+.nav-link:focus,
+.section-summary:focus,
+.nav-link:focus-visible,
+.section-summary:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.sidebar-avatar {
+  width: 25px;
+  height: 25px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.avatar-initials {
+    width:32px;
+    height:32px;
+}
+
+/* Main content area (router-outlet wrapper) */
+.main {
+    flex: 1;
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+}

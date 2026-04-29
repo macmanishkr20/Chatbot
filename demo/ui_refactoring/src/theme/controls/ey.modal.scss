@@ -1,0 +1,75 @@
+.modal-content {
+    background-clip: inherit!important;
+    background-color: #1a1a24 !important;
+}
+
+.modal-header {
+    padding: 0.5rem 1rem !important;
+
+    .modal-title {
+        font-size: 0.9rem !important;
+    }
+}
+
+.modal-open .modal {outline:none;}
+
+/* Feedback modal: gradient border */
+.modal.feedback-modal-window {
+    .modal-content {
+        position: relative;
+        border: 0 !important;
+        border-radius: 0.75rem !important;
+        background-color: #1a1a24 !important;
+        background-clip: padding-box !important;
+
+        &::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: calc(0.75rem + 1px);
+            background: linear-gradient(135deg,
+                rgba(255, 230, 0, 0.45) 0%,
+                rgba(255, 230, 0, 0.45) 33%,
+                rgba(180, 0, 255, 0.45) 66%,
+                rgba(70, 150, 255, 0.45) 100%);
+            z-index: -1;
+            pointer-events: none;
+        }
+    }
+
+    .modal-dialog {
+        max-width: 560px;
+    }
+
+    .feedback-modal-body {
+        padding: 1rem 1.25rem 1.25rem;
+        color: #fff;
+        font-size: 0.85rem;
+    }
+
+    .feedback-modal-title {
+        font-size: 0.95rem;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .feedback-modal-subtitle {
+        color: rgba(255, 255, 255, 0.75);
+        font-size: 0.8rem;
+        margin: 0 0 0.75rem;
+    }
+
+    .feedback-modal-close {
+        background: transparent;
+        border: 0;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0.25rem 0.4rem;
+        cursor: pointer;
+
+        &:hover {
+            color: #fff;
+        }
+    }
+}

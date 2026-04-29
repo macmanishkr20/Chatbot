@@ -1,0 +1,17 @@
+@use "./../../../../theme/app.scss" as *;
+:host {
+  display: block;
+}
+// label {
+//   @extend .font-sm;
+// }
+
+.text-danger {
+  @extend .font-sm;
+}
+input.form-control:disabled {
+  background-color: #23232f !important;
+}
+.cursor-pointer {
+  cursor: pointer !important;
+}

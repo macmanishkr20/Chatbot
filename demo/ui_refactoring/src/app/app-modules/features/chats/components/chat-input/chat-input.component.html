@@ -1,0 +1,35 @@
+  <div class="chat-input-container">
+  <div class="chat-input-wrapper">
+    <form (ngSubmit)="onSend()" [formGroup]="userQueryForm">
+      <div class="chat-input-box">
+        
+        <!-- Textarea -->
+        <textarea 
+          #msg 
+          class="px-2 input-textarea" 
+          [placeholder]="placeholder" 
+          formControlName="message"
+          name="message" 
+          rows="1" 
+          (input)="autoResize(msg)"
+          (keydown)="onKeyDown($event)"
+          draggable="false" 
+          autocomplete="off"
+          [attr.aria-label]="ariaLabel"></textarea>
+
+        <!-- Send Button -->
+        <button 
+          class="input-send-btn" 
+          type="submit"
+          [disabled]="form['message'].invalid || disabled"
+          [attr.aria-label]="'Send message'">
+
+          <app-svg-icon name="send-outline" cssClass="send-icon send-icon--outline"
+            ariaLabel="Send"></app-svg-icon>
+          <app-svg-icon name="send-filled" cssClass="send-icon send-icon--filled"
+            ariaLabel="Send"></app-svg-icon>
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

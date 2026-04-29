@@ -1,0 +1,47 @@
+<div class="container-fluid py-3">
+  <h6 class="mb-2">Admin Dashboard</h6>
+
+  <!-- Summary Cards -->
+  @if (dashBoardSummary()) {
+    <div class="row g-2 mb-2">
+      @for (card of dashBoardSummary(); track card.sortId) {
+        <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+          <div class="summary-card text-center">
+            <div class="summary-value">{{ card.value }}</div>
+            <div class="summary-label">{{ card.label }}</div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+
+  <!-- Charts Row -->
+  <div class="row g-3 mb-2">
+    <div class="col-12 col-md-5">
+      <div class="dash-panel">
+        <app-pie-chart
+          title="Feedback by Type"
+          [labels]="pieLabels"
+          [data]="pieData()"
+          [backgroundColors]="pieColors"
+        />
+      </div>
+    </div>
+    <div class="col-12 col-md-7">
+      <div class="dash-panel">
+        <app-bar-chart
+          title="Feedback by Time"
+          [labels]="barLabels()"
+          [datasets]="barDatasets()"
+        />
+      </div>
+    </div>
+  </div>
+
+  <!-- Feedback Grid -->
+  <div class="row">
+    <div class="col-12">
+      <app-feedback-grid [feedbacks]="feedbackRows()" />
+    </div>
+  </div>
+</div>

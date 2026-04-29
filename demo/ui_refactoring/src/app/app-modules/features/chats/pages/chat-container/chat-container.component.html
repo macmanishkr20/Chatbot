@@ -1,0 +1,50 @@
+<div class="chat-layout">
+    <div class="chat-main">
+        @if(!chatStore.selectedConversationId() && !this.chatStore.messages()?.length){
+        <div class="welcome-block">
+            <div class="welcome-content">
+                <div class="d-flex flex-column align-items-center text-center">
+                    <img src="/assets/bot.png" alt="bot-image" class="img-avatar" />
+                    <h4 class="mt-4 mb-0">Hi {{this.authUser?.fullName}}, How can I assist you today?</h4>
+                </div>
+
+                <span class="welcome-subtitle d-block mt-3">Have a specific topic in mind, Let me know so that I can support you better</span>
+
+                <div class="prompt-cards mt-3">
+                    @for(prompt of (homePrompts || []); track prompt.id) {
+                    <div class="card prompt-card" (click)="onSelectHomePrompt(prompt)">
+                        <div class="card-header">
+                            <span class="prompt-icon-wrap">
+                                <span class="prompt-icon prompt-icon--outline">
+                                    <app-svg-icon name="home-prompt-outline" cssClass="d-inline-block align-top"
+                                        ariaLabel="Home Prompt Outline"></app-svg-icon>
+                                </span>
+                                <span class="prompt-icon prompt-icon--filled">
+                                    <app-svg-icon name="home-prompt-filled" cssClass="d-inline-block align-top"
+                                        ariaLabel="Home Prompt Filled"></app-svg-icon>
+                                </span>
+                            </span>
+                        </div>
+                        <div class="card-body">
+                            <p class="card-text">{{prompt.prompt}}</p>
+                            <span>{{prompt.serviceName}}</span>
+                        </div>
+                    </div>
+                    }
+                </div>
+            </div>
+        </div>
+        } @else {
+        <app-chat-header></app-chat-header>
+        }
+       
+        <div class="chat-window" [class.d-none]="!chatStore.selectedConversationId() && !chatStore.messages()?.length">
+            <router-outlet></router-outlet>
+        </div>
+
+        <div class="chat-input">
+            <app-chat-input [placeholder]="'Type your question'" (send)="onSend($event)"
+                [disabled]="chatStore.loading()"></app-chat-input>
+        </div>
+    </div>
+</div>

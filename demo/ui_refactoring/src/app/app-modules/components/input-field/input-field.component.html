@@ -1,0 +1,72 @@
+<div class="form-group">
+  <label class="form-label form-label-sm">{{ label }}</label>
+  <span *ngIf="isrequired">*</span>
+  <i
+    *ngIf="infoRequired"
+    class="bi bi-info-circle ng-select-20 ms-2 cursor-pointer"
+    placement="bottom"
+    ngbPopover="{{ infoMessage }}"
+  ></i>
+  <input
+    [type]="type"
+    [ngClass]="'form-control'"
+    [className]="className"
+    [formControl]="formControl"
+    [placeholder]="placeholder"
+    [maxlength]="maxlength"
+  />
+  <div
+    *ngIf="control?.invalid && (control?.dirty || control?.touched)"
+    class="text-danger"
+  >
+    <div
+      *ngIf="control?.errors?.['required'] && !validationMessages?.['required']"
+    >
+      {{ label }} is required
+    </div>
+    <div
+      *ngIf="control?.errors?.['minlength'] && !validationMessages?.['minlength']"
+    >
+      {{ label }} must be at least
+      {{ control?.errors?.['minlength'].requiredLength }} characters long
+    </div>
+    <div
+      *ngIf="control?.errors?.['maxlength'] && !validationMessages?.['maxlength']"
+    >
+      {{ label }} cannot be more than
+      {{ control?.errors?.['maxlength'].requiredLength }} characters long
+    </div>
+    <div *ngIf="control?.errors?.['email'] && !validationMessages?.['email']">
+      {{ label }} must be a valid email address
+    </div>
+    <div *ngIf="control?.errors?.['max'] && !validationMessages?.['max']">
+      {{ label }} should not be greater than {{ control?.errors?.['max'].max }}
+    </div>
+    <div *ngIf="control?.errors?.['min'] && !validationMessages?.['min']">
+      {{ label }} should not be less than {{ control?.errors?.['min'].min }}
+    </div>
+    <div *ngIf="control?.errors?.['invalidDecimal']">
+      A maximum of two decimal places is allowed.
+    </div>
+    <div *ngIf="control?.errors?.['nameValidator']">
+      Special character restriction.
+    </div>
+
+    <div *ngIf="control?.errors?.['negativeNumber']">
+      {{ label }} should be a valid number.
+    </div>
+    <div
+      *ngIf="(control?.errors?.['pattern'] && !validationMessages?.['pattern'] && control?.errors?.['pattern'].requiredPattern === '^[0-9]+$') ||(control?.errors?.['hasDecimal'] && !validationMessages?.['hasDecimal'])"
+    >
+      {{ label }} should be a whole number.
+    </div>
+    <div
+      *ngIf="(control?.errors?.['pattern'] && !validationMessages?.['pattern'] && control?.errors?.['pattern'].requiredPattern !== '^[0-9]+$') ||(control?.errors?.['notANumber'] && !validationMessages?.['notANumber'])"
+    >
+      {{ label }} should be a valid number.
+    </div>
+    <div *ngFor="let errorKey of control?.errors | keyvalue">
+      {{ validationMessages[errorKey.key] }}
+    </div>
+  </div>
+</div>

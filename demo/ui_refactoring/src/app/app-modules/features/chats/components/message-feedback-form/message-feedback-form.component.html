@@ -1,0 +1,129 @@
+<div class="feedback-form-container mt-2 p-2  rounded ">
+  <form [formGroup]="feedbackForm" (ngSubmit)="onSubmit()">
+
+    <!-- Category Tags (single-select) -->
+    @if (config.showTags && config.tags?.length) {
+      <div class="mb-3">
+        <label class="form-label text-light">Thank you for your response. We would like to understand where you find issue.</label>
+        <div class="d-flex flex-wrap gap-2">
+          @for (tag of config.tags; track tag) {
+            <label
+              class="btn btn-sm tag-radio-btn"
+              [ngClass]="isCategorySelected(tag) ? 'btn-primary' : 'btn-outline-secondary'">
+              <input
+                type="radio"
+                [name]="'category-' + messageId"
+                [value]="tag"
+                [checked]="isCategorySelected(tag)"
+                (change)="selectCategory(tag)"
+                class="tag-radio-input">
+              {{ tag }}
+            </label>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Service Hierarchy: Function → Sub Function → Service (only when 'Content gaps' selected) -->
+    @if (config.showServiceHierarchy && selectedCategory === feedbackTag.ContentGaps && functions().length) {
+      <label class="form-label text-light mb-1">
+        Could you specify the Function and sub function where you find the content gaps</label>
+      <div class="row g-2 mb-2">
+
+        <!-- Function -->
+        <div [class]="showSubFunction() || showService() ? 'col' : 'col-12'">
+          <label for="fn-{{messageId}}" class="form-label text-light mb-1">Function</label>
+          <ng-select
+            labelForId="fn-{{messageId}}"
+            [items]="functions()"
+            bindLabel="description"
+            bindValue="id"
+            placeholder="Select..."
+            [searchable]="true"
+            formControlName="functionId"
+            class="feedback-dark">
+          </ng-select>
+        </div>
+
+        <!-- Sub Function -->
+        @if (showSubFunction()) {
+          <div class="col">
+            <label for="sfn-{{messageId}}" class="form-label text-light mb-1">Sub Function</label>
+            <ng-select
+              labelForId="sfn-{{messageId}}"
+              [items]="subFunctions()"
+              bindLabel="description"
+              bindValue="id"
+              placeholder="Select..."
+              [searchable]="true"
+              formControlName="subFunctionId"
+              class="feedback-dark">
+            </ng-select>
+          </div>
+        }
+
+        <!-- Service -->
+        @if (showService()) {
+          <div class="col">
+            <label for="svc-{{messageId}}" class="form-label text-light mb-1">Service</label>
+            <ng-select
+              labelForId="svc-{{messageId}}"
+              [items]="availableServices()"
+              bindLabel="description"
+              bindValue="id"
+              placeholder="Select..."
+              [searchable]="true"
+              formControlName="serviceId"
+              class="feedback-dark">
+            </ng-select>
+          </div>
+        }
+
+      </div>
+    }
+
+    <!-- Comments Textarea -->
+    @if (config.showComments) {
+      <div class="mb-3">
+        <label for="comments-{{messageId}}" class="form-label text-light">
+          Additional comments if any
+          <span class="text-danger" *ngIf="config.commentsRequired">*</span>
+        </label>
+        <textarea
+          id="comments-{{messageId}}"
+          class="form-control form-control-sm shadow-sm text-light"
+          formControlName="comments"
+          rows="3"
+          [placeholder]="config.commentsPlaceholder"
+          [maxlength]="config.commentsMaxLength ?? 500"></textarea>
+
+        <div class="d-flex justify-content-between mt-1">
+          <small class="text-danger" *ngIf="commentsControl?.invalid && commentsControl?.touched">
+            @if (commentsControl?.errors?.['required']) {
+              Comments are required
+            }
+            @if (commentsControl?.errors?.['maxlength']) {
+              Comments exceed maximum length
+            }
+          </small>
+        </div>
+      </div>
+    }
+
+    <!-- Action Buttons -->
+    <div class="d-flex justify-content-center gap-2 mt-3">
+      <button
+        type="button"
+        class="btn btn-sm btn-outline-light px-3"
+        (click)="onSkip()">
+        Cancel
+      </button>
+      <button
+        type="submit"
+        class="btn btn-sm btn-light px-3"
+        [disabled]="feedbackForm.invalid">
+        Confirm
+      </button>
+    </div>
+  </form>
+</div>

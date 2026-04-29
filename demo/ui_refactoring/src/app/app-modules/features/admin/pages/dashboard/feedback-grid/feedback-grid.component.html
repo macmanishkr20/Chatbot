@@ -1,0 +1,68 @@
+<div class="grid-panel rounded p-3">
+  <div class="grid-header d-flex align-items-center justify-content-between mb-3">
+    <div class="mb-0 title">Feedback Details</div>
+    <button
+      class="btn btn-outline-secondary btn-sm"
+      (click)="exportExcel()"
+      [disabled]="isExporting()"
+      aria-label="Export feedback data to Excel"
+    >
+      @if (isExporting()) {
+        <span class="spinner-border spinner-border-sm me-1" 
+        role="status" aria-hidden="true"></span>
+        Exporting...
+      } @else {
+        <img src="assets/microsoft-excel.png" alt="Excel icon" 
+        class="me-1 excel-icon"  />
+        <!-- <i class="bi bi-file-earmark-spreadsheet me-1"></i> -->
+        Export to Excel
+      }
+    </button>
+  </div>
+
+  <div class="table-responsive">
+    <table class="table table-dark table-sm mb-0 align-middle">
+      <thead>
+        <tr>
+          <th scope="col">Function</th>
+          <th scope="col">Sub-Function</th>
+          <th scope="col">Service</th>
+          <th scope="col">Topic</th>
+          <th scope="col">Rating</th>
+          <th scope="col">Comments</th>
+          <th scope="col" class="text-nowrap">Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        @if (feedbacks().length === 0) {
+          <tr>
+            <td colspan="7" class="text-center text-muted py-4">No feedback data available</td>
+          </tr>
+        } @else {
+          @for (row of feedbacks() | slice: (page - 1) * pageSize : page * pageSize; track row.id) {
+            <tr>
+              <td class="text-nowrap">{{ row.function?.name ?? '-' }}</td>
+              <td class="text-nowrap">{{ row.subFunction?.name ?? '-' }}</td>
+              <td class="text-nowrap">{{ row.service?.name ?? '-' }}</td>
+              <td class="text-nowrap">{{ row.category ?? '-' }}</td>
+              <td class="text-nowrap">
+                <span>{{ getLabel(row.rating) }}</span>
+              </td>
+              <td class="comment-cell" [ngbTooltip]="row.comments ?? ''" 
+                triggers="hover" container="body">{{ row.comments ?? '-' }}</td>
+              <td class="text-nowrap">{{ row.createdAt | date: 'dd MMM yyyy' }}</td>
+            </tr>
+          }
+        }
+      </tbody>
+    </table>
+  </div>
+
+  <div class="d-flex flex-row-reverse mt-2">
+    <ngb-pagination
+      [collectionSize]="feedbacks().length"
+      [(page)]="page"
+      [pageSize]="pageSize"
+    />
+  </div>
+</div>

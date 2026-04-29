@@ -1,0 +1,39 @@
+<ul class="navbar-nav ms-auto">
+  @for (menu of menus; track menu) {
+    @if (menu.direction === 'Right') {
+      <li
+        class="nav-item mx-1"
+        ngbDropdown
+        routerLinkActive="active"
+        >
+        @if (menu && menu.menus && menu.menus.length > 0) {
+          <a
+            class="nav-link px-2 dropdown-hover"
+            href
+            (click)="(false)"
+            ngbDropdownToggle
+            >{{ menu.name }}</a
+            >
+            <div ngbDropdownMenu>
+              @for (menu of menu.menus; track menu) {
+                <a
+                  ngbDropdownItem
+                  routerLink="{{ menu.url }}"
+                  routerLinkActive="active"
+                  >{{ menu.name }}</a
+                  >
+                }
+              </div>
+            }
+            @if (menu && menu.menus && menu.menus.length === 0) {
+              <a
+                class="nav-link px-2"
+                routerLink="{{ menu.url }}"
+                routerLinkActive="active"
+                >{{ menu.name }}</a
+                >
+              }
+            </li>
+          }
+        }
+      </ul>

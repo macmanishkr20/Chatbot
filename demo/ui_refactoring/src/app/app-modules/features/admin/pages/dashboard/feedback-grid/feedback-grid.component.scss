@@ -1,0 +1,20 @@
+:host {
+  display: block;
+}
+
+.grid-panel {
+  background-color: #1a1a2e;
+}
+
+.comment-cell {
+  max-width: 300px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.excel-icon {
+  width: 16px;
+  height: 16px;
+  color: #1a1a2e;
+  background-color: transparent;
+}

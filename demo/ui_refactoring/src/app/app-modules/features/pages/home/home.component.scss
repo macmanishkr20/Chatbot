@@ -1,0 +1,53 @@
+.full-background {
+    background: url("../../../../../assets/banner.png");
+    /* Update the path as necessary */
+    background-size: cover;
+    /* Ensures the image covers the entire area */
+    background-position: center;
+    background-repeat: no-repeat;
+    /* Centers the image */
+    display: flex;
+    /* Use flexbox for layout */
+    width: 100%;
+    height: 100%;
+}
+.logo-sm {
+    width: 20px;
+    height: 20px;
+}
+.margin-left-30 {
+    margin-left: 30px;
+}
+.img-avatar {
+    height: 40px;
+    width: 40px;
+}
+h1 {
+    font-weight: 700 !important;
+}
+
+/* "Chat now" button: soft gradient border + dark fill on hover.
+   Border gradient is dimmed via per-stop alpha so it reads as a subtle
+   accent ring rather than the saturated brand colors. */
+.chat-now-btn {
+    border: 1px solid transparent;
+    background-color: #fff;
+    color: #212529;
+    transition: color 0.2s ease, background 0.2s ease;
+
+    &:hover,
+    &:focus,
+    &:focus-visible,
+    &:active {
+        color: #fff !important;
+        border: 1px solid transparent !important;
+        background:
+            linear-gradient(#1a1a24, #1a1a24) padding-box,
+            linear-gradient(135deg,
+                rgba(255, 230, 0, 0.35) 0%,
+                rgba(255, 230, 0, 0.35) 33%,
+                rgba(180, 0, 255, 0.35) 66%,
+                rgba(70, 150, 255, 0.35) 100%) border-box !important;
+        box-shadow: none !important;
+    }
+}

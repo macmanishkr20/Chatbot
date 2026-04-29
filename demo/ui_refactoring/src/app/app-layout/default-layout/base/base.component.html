@@ -1,0 +1,136 @@
+<div class="seconday-menu">
+  <div class="d-flex flex-column">
+    <div>
+      <nav
+        class="navbar navbar-expand-sm navbar-dark header nav-header shadow px-0"
+        >
+        <div class="container-fluid">
+          @if (!onlyMenu) {
+            <a class="navbar-brand ps-3 py-0" href="#">
+              <div class="d-flex align-items-center">
+                <div class="logo-sm d-inline-block align-top"></div>
+                <div>
+                  <span class="mx-2 logo-text">|</span>
+                  <span class="logo-text text-white"
+                    ><small>{{ title }}</small></span
+                    >
+                  </div>
+                </div>
+              </a>
+            }
+            <button
+              class="navbar-toggler mb-1 outline-none"
+              type="button"
+              (click)="level1Collapsed = !level1Collapsed"
+              >
+              <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="navbar-collapse" [class.collapse]="level1Collapsed">
+              <ul class="navbar-nav ms-auto">
+                <li
+                  class="nav-item"
+                  ngbDropdown
+                  display="dynamic"
+                  placement="bottom-end"
+                  #myDrop="ngbDropdown"
+                  >
+                  <a
+                    class="nav-link pt-0 pb-1"
+                    ngbDropdownToggle
+                    (mouseover)="myDrop.open()"
+                    >
+                    @if (!hasAvatar) {
+                      <div
+                        class="avatar text-center text-white rounded-circle mt-1 me-1 d-inline-block"
+                        >
+                        <div class="mt-1">
+                          <i class="bi bi-person"></i>
+                        </div>
+                      </div>
+                    }
+                    @if (hasAvatar) {
+                      <img
+                        [src]="userImage"
+                        class="avatar-img rounded-circle border shadow-sm border-primary"
+                        alt=""
+                        />
+                    }
+                  </a>
+
+                  <div ngbDropdownMenu aria-labelledby="navbarDropdown3">
+                    <a ngbDropdownItem (click)="$event.preventDefault()"
+                      >Hi! {{ user?.fullName }}</a
+                      >
+                      @for (menu1 of avatarMenus.menus; track menu1) {
+                        @if (menu1.key === 'text') {
+                          <a
+                            ngbDropdownItem
+                            href="#"
+                            (click)="$event.preventDefault()"
+                            >{{ menu1.name }}</a
+                            >
+                          }
+                          @if (menu1.key === 'divider') {
+                            <div class="d-flex justify-content-center">
+                              <div
+                                class="seperator text-center width"
+                              ></div>
+                            </div>
+                          }
+                          @if (menu1.url) {
+                            <a ngbDropdownItem routerLink="{{ menu1.url }}">{{
+                              menu1.name
+                            }}</a>
+                          }
+                        }
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </nav>
+          </div>
+          <div>
+            <nav
+              class="navbar navbar-expand-sm navbar-dark header sub-nav-header p-0"
+              >
+              <div class="container-fluid">
+                @if (!onlyMenu) {
+                  <a class="p-0" href="#"></a>
+                }
+                <button
+                  class="navbar-toggler mb-1 outline-none"
+                  type="button"
+                  (click)="level2Collapsed = !level2Collapsed"
+                  >
+                  <span class="navbar-toggler-icon"></span>
+                </button>
+                @if (menus && menus.length > 0) {
+                  <div
+                    class="navbar-collapse"
+                    [class.collapse]="level2Collapsed"
+                    >
+                    <app-menu-left [menus]="menus"></app-menu-left>
+                  </div>
+                }
+                @if (menus && menus.length > 0) {
+                  <div
+                    class="navbar-collapse"
+                    [class.collapse]="level2Collapsed"
+                    >
+                    <app-menu-center [menus]="menus"></app-menu-center>
+                  </div>
+                }
+                @if (menus && menus.length > 0) {
+                  <div
+                    class="navbar-collapse flex-row-reverse"
+                    [class.collapse]="level2Collapsed"
+                    >
+                    <app-menu-right [menus]="menus"></app-menu-right>
+                  </div>
+                }
+              </div>
+            </nav>
+          </div>
+        </div>
+      </div>

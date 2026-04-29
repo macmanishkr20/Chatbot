@@ -1,0 +1,46 @@
+.inpage {
+    .nav-tabs {
+       border: none;
+       background-color: $tab-background;
+       margin-top: 0;
+       .nav-item {
+           margin-bottom: 0;
+           min-width: 8rem;
+           .nav-link {
+               border: none;
+               border-top-left-radius: 0;
+               border-top-right-radius: 0;
+               
+           }
+           a {
+               color: black;
+               text-align: center;
+            }
+           .nav-link.active {
+               background-color: $tab-background;
+            //    border-bottom: solid .2rem black;
+               font-weight: 500;
+           }
+       }
+   }   
+
+   
+}
+
+.nav-inpage-bottom {
+    @extend .inpage;
+    .nav-item {
+        .nav-link.active {
+            border-bottom: solid .2rem $primary-color;
+        }
+    }
+}
+
+.nav-inpage-top {
+    @extend .inpage;
+    .nav-item {
+        .nav-link.active {
+            border-top: solid .2rem $primary-color;
+        }
+    }
+}

@@ -1,0 +1,48 @@
+<div class="modal-content">
+  <div class="modal-header">
+    <div class="col-sm-10">
+      <h1 class="modal-title fs-5">{{ title }}</h1>
+    </div>
+    <div class="text-end col-sm-2">
+      <button
+        type="button"
+        (click)="activeModal.close('cancel')"
+        aria-label="Close"
+        class="btn btn-modal-close"
+        *ngIf="showClose"
+      >
+        <i class="bi bi-x-circle"></i>
+      </button>
+    </div>
+  </div>
+  <div class="modal-body">
+    <p [innerHTML]="message"></p>
+  </div>
+  <div class="modal-footer">
+    <div class="ms-auto" *ngIf="type === 'alert'">
+      <button
+        type="button"
+        class="btn btn-primary me-2"
+        (click)="activeModal.close('ok')"
+      >
+        Ok
+      </button>
+    </div>
+    <div class="ms-auto d-flex" *ngIf="type === 'confirm'">
+      <button
+        type="button"
+        class="btn btn-secondary me-2"
+        (click)="passConfirmationBack(false)"
+      >
+        {{ noButtonText }}
+      </button>
+      <button
+        type="button"
+        class="btn btn-primary me-2"
+        (click)="passConfirmationBack(true)"
+      >
+        {{ yesButtonText }}
+      </button>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,35 @@
+.pagination {
+    flex-wrap: wrap;
+    .page-link{
+        border: none;
+        font-size: 0.75rem;
+        color: white;
+        padding-bottom: 0;
+        padding-top: ($pagination-padding-y * 2 - 0.3);
+        &:hover {
+            background-color: transparent;
+        }
+        &:focus{
+            box-shadow: none;
+        }
+    }
+    .page-item {
+         
+        &.active .page-link {
+            font-size: 0.75rem;
+            background-color: transparent;
+            border-color: transparent;
+            border-bottom: solid .2rem $primary-color;
+            color: white;
+            padding: $pagination-padding-y $pagination-padding-x;
+        }
+    }
+
+    .page-link.disabled, 
+    .disabled > .page-link {
+        color: var(--bs-pagination-disabled-color);
+        pointer-events: none;
+        background-color: var(--bs-pagination-transparent-bg);
+        border-color: var(--bs-pagination-transparent-border-color);
+    }
+}

@@ -1,0 +1,42 @@
+.timer {
+  .form-control[readonly] {
+    background-color: inherit;
+  }
+}
+
+.input-group,
+.timer {
+  .btn {
+    &.btn-outline-secondary,
+    &.btn-outline-primary {
+      border: 1px solid #ced4da;
+    }
+  }
+}
+.form-control[readonly] {
+  background-color: $app-secondary-color !important;
+}
+.modal-backdrop {
+  // height: 125vh!important;
+  // width: 125vw!important;
+}
+.form-control {
+  background-color: inherit !important;
+  padding: 0.5rem !important;
+}
+.input-group .input-group-left {
+  border-right: 0rem !important;
+}
+.input-group .input-group-text {
+  background-color: inherit !important;
+}
+.input-group .input-group-right {
+  border-left: 0rem !important;
+}
+
+.input-group .input-group-right-disabled {
+  background-color: $app-secondary-color !important;
+}
+.input-group .input-group-left-disabled {
+  background-color: $app-secondary-color !important;
+}

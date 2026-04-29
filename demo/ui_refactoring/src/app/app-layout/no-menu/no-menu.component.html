@@ -1,0 +1,36 @@
+<div class="seconday-menu d-flex flex-column border border-top-0 border-start-0 border-end-0 border-app">
+  <nav class="navbar navbar-expand-sm navbar-dark header nav-header p-0">
+    <div class="container-fluid align-items-center py-0 px-2">
+      @if (!onlyMenu) {
+      <a class="navbar-brand ps-1 py-0 m-0 d-inline-flex align-items-center" href="#">
+        <div class="d-inline-flex align-items-center gap-2">
+          <app-svg-icon name="logo" cssClass="app-logo logo-banner"
+          ariaLabel="MENA Chat BE Logo"></app-svg-icon>
+          <span class="logo-text text-white">{{ title }}</span>
+        </div>
+      </a>
+      }
+       <div class="navbar-collapse" [class.collapse]="level1Collapsed">
+          <ul class="navbar-nav ms-auto align-items-center">
+            <li class="nav-item" ngbDropdown display="dynamic" placement="bottom-end" #myDrop="ngbDropdown">
+              <a class="nav-link p-0 d-inline-flex align-items-center" ngbDropdownToggle (mouseover)="myDrop.open()">
+                @if (!hasAvatar) {
+                <div class="avatar text-center text-white rounded-circle d-inline-flex align-items-center justify-content-center">
+                  <i class="bi bi-person"></i>
+                </div>
+                }
+                @if (hasAvatar) {
+                <img [src]="userImage" class="avatar-img rounded-circle border shadow-sm border-primary" alt="" />
+                }
+              </a>
+
+              <div ngbDropdownMenu aria-labelledby="navbarDropdown3">
+                <a ngbDropdownItem (click)="$event.preventDefault()">Hi! {{ user?.fullName }}</a>
+                <input type="button" ngbDropdownItem (click)="logout()" value="Logout" />
+              </div>
+            </li>
+          </ul>
+        </div>
+    </div>
+  </nav>
+</div>

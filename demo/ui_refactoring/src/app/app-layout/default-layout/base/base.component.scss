@@ -1,0 +1,19 @@
+@import "../../../../theme/app";
+
+.avatar {
+  height: 1.8rem;
+  width: 1.8rem;
+  margin-top: 0.5rem;
+  background-color: $app-netural-background;
+}
+
+.avatar-img {
+  height: 2rem;
+  width: 2rem;
+  margin-top: 0.2rem;
+  border-width: 2px !important;
+}
+
+.seconday-menu .navbar-dark .navbar-nav .nav-item {
+  min-width: auto;
+}

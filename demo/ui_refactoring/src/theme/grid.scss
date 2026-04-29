@@ -1,0 +1,159 @@
+@use "./app.scss" as *;
+.cell-primary {
+  background-color: #f0f0f0 !important;
+  color: black !important;
+}
+
+.primay-text-hightlight {
+  color: $primary-color !important;
+  // font-weight: bold;
+}
+.cell-grand-total {
+  background-color: gold;
+  font-size: 9px;
+  font-weight: bold;
+  color: $app-primary-color;
+}
+.cell-total {
+  background-color: $app-primary-color;
+  color: $primary-color;
+  font-size: 9px;
+  //   @extend .font-sm;
+}
+.cell-item-name {
+  font-size: 9px;
+  background-color: $dark-card-bg;
+  text-wrap: normal;
+}
+.cell-item-value {
+  background-color: $app-backgrond;
+  font-size: 9px;
+  text-wrap: normal;
+}
+.cell-child {
+  background-color: $select-border-color;
+  color: $app-netural-font-color;
+  font-size: 9px;
+}
+
+.cell-dark {
+  font-family: EYInterstate !important;
+  background-color: $app-font-color !important;
+  color: $app-netural-font-color;
+  font-size: smaller;
+  border-bottom-color: color-mix(in srgb, transparent 85%, rgb(255, 255, 255));
+}
+
+.cell-danger {
+  // background-color: darkred;
+  color: white;
+  font-size: smaller;
+  color: #ff4336 !important;
+  font-weight: none !important;
+  font-family: EYInterstate !important;
+}
+
+.cellheader {
+  font-weight: bold;
+}
+
+.row-footer {
+  background-color: $app-footer-background !important;
+  color: $app-netural-font-color;
+  font-weight: bold;
+}
+
+.row-footer-highlight {
+  background-color: black !important;
+  color: $app-netural-font-color;
+  font-weight: bold;
+}
+
+.column-blk-highlight {
+  background-color: black !important;
+}
+
+.pinned-column {
+  background-color: #23232f;
+}
+.pinned-column-primary-highlight {
+  background-color: #23232f;
+  @extend .primay-text-hightlight;
+}
+.unpinned-column {
+  background-color: #1a1a24;
+}
+
+.cell-item-name-highlight {
+  font-size: 9px;
+  background-color: $dark-card-bg;
+  font-weight: bold;
+}
+
+.cell-border-right {
+  border-right-width: 1px;
+  border-right-style: solid;
+}
+
+.cell-item-primary {
+  font-family: EYInterstate !important;
+  background-color: $primary-color;
+  font-size: smaller;
+  font-weight: bold;
+  color: $app-primary-color;
+  border-right-color: color-mix(
+    in srgb,
+    transparent 85%,
+    rgb(0, 0, 0)
+  ) !important;
+  // @extend .cell-border-right;
+}
+
+.cell-item {
+  font-family: EYInterstate !important;
+  color: $app-netural-font-color;
+  font-size: smaller;
+  border-right-color: color-mix(in srgb, transparent 85%, rgb(255, 255, 255));
+  // @extend .cell-border-right;
+}
+
+.cell-clip {
+  background-clip: padding-box;
+  // padding: 0.01em;
+}
+
+.header-text {
+  font-size: small;
+  font-family: EYInterstate !important;
+}
+
+.text-center {
+  text-align: center;
+}
+
+// #cashflowGrid .ag-header-cell-label {
+//   justify-content: center !important;
+//   text-align: center !important;
+// }
+
+#cashflowGrid .header-center .ag-header-cell-label,
+#cashflowGrid .header-center .ag-header-group-cell-label {
+  justify-content: center !important;
+  text-align: center !important;
+}
+
+.cell-item-highlight {
+  // font-size: 12px !important;
+  background-color: $dark-card-bg;
+  // font-weight: bold;
+  color: red;
+}
+
+// .cell-phase-conflict {
+//   background-color: #ffcc00;
+//   color: black !important;
+// }
+// .cell-duration-conflict {
+//   background-color: #ffff00;
+//   color: black !important;
+// }

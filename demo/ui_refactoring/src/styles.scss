@@ -1,0 +1,312 @@
+/* You can add global styles to this file, and also import other style files */
+
+/* Importing Bootstrap SCSS file. */
+@use "../node_modules/bootstrap/scss/bootstrap";
+
+@use "./theme/app" as *;
+
+@use "./theme/grid.scss" as *;
+
+.fs-7 {
+  font-size: 0.7rem;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+
+// ---------------------------------------------------------------------------
+// Font-weight enforcement — overrides Bootstrap defaults app-wide.
+// Convention: Light (300) for all body/inline text, Regular (400) for titles.
+// ---------------------------------------------------------------------------
+
+// Body-level elements — ensure Light across the board
+body, p, span, div, li, td, th,
+input, textarea, select, button,
+label, legend, small, blockquote {
+  font-weight: 300;
+}
+
+// Headings and title classes — Regular
+h1, h2, h3, h4, h5, h6,
+.heading, .title,
+.card-title, .modal-title,
+.nav-link, .breadcrumb-item,
+.badge, .alert-heading {
+  font-weight: 400;
+}
+
+// Explicit bold/semibold helpers — keep at Regular (400) rather than Bootstrap's 700/600
+strong, b, .fw-bold, .fw-semibold, .fw-bolder { 
+  font-weight: 400 !important; 
+}
+
+.border-app {
+  border: thin solid #31313d;
+}
+
+.tooltip {
+  --bs-tooltip-bg: #000000;
+  --bs-tooltip-color: #ffffff;
+}
+.form-control-sm{
+  font-size: 0.75rem;
+}
+
+.logo-banner svg {
+    width: 0.75em !important;
+    height: 0.75em !important;
+    line-height: 1;
+    fill: currentColor !important;
+  }
+// Bootstrap 5 removed automatic .form-group margin — restore vertical rhythm
+.form-group {
+  margin-top: 0.75rem;
+  &:first-child {
+    margin-top: 0;
+  }
+}
+
+button.btn:not(.btn-modal-close):not(.btn-icon):not(.btn-sm):not([class*="btn-link"]) {
+    font-size: .875rem;
+    line-height: 1.375rem;
+    transition: all .3s ease;
+    border-radius: 0;
+    border: .0625rem solid transparent;
+    vertical-align: middle;
+    min-width: 6.875rem;
+    cursor: pointer;
+    box-shadow: none;
+}
+.ng-select .ng-select-container .ng-value-container .ng-input > input{
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+// Icon/close buttons — must not inherit min-width or forced color
+.btn-modal-close {
+    min-width: unset !important;
+    width: 2rem;
+    height: 2rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.65) !important;
+    background: transparent;
+    border: none;
+
+    &:hover {
+        color: #fff !important;
+    }
+}
+// ---------------------------------------------------------------------------
+// .table-dark shared overrides — used by feedback-grid and access-control.
+// Removes Bootstrap's default bg/border so components can set their own panel
+// background, and enforces app font-weight conventions on headers/rows.
+// ---------------------------------------------------------------------------
+.table-dark {
+  --bs-table-bg: transparent;
+  --bs-table-border-color: rgba(255, 255, 255, 0.07);
+
+  thead th {
+    font-size: 0.75rem;
+    font-weight: 400; // Regular for column headers (title convention)
+    letter-spacing: 0.6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  tbody tr {
+    font-size: 0.75rem;
+    &:last-child td { border-bottom: none; }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// ngb-typeahead dropdown — override transparent background in dark theme.
+// Bootstrap's dark theme sets --bs-body-bg to a dark value but the typeahead
+// popup can render transparent. Force a solid dark background.
+// ---------------------------------------------------------------------------
+ngb-typeahead-window.dropdown-menu {
+  background-color: #23232f !important;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  padding: 0.25rem 0;
+
+  // CSS variable approach — ensures all Bootstrap states use same padding
+  --bs-dropdown-item-padding-x: 0.75rem;
+  --bs-dropdown-item-padding-y: 0.4rem;
+
+  button.dropdown-item {
+    @extend .form-control-sm;
+    color: rgba(255, 255, 255, 0.65);
+    font-weight: 300;
+    outline: none;
+    box-shadow: none;
+    // Flatten custom result-template wrappers — prevent extra indentation
+    > * {
+      margin: 0;
+      padding: 5px;
+      width: 100%;
+    }
+
+    &:hover, &:focus, &.active {
+      background-color: rgba(255, 255, 255, 0.1);
+      color: rgba(255, 255, 255, 0.9);
+      outline: none;
+      box-shadow: none;
+    }
+  }
+}
+
+// Soften typed text in form inputs — dark theme --bs-body-color (#dee2e6) is too bright
+[data-bs-theme="dark"] .form-control {
+  color: rgba(255, 255, 255, 0.62) !important;
+}
+
+
+// ---------------------------------------------------------------------------
+// .markdown-body — global styles for rendered markdown (chat, admin, etc.)
+// Font weights follow app convention: Light (300) body, Regular (400) headings.
+// ---------------------------------------------------------------------------
+.markdown-body {
+  word-break: break-word;
+  overflow-wrap: break-word;
+  overflow: hidden;
+  min-width: 0;
+  width: 100%;
+  white-space: normal;
+
+  // Base — inherit app font so markdown never overrides the design system
+  font-size: inherit;
+  font-family: inherit;
+  font-weight: inherit;
+  line-height: 1.6;
+
+  // Paragraphs
+  p {
+    margin: 0 0 0.75em;
+    &:last-child { margin-bottom: 0; }
+  }
+
+  // Headings — Regular weight, matching app h1–h6 convention
+  h1 { 
+    font-size: 1.25em; 
+    font-weight: 400; 
+    margin: 0.75em 0 0.75em; 
+  }
+  h2 { 
+    font-size: 1.15em; 
+    font-weight: 400; 
+    margin: 0.65em 0 0.65em; 
+  }
+  h3 { 
+    font-size: 1.05em; 
+    font-weight: 400; 
+    margin: 0.55em 0 0.55em; 
+  }
+  h4, h5, h6 { 
+    font-size: 1em; 
+    font-weight: 400; 
+    margin: 0.5em 0 0.5em; 
+  }
+
+  // First heading — no extra top margin
+  h1:first-child, h2:first-child, h3:first-child,
+  h4:first-child, h5:first-child, h6:first-child { 
+    margin-top: 0; 
+  }
+
+  // Lists
+  ul, ol {
+    margin: 0.25em 0 0.5em 0;
+    padding-left: 1.4em;
+  }
+  li {
+    margin-bottom: 0.5em;
+    line-height: 1.6;
+    > p { 
+      margin: 0; 
+    }
+  }
+  li + li { 
+    margin-top: 0.5em; 
+  }
+
+  // Inline emphasis — Regular for bold (body is Light/300, so 400 is visually distinct)
+  strong, b { 
+    font-weight: 400; 
+  }
+  em, i { 
+    font-style: italic; 
+  }
+
+  // Inline code
+  code {
+    font-family: 'Cascadia Code', 'Consolas', 'Menlo', monospace;
+    font-size: 0.875em;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+    padding: 0.1em 0.35em;
+    word-break: break-word;
+  }
+
+  // Code blocks
+  pre {
+    margin: 0.5em 0;
+    padding: 0.75em 1em;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    overflow-x: auto;
+
+    code {
+      background: none;
+      padding: 0;
+      font-size: 0.85em;
+      white-space: pre;
+      word-break: normal;
+    }
+  }
+
+  // Blockquote
+  blockquote {
+    margin: 0.4em 0;
+    padding: 0.3em 0.75em;
+    border-left: 3px solid rgba(255, 255, 255, 0.25);
+    color: rgba(255, 255, 255, 0.7);
+    font-style: italic;
+  }
+
+  // Horizontal rule
+  hr {
+    border: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.15);
+    margin: 0.75em 0;
+  }
+
+  // Links
+  a {
+    color: #a8c8f8;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    word-break: break-all;
+    &:hover { color: #c8dcff; }
+  }
+
+  // Tables
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0.5em 0;
+    font-size: 0.9em;
+  }
+  th, td {
+    padding: 0.35em 0.6em;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    text-align: left;
+  }
+  th { 
+    background: rgba(255, 255, 255, 0.06); 
+    font-weight: 400; 
+  }
+}

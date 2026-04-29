@@ -1,0 +1,58 @@
+@import "../../../theme/app";
+
+.avatar {
+  height: 1.5rem;
+  width: 1.5rem;
+  background-color: $app-netural-background;
+}
+
+.avatar-img {
+  height: 1.5rem;
+  width: 1.5rem;
+  border-width: 2px !important;
+}
+
+.seconday-menu .navbar-dark {
+  min-width: auto;
+  min-height: 2rem;
+  padding-top: 0.15rem;
+  padding-bottom: 0.15rem;
+  // Match banner.png — dark left fading into deep indigo/purple on the right
+  background: linear-gradient(
+    90deg,
+    #1c1c2b 0%,
+    #2a2542 45%,
+    #3d2f6a 80%,
+    #4b3a8a 100%
+  );
+}
+
+.seconday-menu .container-fluid {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.seconday-menu .navbar-brand {
+  margin-right: 0;
+}
+
+.seconday-menu app-svg-icon.app-logo {
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+}
+
+.seconday-menu app-svg-icon.app-logo ::ng-deep svg {
+  width: 1rem;
+  height: 1rem;
+  display: block;
+}
+
+.seconday-menu .logo-text {
+  font-size: 0.7rem;
+  font-weight: 600 !important;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}

@@ -1,0 +1,55 @@
+@use './../../../../../../theme/app' as *;
+.feedback-form-container {
+    width: 100%;
+    animation: slideDown 0.2s ease-out;
+
+    .form-control,
+    .form-select {
+        &:focus {
+            background-color: $app-secondary-color;
+            color: #fff;
+            box-shadow: 0 0 0 0.2rem rgba(100, 98, 103, 0.25);
+        }
+    }
+
+    textarea.form-control {
+        resize: vertical;
+        min-height: 80px;
+        font-size: 0.75rem;
+
+        &::placeholder {
+            color: #fff;
+        }
+    }
+
+    // Tag buttons with embedded radio indicator
+    .tag-radio-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+        user-select: none;
+
+        .tag-radio-input {
+            width: 0.8rem;
+            height: 0.8rem;
+            flex-shrink: 0;
+            cursor: pointer;
+            accent-color: #fff;
+            margin: 0;
+        }
+    }
+
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

@@ -1,0 +1,118 @@
+<div class="chat-container">
+
+    <!-- New Side bar -->
+    <input id="navCollapse" type="checkbox" 
+    class="d-none" 
+    aria-hidden="true" 
+    [checked]="sidebarCollapsed" />
+
+    <aside class="sidebar">
+        <!-- TOP: brand + collapse/expand -->
+        <div class="sidebar-top d-flex align-items-center gap-2 px-3 py-2">
+            
+            <!-- Collapse/Expand toggle -->
+            <label for="navCollapse"
+             class="sidebar-toggle d-inline-flex border-0 align-items-center justify-content-center gap-1 cursor-pointer"
+             aria-label="Collapse or expand sidebar"
+             title="Collapse/Expand">
+             <app-svg-icon name="sidebar-collapse" cssClass="collapse-icon flex-shrink-0"
+             ariaLabel="Collapse or expand sidebar"></app-svg-icon>
+            </label>
+        </div>
+
+        <!-- MIDDLE: scrollable sections -->
+        <nav class="sidebar-scroll flex-grow-1 overflow-auto px-2 py-2">
+            <ul class="list-unstyled mb-0">
+                @for(item of sidebarStore.chatSidebarItems(); track item.id) {
+                    <ng-container
+                        *ngTemplateOutlet="navItemTemplate; context: { $implicit: item, level: 0 }" />
+                }
+            </ul>
+        </nav>
+
+        <!-- Recursive navigation item template -->
+        <ng-template #navItemTemplate let-item let-level="level">
+            <li class="mb-1">
+                <!-- ACTION TYPE -->
+                @if(item.type === 'action' && item.showInSidebar) {
+                <a class="nav-link d-flex align-items-center gap-2 py-2 rounded cursor-pointer"
+                   [class.active]="sidebarStore.isActive(item.id)"
+                   [ngClass]="getItemClasses(level)"
+                   [attr.title]="item.name"
+                   (click)="item.action?.()">
+                    <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
+                        [ariaLabel]="item.name"></app-svg-icon>
+                    <span class="text-truncate cursor-pointer">{{ item.name }}</span>
+                </a>
+                }
+
+                <!-- LINK TYPE -->
+                @if(item.type === 'link' && item.showInSidebar) {
+                <a [routerLink]="item.path"
+                   class="nav-link d-flex align-items-center gap-2 py-2 rounded cursor-pointer"
+                   [class.active]="sidebarStore.isActive(item.id)"
+                   [ngClass]="getItemClasses(level)"
+                   [attr.title]="item.name">
+                    <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
+                        [ariaLabel]="item.name"></app-svg-icon>
+                    <span class="text-truncate cursor-pointer">{{ item.name }}</span>
+                </a>
+                }
+
+                <!-- GROUP TYPE (expandable with children) -->
+                @if(item.type === 'group' && item.showInSidebar) {
+                <details class="section"
+                         [class.nested-section]="level > 0"
+                         [attr.open]="item.expanded?.() ? '' : null"
+                         (toggle)="sidebarStore.toggleConversation(item, $event)">
+                    <summary class="section-summary d-flex align-items-center gap-2 py-2 rounded"
+                             [ngClass]="getSummaryClasses(level)"
+                             [attr.title]="item.name">
+                        <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
+                            [ariaLabel]="item.name" 
+                            (click)="onGroupLabelClick(item, $event)"></app-svg-icon>
+                        <span class="text-truncate cursor-pointer"
+                              (click)="onGroupLabelClick(item, $event)">{{ item.name }}</span>
+                        <i class="bi bi-chevron-right chevron ms-auto"></i>
+                    </summary>
+                    @if(item.expanded?.() && item.children?.()) {
+                    <div class="conversation-list">
+                        <ul class="nav flex-column mt-1 mb-2">
+                            @for(child of (item.children?.() ?? []); track child.id) {
+                                <ng-container
+                                    *ngTemplateOutlet="navItemTemplate; context: { $implicit: child, level: level + 1 }" />
+                            }
+                        </ul>
+                        <!-- Load more button for conversations -->
+                        @if(item.code === SidebarCodes.ChatHistory && chatStore.hasMoreConversations()) {
+                        <div class="d-grid mt-2 px-2">
+                            <button type="button"
+                                    class="btn btn-sm btn-outline-light"
+                                    [disabled]="chatStore.loadingConversations()"
+                                    (click)="onLoadMoreConversations()">
+                                @if(chatStore.loadingConversations()) {
+                                Loading...
+                                } @else {
+                                Load more
+                                }
+                            </button>
+                        </div>
+                        } @else if(item.code === SidebarCodes.ChatHistory && chatStore.loadingConversations()) {
+                        <div class="text-center text-secondary py-2 small">Loading conversations...</div>
+                        }
+                    </div>
+                    }
+                </details>
+                }
+            </li>
+        </ng-template>
+
+        <!-- BOTTOM: user info -->
+        <div class="sidebar-bottom d-flex align-items-center gap-2 px-3 py-2">
+            
+        </div>
+    </aside>
+<div class="main flex-grow-1 w-100">
+    <router-outlet></router-outlet>
+</div>
+</div>

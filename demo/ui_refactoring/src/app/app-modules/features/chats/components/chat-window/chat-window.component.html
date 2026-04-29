@@ -1,0 +1,47 @@
+<div class="chat-messages" #messagesContainer (scroll)="onMessageScroll($event)">
+    @if(loadingOlderMessages){
+        <div class="text-center mb-3">
+            <span class="spinner-border spinner-border-sm" role="status"></span>
+            <span class="ms-2">Loading older messages...</span>
+        </div>
+    }
+   
+    @for(message of chatStore.messages(); track (message.trackId ?? message.messageId || $index)){
+        <app-chat-message 
+            [message]="message" 
+            [attr.data-role]="message.role"
+            [actionsFor]="['Assistant']" 
+            [feedbackConfig]="feedbackFormConfig()"
+            (like)="onLike($event)"
+            (feedbackSubmit)="onFeedbackSubmit($event)"
+            (more)="onMore($event)" 
+            [user]="chatStore.authUser()">
+        </app-chat-message>
+        }
+        @if(chatStore.loading() && !chatStore.messages().some(m => m.isStreaming)) {
+        <div class="d-flex gap-2 align-items-start my-2">
+            <app-svg-icon name="logo" 
+            cssClass="rounded-circle object-fit-cover flex-shrink-0" 
+            ariaLabel="Thinking indicator"></app-svg-icon>
+            <div class="chat-bubble d-inline-block border rounded-2 p-2 shadow-sm app-bg-secondary">
+                <div class="thinking-indicator">
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-label">{{ thinkingLabel() }}</span>
+                </div>
+            </div>
+        </div>
+        }
+        @if(chatStore.messages().some(m => m.isStreaming && m.isThinking)) {
+        <div class="d-flex gap-2 align-items-start my-2">
+            <app-svg-icon name="logo" 
+            cssClass="rounded-circle object-fit-cover flex-shrink-0" 
+            ariaLabel="Thinking indicator"></app-svg-icon>
+            <div class="chat-bubble d-inline-block border rounded-2 p-2 shadow-sm app-bg-secondary">
+                <div class="thinking-indicator">
+                    <span class="thinking-dot"></span>
+                    <span class="thinking-label">Generating...</span>
+                </div>
+            </div>
+        </div>
+        }
+</div>

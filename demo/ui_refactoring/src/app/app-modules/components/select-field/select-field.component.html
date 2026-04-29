@@ -1,0 +1,12 @@
+<div class="form-group">
+  <label>{{ label }}</label>
+  <ng-select
+    [bindLabel]="bindLabel"
+    [searchable]="searchable"
+    [clearable]="clearable"
+    [items]="items"
+    placeholder="{{ placeholder }}"
+    (change)="onSelectionChange($event)"
+  >
+  </ng-select>
+</div>

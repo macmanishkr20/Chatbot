@@ -1,0 +1,91 @@
+<form [formGroup]="userForm" (ngSubmit)="onSubmit()">
+    <div class="modal-header">
+        <div class="col-sm-10">
+            <h1 class="modal-title fs-5">{{action}} User</h1>
+        </div>
+        <div class="text-end col-sm-2">
+            <button type="button" (click)="activeModal.close('cancel')" 
+                    aria-label="Close" class="btn btn-modal-close">
+                <i class="bi bi-x-circle"></i>
+            </button>
+        </div>
+    </div>
+    <div class="modal-body">
+
+        <div class="row">
+            <div class="col-lg-6 col-md-6">
+                <!-- text field for Email starts here -->
+                <div class="form-group">
+                    <label for="user"> Email</label>
+                    <input type="text" class="form-control form-control-sm" formControlName="user"
+                        [ngbTypeahead]="searchEmail" [editable]='false' [inputFormatter]="inputFormatterName"
+                        [resultTemplate]="rt" [ngClass]="{ 'is-invalid':(form['user'].touched && form['user'].errors)}"
+                        maxlength="50" name="user">
+                    <ng-template #rt let-r="result" let-t="term">
+                        <div class="d-flex flex-column">
+                            <div>
+                                <span>{{ r.mail }}</span>
+                            </div>
+                        </div>
+                    </ng-template>
+                    <span class="error" *ngIf="(form['user'].touched && form['user'].errors)  ">
+                        Email is required
+                    </span>
+                </div>
+
+            </div>
+            <div class="col-lg-6 col-md-6">
+                <!-- role dropdown starts here -->
+                <div class="form-group">
+                    <label for="role">Role</label>
+                    <ng-select
+                        labelForId="role"
+                        [items]="roles"
+                        bindLabel="name"
+                        formControlName="role"
+                        [compareWith]="compareModel"
+                        placeholder="Select"
+                        [searchable]="true"
+                        [ngClass]="{'is-invalid': form['role'].touched && form['role'].invalid}">
+                    </ng-select>
+                    <span class="error" *ngIf="form['role'].touched && form['role'].invalid">
+                        Role is required
+                    </span>
+                </div>
+            </div>
+            <div class="col-lg-6 col-md-6 mt-2">
+                <!-- text field for FirstName starts here -->
+                <div class="form-group">
+                    <label for="firstName"> First Name</label>
+                    <input type="text" class="form-control form-control-sm" formControlName="firstName"
+                        [ngClass]="{ 'is-invalid':(form['firstName'].touched && form['firstName'].errors)}"
+                        maxlength="50" name="firstName">
+                    <span class="error" *ngIf="(form['firstName'].touched && form['firstName'].errors)  ">
+                        First name is required
+                    </span>
+                </div>
+
+            </div>
+            <div class="col-lg-6 col-md-6 mt-2">
+                <!-- text field for LastName starts here -->
+                <div class="form-group">
+                    <label for="lastName"> Last Name</label>
+                    <input type="text" class="form-control form-control-sm" formControlName="lastName"
+                        [ngClass]="{ 'is-invalid':(form['lastName'].touched && form['lastName'].errors)}"
+                        maxlength="50" name="lastName">
+                    <span class="error" *ngIf="(form['lastName'].touched && form['lastName'].errors)  ">
+                        Last name is required
+                    </span>
+                </div>
+
+            </div>
+        </div>
+
+    </div>
+    <div class="modal-footer d-flex justify-content-center">
+        <button type="button" class="btn btn-outline-secondary" ngbAutofocus
+            (click)="activeModal.close('cancel')">Cancel</button>
+        <button type="submit" class="btn btn-primary" [disabled]="userForm.invalid || showLoader"
+            loader-button>Save</button>
+    </div>
+</form>

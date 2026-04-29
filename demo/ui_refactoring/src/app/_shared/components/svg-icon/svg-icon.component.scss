@@ -1,0 +1,17 @@
+:host {
+  display: inline-flex;
+  line-height: 0;
+}
+
+.app-svg-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  ::ng-deep svg {
+    width: 1.25em;
+    height: 1.25em;
+    fill: currentColor;
+  }
+
+}

@@ -1,0 +1,7 @@
+@use "../app";
+
+.card {
+  &.bg-dark {
+    background-color: $dark-card-bg !important;
+  }
+}
