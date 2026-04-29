@@ -16,12 +16,13 @@ import { MessageBubbleComponent } from '../message-bubble/message-bubble.compone
 import { ChatInputComponent } from '../chat-input/chat-input.component';
 import { ExportMenuComponent } from '../export-menu/export-menu.component';
 import { FunctionChipsComponent } from '../function-chips/function-chips.component';
+import { MapBackdropComponent } from '../map-backdrop/map-backdrop.component';
 import { SuggestiveAction } from '../../models/chat.models';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, MessageBubbleComponent, ChatInputComponent, ExportMenuComponent, FunctionChipsComponent],
+  imports: [CommonModule, MessageBubbleComponent, ChatInputComponent, ExportMenuComponent, FunctionChipsComponent, MapBackdropComponent],
   templateUrl: './chat-window.component.html',
   styleUrl: './chat-window.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,

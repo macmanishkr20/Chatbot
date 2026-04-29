@@ -21,6 +21,8 @@
   gap: 8px;
   flex-shrink: 0;
   padding-bottom: 6px;
+  position: relative;
+  z-index: 1;
 }
 
 .input-hint {
@@ -175,6 +177,7 @@
   overflow-y: auto;
   scroll-behavior: smooth;
   position: relative;
+  z-index: 1;
   background: transparent;
 }
 
