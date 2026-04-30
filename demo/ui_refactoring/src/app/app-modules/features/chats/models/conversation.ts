@@ -12,6 +12,11 @@ export interface ConversationsVM {
     clientType: ChannelType;
     createdAt: Date | string;
     modifiedAt?: Date | string;
+    /**
+     * Original LangGraph chat_session_id from menabot-ui's backend.
+     * Used to restore the LangGraph thread for edit/regenerate.
+     */
+    chatSessionId?: string | null;
 }
 
 export interface ConversationRequestVM extends PaginationVM {

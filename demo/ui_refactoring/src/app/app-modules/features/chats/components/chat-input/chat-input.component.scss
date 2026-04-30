@@ -157,6 +157,74 @@
   }
 }
 
+/* Selected MENA function pill (above the input) */
+.selected-fn-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin: 0 0 8px 8px;
+  border-radius: 999px;
+  background: rgba(255, 230, 0, 0.12);
+  border: 1px solid rgba(255, 230, 0, 0.5);
+  color: #fff;
+  font-size: 0.7rem;
+
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #ffe600;
+    box-shadow: 0 0 6px rgba(255, 230, 0, 0.6);
+  }
+
+  .code {
+    font-weight: 700;
+  }
+
+  .full {
+    color: rgba(255, 255, 255, 0.75);
+    font-size: 0.65rem;
+  }
+
+  .clear-btn {
+    margin-left: 4px;
+    border: 0;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+
+    &:hover { color: #fff; }
+  }
+}
+
+/* Stop / cancel button while streaming */
+.cancel-btn {
+  color: #ff6b6b;
+
+  .stop-icon {
+    font-size: 22px;
+  }
+}
+
+.input-hint {
+  margin-top: 6px;
+  text-align: center;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.45);
+
+  kbd {
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: rgba(255, 255, 255, 0.85);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.6rem;
+  }
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .chat-input-wrapper {

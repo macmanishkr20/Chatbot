@@ -5,70 +5,159 @@
 
         <!-- Avatar -->
         @if(!isUser()) {
-        <app-svg-icon name="logo" cssClass="rounded-circle object-fit-cover flex-shrink-0 avatar"
-            [ariaLabel]="(message.name || 'Assistant') + ' avatar'"></app-svg-icon>
-
+            <app-svg-icon name="logo" cssClass="rounded-circle object-fit-cover flex-shrink-0 avatar"
+                [ariaLabel]="(message.name || 'Assistant') + ' avatar'"></app-svg-icon>
         }
-
 
         <!-- Message bubble & meta -->
         <div class="message-wrapper d-flex flex-column"
-            [ngClass]="{'align-items-end': isUser(), 'align-items-start': !isUser()}">
+             [ngClass]="{'align-items-end': isUser(), 'align-items-start': !isUser()}">
+
+            <!-- ── User message: inline edit form ── -->
+            @if (isUser() && message.isEditing) {
+                <div class="edit-form chat-bubble rounded-2 p-2">
+                    <textarea
+                        class="form-control form-control-sm edit-textarea"
+                        [(ngModel)]="editBuffer"
+                        (keydown.control.enter)="doSubmitEdit()"
+                        rows="3"></textarea>
+                    <div class="edit-actions d-flex gap-2 mt-2">
+                        <button type="button" class="btn btn-sm btn-warning" (click)="doSubmitEdit()">Save &amp; Submit</button>
+                        <button type="button" class="btn btn-sm btn-outline-light" (click)="doCancelEdit()">Cancel</button>
+                    </div>
+                </div>
+            } @else {
 
             <!-- The bubble itself -->
-            <!-- <span class="text-muted app-font-sm">{{ getTimeStamp() }}</span> -->
-            <div class="chat-bubble d-inline-block rounded-2 p-2 text-wrap
-                text-break">
+            <div class="chat-bubble d-inline-block rounded-2 p-2 text-wrap text-break">
+
+                <!-- ── Assistant: thinking + deep search panels ── -->
+                @if (!isUser() && message.thinkingSteps && message.thinkingSteps.length > 0) {
+                    <app-thinking-panel
+                        [steps]="message.thinkingSteps"
+                        [collapsed]="message.thinkingCollapsed ?? false" />
+                }
+                @if (!isUser() && message.deepSearchSteps && message.deepSearchSteps.length > 0) {
+                    <app-deep-search-panel
+                        [steps]="message.deepSearchSteps"
+                        [collapsed]="message.deepSearchCollapsed ?? false"
+                        [isSearching]="message.isStreaming ?? false" />
+                }
 
                 <!-- Message content -->
                 <div class="text-white app-font-sm pre-wrap gap-2 d-flex justify-content-start align-items-start">
                     @if(message.avatarUrl || isUser()){
-                    @if(userImage) {
-                    <img [src]="userImage" [alt]="(message.name || 'You') + ' avatar'"
-                        class="rounded-circle object-fit-cover flex-shrink-0 user-avatar" />
+                        @if(userImage) {
+                            <img [src]="userImage" [alt]="(message.name || 'You') + ' avatar'"
+                                class="rounded-circle object-fit-cover flex-shrink-0 user-avatar" />
+                        } @else {
+                            <div class="rounded-circle bg-secondary d-inline-flex align-items-center
+                                        justify-content-center text-dark fw-semibold" style="width:32px;height:32px;">
+                                {{ userInitials }}
+                            </div>
+                        }
+                    }
+
+                    @if (isUser()) {
+                        <div class="markdown-body">{{ message.content ?? message.answer }}</div>
                     } @else {
-                    <div class="rounded-circle bg-secondary d-inline-flex align-items-center 
-                            justify-content-center text-dark fw-semibold" style="width:32px;height:32px;">
-                        {{ userInitials }}
+                        <div class="markdown-body" [class.streaming]="message.isStreaming"
+                             [innerHTML]="displayContent | safeMarkdown"></div>
+                    }
+                </div>
+
+                <!-- Streaming dots when assistant has no content yet -->
+                @if (!isUser() && message.isStreaming && !(message.content ?? message.answer)) {
+                    <div class="streaming-indicator">
+                        <span class="dot"></span>
+                        <span class="dot"></span>
+                        <span class="dot"></span>
                     </div>
-                    }
-                    }
-                    <div class="markdown-body" [innerHTML]="message.content | safeMarkdown"></div>
-
-                </div>
-
-                <!-- Action buttons at bottom-left -->
-                @if (showActions(message)) {
-                <div class="message-actions d-flex align-items-center gap-1 mt-2 pt-2">
-                    <button type="button" class="btn btn-sm btn-link text-light p-1" title="Like"
-                        (click)="onLike(message)" [disabled]="message.hasFeedback">
-                        @if(!message.hasFeedback || !message.isLiked){
-                        <app-svg-icon name="thumps-up-outline"
-                            [ariaLabel]="(message.isLiked && message.hasFeedback) ? 'Liked' : 'Like'"></app-svg-icon>
-                        }
-
-                        @if(message.isLiked && message.hasFeedback) {
-                        <app-svg-icon name="thumps-up-filled" [ariaLabel]="'Liked'"></app-svg-icon>
-                        }
-                        <!-- <i class="bi" [ngClass]="{'bi-hand-thumbs-up': !message.isLiked || !message.hasFeedback, 
-                                       'bi-hand-thumbs-up-fill': message.isLiked && message.hasFeedback}"></i> -->
-                    </button>
-                    <button type="button" class="btn btn-sm btn-link text-light p-1" title="Dislike"
-                        (click)="onDislike()" [disabled]="message.hasFeedback">
-                        @if(!message.hasFeedback || message.isLiked){
-                        <app-svg-icon name="thumps-down-outline"
-                            [ariaLabel]="(!message.isLiked && message.hasFeedback) ? 'Disliked' : 'Dislike'"></app-svg-icon>
-                        }
-                        @if(!message.isLiked && message.hasFeedback) {
-                        <app-svg-icon name="thumps-down-filled" [ariaLabel]="'Disliked'"></app-svg-icon>
-                        }
-                        <!-- <i class="bi" [ngClass]="{'bi-hand-thumbs-down': message.isLiked || !message.hasFeedback, 
-                                       'bi-hand-thumbs-down-fill': !message.isLiked && message.hasFeedback}"></i> -->
-                    </button>
-                </div>
                 }
 
+                <!-- ── Citations (assistant only) ── -->
+                @if (!isUser() && hasCitations && !message.isStreaming) {
+                    <div class="citations-section mt-2">
+                        <button type="button" class="citations-header" (click)="toggleCitations()">
+                            <span class="citations-header-left">
+                                <i class="bi bi-link-45deg"></i>
+                                <span class="ms-1">Citations</span>
+                            </span>
+                            <i class="bi bi-chevron-down citations-chevron"
+                               [class.expanded]="citationsExpanded()"></i>
+                        </button>
+                        @if (citationsExpanded()) {
+                            <div class="citations-body">
+                                @for (cite of citations; track cite.source) {
+                                    @if (cite.isUrl) {
+                                        <a class="citation-link" [href]="cite.source" target="_blank" rel="noopener noreferrer">
+                                            @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ cite.source }}
+                                        </a>
+                                    } @else {
+                                        <span class="citation-doc">
+                                            @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ cite.source }}
+                                        </span>
+                                    }
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+
+                <!-- ── Action buttons at bottom-left ── -->
+                @if (showActions(message)) {
+                    <div class="message-actions d-flex align-items-center gap-1 mt-2 pt-2">
+                        <button type="button" class="btn btn-sm btn-link text-light p-1" title="Copy"
+                                (click)="copyContent()">
+                            <i class="bi bi-clipboard"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-link text-light p-1" title="Like"
+                                (click)="onLike(message)" [disabled]="message.hasFeedback">
+                            @if(!message.hasFeedback || !message.isLiked){
+                                <app-svg-icon name="thumps-up-outline"
+                                    [ariaLabel]="(message.isLiked && message.hasFeedback) ? 'Liked' : 'Like'"></app-svg-icon>
+                            }
+                            @if(message.isLiked && message.hasFeedback) {
+                                <app-svg-icon name="thumps-up-filled" [ariaLabel]="'Liked'"></app-svg-icon>
+                            }
+                        </button>
+                        <button type="button" class="btn btn-sm btn-link text-light p-1" title="Dislike"
+                                (click)="onDislike()" [disabled]="message.hasFeedback">
+                            @if(!message.hasFeedback || message.isLiked){
+                                <app-svg-icon name="thumps-down-outline"
+                                    [ariaLabel]="(!message.isLiked && message.hasFeedback) ? 'Disliked' : 'Dislike'"></app-svg-icon>
+                            }
+                            @if(!message.isLiked && message.hasFeedback) {
+                                <app-svg-icon name="thumps-down-filled" [ariaLabel]="'Disliked'"></app-svg-icon>
+                            }
+                        </button>
+                        @if (isLastAssistant) {
+                            <button type="button" class="btn btn-sm btn-link text-light p-1" title="Regenerate"
+                                    (click)="onRegenerate()">
+                                <i class="bi bi-arrow-clockwise"></i>
+                            </button>
+                        }
+                    </div>
+                }
+
+                <!-- ── User edit button ── -->
+                @if (isUser() && !message.isStreaming) {
+                    <div class="message-actions user-actions d-flex align-items-center gap-1 mt-2 pt-2">
+                        <button type="button" class="btn btn-sm btn-link text-light p-1" title="Edit message"
+                                (click)="startEdit()">
+                            <i class="bi bi-pencil-square"></i>
+                        </button>
+                    </div>
+                }
             </div>
+
+            <!-- Suggestive actions (assistant only, after streaming) -->
+            @if (!isUser() && message.suggestiveActions && message.suggestiveActions.length > 0 && !message.isStreaming) {
+                <app-suggestive-actions
+                    [actions]="message.suggestiveActions"
+                    (actionClicked)="onSuggestiveAction($event)" />
+            }
+            }
 
             <!-- Feedback popup template (opened via NgbModal) -->
             <ng-template #feedbackModalTpl let-modal>
@@ -85,3 +174,6 @@
                     </app-message-feedback-form>
                 </div>
             </ng-template>
+        </div>
+    </div>
+</div>

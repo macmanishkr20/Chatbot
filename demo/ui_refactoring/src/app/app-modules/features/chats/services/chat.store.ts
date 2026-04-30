@@ -1,592 +1,459 @@
 import { computed, inject, Injectable, signal } from '@angular/core';
-import { ActorType } from '../../../../_shared/constants/actor-type';
-import { ChatMessageDTO, ChatQueryDTO, ChatResponse } from '../models/chat.model';
-import { ChatService } from './chat.service';
-import { firstValueFrom } from 'rxjs';
 import { Router } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { AuthService } from '../../../../_shared/messaging-service/auth.service';
 import { AuthUser } from '../../../../_shared/messaging-service/auth-user';
-import { ConversationsVM } from '../models/conversation';
-import { MessageFeedbackVM, FeedbackResultVM, FeedbackDTO } from '../models/message-feedabck';
 import { FeedbackRating } from '../../../../_shared/constants/feedback-rating';
+import { ChatService } from './chat.service';
+import {
+  ChatResponse,
+  Citation,
+  DeepSearchEvent,
+  FinalEvent,
+  SSEEvent,
+  SuggestiveAction,
+  StoredConversation,
+  ThinkingStep,
+} from '../models/chat.model';
+import { ConversationsVM } from './../models/conversation';
+import { ChannelType } from '../../../../_shared/constants/channel-type';
+import { FeedbackDTO, FeedbackResultVM } from '../models/message-feedabck';
 import { ServiceHierarchyVM } from '../models/service-hierarchy';
 
-@Injectable({
-  providedIn: 'root',
-})
+/**
+ * Central chat state manager.
+ *
+ * This is a direct port of menabot-ui's `ChatService` (services/chat.service.ts),
+ * adapted to ui_refactoring's auth (`AuthService<AuthUser>`) and routing
+ * (`/features/page/chats/:id`). All /chat pipeline behaviour — streaming with
+ * smooth drip, thinking steps, deep search, edit, regenerate, cancel,
+ * suggestive actions, function chips, citations and feedback — matches
+ * menabot-ui exactly.
+ */
+@Injectable({ providedIn: 'root' })
 export class ChatStore {
-  /**
-   * The main store for chat state management. It holds the current messages, loading states, selected conversation, and list of conversations.
-   * It provides methods to manipulate this state and interact with the ChatService for API calls.
-   */
-  readonly messages = signal<ChatResponse[]>([]);
-  /**
-   * Enable/disable streaming for chat responses. Set to true to stream, false for normal requests.
-   */
-  readonly enableStreaming = signal(false);
-  /**
-   * Indicates if a chat message is currently being sent/processed. This can be used to show loading indicators in the UI and prevent duplicate sends.
-   */
-  readonly loading = signal(false);
-  /**
-   * The ID of the currently selected conversation. This is used to determine which conversation's messages 
-   * to display and where to send new messages. It can be null if no conversation is selected.
-   */
-  readonly selectedConversationId = signal<number | null>(null);
-
-  readonly selectedSessionId = signal<string | null>(null);
-
-  /**
-   * The list of chat conversations available to the user. 
-   * This is loaded from the backend and updated when new conversations are created. 
-   * Each conversation has an ID, name, and other metadata.
-   */
-  readonly chatConversations = signal<ConversationsVM[]>([]);
-  readonly hasMoreMessages = signal(false);
-  readonly hasMoreConversations = signal(false);
-  readonly loadingConversations = signal(false);
-  readonly feedbackResult = signal<FeedbackResultVM | null>(null);
-  readonly serviceHierarchies = signal<ServiceHierarchyVM[]>([]);
-  private hierarchiesLoaded = false;
-
-  private readonly pendingApiRequests = signal(0);
-  readonly isAPILoading = computed(() => this.pendingApiRequests() > 0);
-  private conversationLoadToken = 0;
-  private trackCounter = 0;
-  private readonly messagePageSize = 10;
-  private readonly conversationPageSize = 8;
-
-
-  // Injecting necessary services for API calls, routing, and authentication.
-  private chatService = inject(ChatService);
+  private readonly chatService = inject(ChatService);
   private readonly router = inject(Router);
   private readonly authService = inject(AuthService<AuthUser>);
 
+  // ── Reactive state (signals) ──
 
-  /**
-   * The currently authenticated user. This is used to associate messages with the user and 
-   * can be used for permission checks or displaying user info in the UI.
-   */
+  /** All messages in the current conversation. */
+  readonly messages = signal<ChatResponse[]>([]);
+
+  /** Conversation list (sidebar). */
+  readonly chatConversations = signal<ConversationsVM[]>([]);
+
+  /** Active LangGraph chat_session_id (null = new chat). */
+  readonly selectedSessionId = signal<string | null>(null);
+
+  /** Active SQL chat_id (null until first response). */
+  readonly selectedConversationId = signal<number | null>(null);
+
+  /** Conversation title (auto-generated or user-set). */
+  readonly conversationTitle = signal<string | null>(null);
+
+  /** Whether a stream is currently active. */
+  readonly isStreaming = signal(false);
+
+  /** UI loading flag (mirror of isStreaming for legacy components). */
+  readonly loading = computed(() => this.isStreaming());
+
+  /** Conversation list loading. */
+  readonly loadingConversations = signal(false);
+
+  /** Pagination — kept for legacy chat-sidebar `Load more` button. Always false now (full list returned). */
+  readonly hasMoreConversations = signal(false);
+
+  /** Pagination — kept for legacy chat-window scroll. Always false (full conversation returned). */
+  readonly hasMoreMessages = signal(false);
+
+  /** Concurrent API loading reference count, for UI spinners. */
+  private readonly pendingApiRequests = signal(0);
+  readonly isAPILoading = computed(() => this.pendingApiRequests() > 0);
+
+  /** Currently selected MENA function chip (e.g. 'AWS', 'Talent'). */
+  readonly selectedFunction = signal<string | null>(null);
+
+  /** Glow / shimmer the function chips below the input. */
+  readonly chipsHighlighted = signal(false);
+
+  /** Optional reason text the backend gave for asking to (re)select. */
+  readonly functionPromptReason = signal<string | null>(null);
+
+  /** Last error message (null = no error). */
+  readonly error = signal<string | null>(null);
+
+  /** Toast feedback result (used by chat-window for toast notifications). */
+  readonly feedbackResult = signal<FeedbackResultVM | null>(null);
+
+  /** Service hierarchies for the categorised feedback form. */
+  readonly serviceHierarchies = signal<ServiceHierarchyVM[]>([]);
+
+  /** Streaming toggle — kept for legacy chat-container; menabot-ui flow is always streaming. */
+  readonly enableStreaming = signal(true);
+
+  /** Authenticated user (used by sidebar and other components). */
   readonly authUser = computed<AuthUser | null>(() => this.authService.user);
 
-  /**
-   * Adds a new message to the current list of messages.
-   * @param message The message to be added. This is typically a response from the bot or a user query that has been sent.
-   */
-  addMessage(message: ChatResponse) {
-    this.messages.update(msgs => [...msgs, message]);
-  }
+  /** User identity sent to the backend as `user_id`. Falls back to a demo identity. */
+  readonly userId = computed(() => {
+    const user = this.authService.user;
+    return (user && user.email) ? user.email : 'demo.user@gds.ey.com';
+  });
 
-  setLoading(isLoading: boolean) {
-    this.loading.set(isLoading);
-  }
-  clearFeedbackResult() {
-    this.feedbackResult.set(null);
-  }
+  /** Number of user messages (for edit indexing). */
+  readonly userMessageCount = computed(() =>
+    this.messages().filter(m => m.role === 'User').length,
+  );
 
+  // ── Internal ──
+  private hierarchiesLoaded = false;
+  private abortController: AbortController | null = null;
+  private userMsgCounter = 0;
+  private pendingResendQuery: string | null = null;
+  private trackCounter = 0;
 
-  /**
-   * Sets the list of messages for the current conversation.
-   * @param messages The array of messages to set.
-   */
-  setMessages(messages: ChatResponse[]) {
-    this.messages.set(messages);
-  }
+  // ── Smooth streaming (word-by-word drip buffer) ──
+  private contentQueue = '';
+  private dripTimerId: ReturnType<typeof setTimeout> | null = null;
+  private dripAssistantId: string | null = null;
 
-  /**
-   * Clears all messages from the current conversation.
-   */
-  clearMessages() {
+  // ── Public API ──
+
+  /** Start a new chat — clears messages and generates a new session ID. */
+  newChat(): void {
     this.messages.set([]);
-    this.hasMoreMessages.set(false);
-  }
-
-  /**
-   * Updates API loading by reference count to support concurrent requests safely.
-   * @param isLoading True to increment pending request count, false to decrement.
-   */
-  setIsAPILoading(isLoading: boolean) {
-    this.pendingApiRequests.update(count => {
-      if (isLoading) {
-        return count + 1;
-      }
-
-      return Math.max(0, count - 1);
-    });
-  }
-
-  /**
-   * Sets the list of chat conversations.
-   * @param conversations The array of chat conversations to set.
-   */
-  setChatConversations(conversations: ConversationsVM[]) {
-    this.chatConversations.set(conversations);
-  }
-
-  appendChatConversations(conversations: ConversationsVM[]) {
-    const existing = new Set(this.chatConversations().map(conversation => conversation.id));
-    const newConversations = conversations.filter(conversation => !existing.has(conversation.id));
-    this.chatConversations.update(current => [...current, ...newConversations]);
-  }
-
-  /**
-   * Adds a user query to the current conversation.
-   * @param chatQuery The user query to be added.
-   */
-  addUserQueryToCurrentConversation(chatQuery: ChatQueryDTO) {
-    const tempMessageId = `tmp-${chatQuery.queryId}`;
-    const chatUserQry: ChatResponse = {
-      id: 0,
-      messageId: tempMessageId,
-      trackId: `${tempMessageId}_User`,
-      localTempId: chatQuery.queryId,
-      queryId: chatQuery.queryId,
-      conversationId: this.selectedConversationId() ?? 0,
-      chatSessionId: this.selectedSessionId() ?? '',
-      role: 'User',
-      answer: chatQuery.userQuery,
-      content: chatQuery.userQuery,
-      timestamp: new Date()
-    };
-    this.addMessage(chatUserQry);
-  }
-
-  startNewConversation() {
+    this.selectedSessionId.set(this.generateSessionId());
     this.selectedConversationId.set(null);
-    this.selectedSessionId.set(null);
-    this.clearMessages();
+    this.conversationTitle.set(null);
+    this.error.set(null);
+    this.userMsgCounter = 0;
+    this.selectedFunction.set(null);
+    this.chipsHighlighted.set(true);
+    this.functionPromptReason.set(null);
+    this.pendingResendQuery = null;
   }
 
-  async loadConversation(conversationId: number) {
-    const user = this.authUser();
-    const userId = user?.userInfoId;
-    if (!userId) {
-      return;
-    }
-
-    const isSameConversation = this.selectedConversationId() === conversationId;
-    this.selectedConversationId.set(conversationId);
-
-    // Only reset the ChatSessionId when switching to a different conversation.
-    // When navigating to the same conversation (e.g. post-stream route update),
-    // preserve the session so the backend maintains the correct context.
-    if (!isSameConversation) {
-      this.selectedSessionId.set(null);
-    }
-
-    await this.loadConversationMessages(conversationId, userId);
+  /** Reset state when entering a fresh chat URL (matches legacy method name used by chat-window). */
+  startNewConversation(): void {
+    this.newChat();
   }
 
-  selectConversation(conversationId: number) {
-    this.router.navigate(['/features/page/chats', conversationId]);
-  }
-
-  startNewChat() {
+  /** Navigate to /features/page/chats (called by sidebar "New Chat"). */
+  startNewChat(): void {
     this.router.navigate(['/features/page/chats']);
   }
 
-  private ensureSelectedConversationId(): number | null {
-    return this.selectedConversationId();
+  /** Function chip selection. */
+  selectFunction(code: string): void {
+    this.selectedFunction.set(code);
+    this.chipsHighlighted.set(false);
+    this.functionPromptReason.set(null);
+
+    const pending = this.pendingResendQuery;
+    this.pendingResendQuery = null;
+    if (pending && !this.isStreaming()) {
+      void this.sendUserMessage(pending);
+    }
   }
 
-  private ensureChatSessionId(): string | null {
-    return this.selectedSessionId();
+  clearFunction(): void {
+    this.selectedFunction.set(null);
+    this.pendingResendQuery = null;
   }
 
-  async loadConversations(reset = true) {
-    if (this.loadingConversations()) {
-      return;
+  /**
+   * Send a user message and stream the response.
+   * Call signature kept compatible with the legacy `sendMessage(chatQuery)` —
+   * we accept either a raw text or a `ChatQueryDTO`-shaped object.
+   */
+  async sendMessage(input: string | { userQuery?: string }): Promise<void> {
+    const text = typeof input === 'string' ? input : (input?.userQuery ?? '');
+    return this.sendUserMessage(text);
+  }
+
+  private async sendUserMessage(text: string): Promise<void> {
+    if (this.isStreaming() || !text.trim()) return;
+
+    this.pendingResendQuery = null;
+
+    if (!this.selectedSessionId()) {
+      this.selectedSessionId.set(this.generateSessionId());
     }
 
-    const userId = this.authUser()?.userInfoId;
-    if (!userId) {
-      return;
+    const userMsg: ChatResponse = {
+      id: 0,
+      messageId: this.generateId(),
+      trackId: `user_t${++this.trackCounter}`,
+      role: 'User',
+      conversationId: this.selectedConversationId() ?? 0,
+      chatSessionId: this.selectedSessionId() ?? '',
+      answer: text.trim(),
+      content: text.trim(),
+      timestamp: new Date(),
+      userMessageIndex: this.userMsgCounter++,
+    };
+    this.messages.update(msgs => [...msgs, userMsg]);
+
+    const fn = this.selectedFunction();
+    await this.streamResponse({
+      input_type: 'ask',
+      user_input: text.trim(),
+      is_free_form: true,
+      user_id: this.userId(),
+      chat_session_id: this.selectedSessionId(),
+      chat_id: this.selectedConversationId() ? String(this.selectedConversationId()) : undefined,
+      function: fn ? [fn] : [],
+      sub_function: [],
+      source_url: [],
+      start_date: '',
+      end_date: '',
+      content_type: 'qa_pair',
+    });
+  }
+
+  /** Edit a user message at the given index and re-run from that point. */
+  async editMessage(messageIndex: number, newText: string): Promise<void> {
+    if (this.isStreaming() || !newText.trim()) return;
+
+    const msgs = this.messages();
+    const userMsgs = msgs.filter(m => m.role === 'User');
+    if (messageIndex < 0 || messageIndex >= userMsgs.length) return;
+
+    const editedUserMsg = userMsgs[messageIndex];
+    const editPos = msgs.indexOf(editedUserMsg);
+    if (editPos === -1) return;
+
+    const backendIndex = msgs.slice(0, editPos + 1).filter(m => m.role === 'User').length - 1;
+    const kept = msgs.slice(0, editPos);
+    const updatedUserMsg: ChatResponse = {
+      ...editedUserMsg,
+      content: newText.trim(),
+      answer: newText.trim(),
+      isEditing: false,
+    };
+    kept.push(updatedUserMsg);
+
+    this.messages.set(kept);
+    this.userMsgCounter = backendIndex + 1;
+
+    const fn = this.selectedFunction();
+    await this.streamResponse(undefined, {
+      user_id: this.userId(),
+      chat_session_id: this.selectedSessionId()!,
+      message_index: backendIndex,
+      new_input: newText.trim(),
+      is_free_form: true,
+      function: fn ? [fn] : [],
+      sub_function: [],
+      source_url: [],
+      start_date: '',
+      end_date: '',
+      content_type: 'qa_pair',
+    });
+  }
+
+  /** Regenerate the last assistant response. */
+  async regenerate(): Promise<void> {
+    if (this.isStreaming() || !this.selectedConversationId()) return;
+
+    const msgs = this.messages();
+    const lastIdx = msgs.length - 1;
+    if (msgs[lastIdx]?.role === 'Assistant') {
+      this.messages.set(msgs.slice(0, lastIdx));
     }
 
-    this.loadingConversations.set(true);
-    this.setIsAPILoading(true);
-    try {
-      const response = await firstValueFrom(this.chatService.loadConversations(userId, this.conversationPageSize));
-      if (response.success) {
-        const page = response.result;
-        const conversations = (page?.conversations ?? []) as ConversationsVM[];
-        if (reset) {
-          this.setChatConversations(conversations);
-        } else {
-          this.appendChatConversations(conversations);
+    await this.streamResponse(undefined, undefined, {
+      user_id: this.userId(),
+      chat_id: String(this.selectedConversationId()),
+      chat_session_id: this.selectedSessionId()!,
+    });
+  }
+
+  /** Cancel the current in-flight stream. */
+  cancelStream(): void {
+    this.abortController?.abort();
+    if (this.dripAssistantId) {
+      this.flushContentQueue(this.dripAssistantId);
+    }
+    if (this.selectedSessionId()) {
+      this.chatService.cancelChat({
+        user_id: this.userId(),
+        chat_session_id: this.selectedSessionId()!,
+      }).subscribe({ error: () => { /* swallow — server may already have closed */ } });
+    }
+    this.isStreaming.set(false);
+  }
+
+  /** Toggle a user message into edit mode. */
+  toggleEdit(msgId: string): void {
+    this.messages.update(msgs =>
+      msgs.map(m => {
+        if (m.messageId === msgId && m.role === 'User') {
+          return { ...m, isEditing: !m.isEditing, editText: m.content ?? m.answer };
         }
-        this.hasMoreConversations.set(Boolean(page?.hasMore));
-      }
-    } catch (error) {
-      console.error('Failed to load conversations', error);
-    } finally {
-      this.loadingConversations.set(false);
-      this.setIsAPILoading(false);
-    }
+        return { ...m, isEditing: false };
+      }),
+    );
   }
 
-  async loadMoreConversations() {
-    if (this.loadingConversations() || !this.hasMoreConversations()) {
-      return;
-    }
+  cancelEdit(msgId: string): void {
+    this.messages.update(msgs =>
+      msgs.map(m => (m.messageId === msgId ? { ...m, isEditing: false } : m)),
+    );
+  }
 
-    const userId = this.authUser()?.userInfoId;
-    if (!userId) {
-      return;
-    }
+  // ── Conversations ──
 
-    const conversations = this.chatConversations();
-    const lastId = conversations.length > 0 ? conversations[conversations.length - 1].id : undefined;
+  /** Load the conversation list from the FastAPI backend. */
+  async loadConversations(_reset = true): Promise<void> {
+    if (this.loadingConversations()) return;
 
     this.loadingConversations.set(true);
     this.setIsAPILoading(true);
+
     try {
-      const response = await firstValueFrom(
-        this.chatService.loadConversations(userId, this.conversationPageSize, lastId)
-      );
-
-      if (!response.success) {
-        return;
-      }
-
-      const page = response.result;
-      this.appendChatConversations((page?.conversations ?? []) as ConversationsVM[]);
-      this.hasMoreConversations.set(Boolean(page?.hasMore));
-    } catch (error) {
-      console.error('Failed to load more conversations', error);
+      const res = await firstValueFrom(this.chatService.getConversations(this.userId()));
+      const items: ConversationsVM[] = (res?.data ?? []).map(c => this.toConversationVM(c));
+      this.chatConversations.set(items);
+      // FastAPI returns the full list — no further pages.
+      this.hasMoreConversations.set(false);
+    } catch (err) {
+      console.error('Failed to load conversations:', err);
     } finally {
       this.loadingConversations.set(false);
       this.setIsAPILoading(false);
     }
   }
 
-  private async loadConversationMessages(conversationId: number, userId: number) {
+  /** No-op: kept for legacy chat-sidebar "Load more" button (FastAPI returns the full list). */
+  async loadMoreConversations(): Promise<void> {
+    return;
+  }
+
+  /** Load messages for a conversation by SQL chat_id, navigating to the URL too. */
+  selectConversation(conversationId: number): void {
+    this.router.navigate(['/features/page/chats', conversationId]);
+  }
+
+  /** Load a conversation (called by chat-window on route param change). */
+  async loadConversation(conversationId: number): Promise<void> {
     if (!conversationId) {
       this.clearMessages();
       return;
     }
 
-    const token = ++this.conversationLoadToken;
-    this.setIsAPILoading(true);
+    const isSame = this.selectedConversationId() === conversationId;
+    this.selectedConversationId.set(conversationId);
 
-    try {
-      const response = await firstValueFrom(
-        this.chatService.loadConversationMessages(conversationId, userId, undefined, this.messagePageSize)
-      );
-
-      if (token !== this.conversationLoadToken) {
-        return;
-      }
-
-      if (response.success) {
-        const messages = (response.result?.messages ?? []).map(dto => this.toChatMessageVM(dto));
-        this.setMessages(messages);
-        this.hasMoreMessages.set(Boolean(response.result?.hasMore));
-      } else {
-        this.clearMessages();
-      }
-    } catch (error) {
-      if (token === this.conversationLoadToken) {
-        this.clearMessages();
-      }
-      console.error('Failed to load conversation messages', error);
-    } finally {
-      if (token === this.conversationLoadToken) {
-        this.setIsAPILoading(false);
-      }
+    // Find the matching conversation row to recover the original
+    // ChatSessionId — needed so edit/regenerate hit the right LangGraph thread.
+    const row = await this.findStoredConversation(conversationId);
+    if (!isSame) {
+      this.selectedSessionId.set(row?.ChatSessionId || String(conversationId));
     }
+    this.conversationTitle.set(row?.Title ?? null);
+
+    // If we already have in-memory messages for this thread (e.g. the SSE final
+    // event just routed us here from the welcome screen), skip the reload —
+    // the stored copy may not yet include the latest assistant turn anyway.
+    const haveLocal = this.messages().some(m => m.conversationId === conversationId);
+    if (haveLocal && isSame) return;
+
+    await this.loadMessages(conversationId);
   }
 
-  async loadMoreMessages() {
-    const conversationId = this.selectedConversationId();
-    const userId = this.authUser()?.userInfoId;
-    
-    if (!conversationId || !this.hasMoreMessages() || !userId) {
-      return;
-    }
-
+  /** Load messages — full list returned by FastAPI; no pagination. */
+  private async loadMessages(chatId: number): Promise<void> {
     this.setIsAPILoading(true);
     try {
-      const current = this.messages();
-      const oldestId = current
-        .map(m => Number(m.id))
-        .filter(id => !Number.isNaN(id))
-        .reduce((min, id) => Math.min(min, id), Number.POSITIVE_INFINITY);
+      const res = await firstValueFrom(this.chatService.getMessages(this.userId(), chatId));
+      const stored = res?.data ?? [];
 
-      const lastId = Number.isFinite(oldestId) ? oldestId : undefined;
-      const response = await firstValueFrom(
-        this.chatService.loadConversationMessages(conversationId, userId, lastId, this.messagePageSize)
-      );
-
-      if (!response.success) {
-        return;
+      const msgs: ChatResponse[] = [];
+      this.userMsgCounter = 0;
+      for (const s of stored) {
+        if (s.UserPrompt) {
+          msgs.push({
+            id: s.Id,
+            messageId: s.MessageId || this.generateId(),
+            trackId: `${s.MessageId || s.Id}_User_t${++this.trackCounter}`,
+            role: 'User',
+            conversationId: s.ConversationSessionId,
+            answer: s.UserPrompt,
+            content: s.UserPrompt,
+            timestamp: new Date(s.CreatedAt),
+            userMessageIndex: this.userMsgCounter++,
+          });
+        }
+        if (s.AiContentFreeForm) {
+          let content = s.AiContentFreeForm;
+          try {
+            const parsed = JSON.parse(content);
+            if (typeof parsed === 'string') content = parsed;
+          } catch { /* keep as-is */ }
+          msgs.push({
+            id: s.Id,
+            messageId: s.MessageId || this.generateId(),
+            trackId: `${s.MessageId || s.Id}_t${++this.trackCounter}`,
+            role: 'Assistant',
+            conversationId: s.ConversationSessionId,
+            answer: content,
+            content,
+            timestamp: new Date(s.CreatedAt),
+            citations: this.parseCitations(content),
+          });
+        }
       }
-
-      const older = (response.result?.messages ?? []).map(dto => this.toChatMessageVM(dto));
-      const identityKey = (m: ChatResponse) => m.id > 0 ? `id:${m.id}` : `msg:${m.messageId ?? ''}`;
-      const existingKeys = new Set(current.map(identityKey));
-      const merged = [...older.filter(m => !existingKeys.has(identityKey(m))), ...current];
-
-      this.setMessages(merged);
-      this.hasMoreMessages.set(Boolean(response.result?.hasMore));
-    } catch (error) {
-      console.error('Failed to load more messages', error);
+      this.messages.set(msgs);
+      this.hasMoreMessages.set(false);
+    } catch (err) {
+      console.error('Failed to load messages:', err);
+      this.error.set('Failed to load conversation');
+      this.clearMessages();
     } finally {
       this.setIsAPILoading(false);
     }
   }
 
-  /**
-   * Sends a chat message using the provided chat query.
-   * 
-   * This method sets loading states, ensures a conversation is selected,
-   * updates the chat query with conversation/thread IDs, adds the user's query
-   * to the current conversation, and sends the message via the chat service.
-   * If the response is successful, it adds the bot's response to the conversation,
-   * resolves the pending user message, and updates the selected conversation if needed.
-   * Loading states are reset after completion.
-   * 
-   * @param chatQuery The chat query data transfer object containing message details.
-   * @returns A Promise that resolves when the message sending process is complete.
-   * 
-   * @remarks
-   * The `void` keyword before `this.loadConversations(true);` is used to explicitly ignore
-   * the returned Promise, indicating that the result is not awaited or handled.
-   */
-  async sendMessage(chatQuery: ChatQueryDTO) {
-    // Check if streaming is enabled
-    if (this.enableStreaming()) {
-      return this.sendMessageWithStreaming(chatQuery);
-    }
+  /** No-op: kept for legacy chat-window scroll-up handler (FastAPI returns full message list). */
+  async loadMoreMessages(): Promise<void> {
+    return;
+  }
 
-    // Original non-streaming implementation
-    this.setIsAPILoading(true);
-    this.setLoading(true);
-
-    try {
-      const conversationId = this.ensureSelectedConversationId();
-      chatQuery.threadId = conversationId ?? 0;
-      chatQuery.conversationId = conversationId ?? undefined;
-      chatQuery.chatSessionId = this.ensureChatSessionId() ?? undefined;
-
-      this.addUserQueryToCurrentConversation(chatQuery);
-
-      const response = await firstValueFrom(this.chatService.sendChatMessage(chatQuery));
-      if (response.success && response.result) {
-        const botResponse = this.toChatMessageVM(response.result as ChatMessageDTO);
-
-        if (!this.selectedConversationId() && botResponse.conversationId) {
-          // New conversation created - update state and navigate
-          this.selectedConversationId.set(botResponse.conversationId);
-          this.router.navigate(['/features/page/chats', botResponse.conversationId]);
-          void this.loadConversations(true);
+  /** Delete a conversation. */
+  deleteConversation(conv: ConversationsVM): void {
+    this.chatService.deleteConversation(this.userId(), conv.id).subscribe({
+      next: () => {
+        this.chatConversations.update(list => list.filter(c => c.id !== conv.id));
+        if (this.selectedConversationId() === conv.id) {
+          this.newChat();
+          this.router.navigate(['/features/page/chats']);
         }
+      },
+      error: (err) => console.error('Failed to delete conversation:', err),
+    });
+  }
 
-        if (botResponse.chatSessionId) {
-          this.selectedSessionId.set(botResponse.chatSessionId);
+  /** Rename a conversation. */
+  renameConversation(conv: ConversationsVM, newTitle: string): void {
+    this.chatService.renameConversation(this.userId(), conv.id, { title: newTitle }).subscribe({
+      next: () => {
+        this.chatConversations.update(list =>
+          list.map(c => (c.id === conv.id ? { ...c, title: newTitle } : c)),
+        );
+        if (this.selectedConversationId() === conv.id) {
+          this.conversationTitle.set(newTitle);
         }
-
-        this.addMessage(botResponse);
-        this.resolvePendingUserMessage(chatQuery.queryId);
-      }
-    } catch (error) {
-      console.error('Failed to send message', error);
-    } finally {
-      this.setIsAPILoading(false);
-      this.setLoading(false);
-    }
+      },
+      error: (err) => console.error('Failed to rename conversation:', err),
+    });
   }
 
-  /**
-   * Sends a message with streaming enabled for progressive response updates.
-   * Creates a placeholder bot message that gets updated as chunks arrive.
-   */
-  private async sendMessageWithStreaming(chatQuery: ChatQueryDTO) {
-    this.setIsAPILoading(true);
-    this.setLoading(true);
+  // ── Feedback ──
 
-    try {
-      const conversationId = this.ensureSelectedConversationId();
-      const chatSessionId = this.ensureChatSessionId();
-      chatQuery.threadId = conversationId ?? 0;
-      chatQuery.conversationId = conversationId ?? undefined;
-      chatQuery.chatSessionId = chatSessionId ?? undefined;
-
-      // Add user message
-      this.addUserQueryToCurrentConversation(chatQuery);
-
-      const streamingMessageId = `streaming-${Date.now()}`;
-      let streamingMessageAdded = false;
-
-      // Start streaming
-      await this.chatService.streamChatResponse(
-        chatQuery,
-        (chunk: string, fullContent: string) => {
-          if (!streamingMessageAdded) {
-            const streamingMessage: ChatResponse = {
-              id: 0,
-              messageId: streamingMessageId,
-              trackId: streamingMessageId,
-              conversationId: conversationId ?? 0,
-              role: 'Assistant',
-              answer: fullContent,
-              content: fullContent,
-              timestamp: new Date(),
-              isStreaming: true,
-              chatSessionId: chatSessionId ?? ''
-            };
-            this.addMessage(streamingMessage);
-            streamingMessageAdded = true;
-          } else {
-            this.updateStreamingMessage(streamingMessageId, fullContent);
-          }
-        },
-        // onComplete: Finalize the message with server data
-        (messageData: ChatMessageDTO) => {
-          const finalMessage = this.toChatMessageVM(messageData);
-          
-          // Update conversation if this was a new chat
-          if (!this.selectedConversationId() && finalMessage.conversationId) {
-            this.selectedConversationId.set(finalMessage.conversationId);
-            this.router.navigate(['/features/page/chats', finalMessage.conversationId]);
-            void this.loadConversations(true);
-          }
-
-          if (finalMessage.chatSessionId) {
-            this.selectedSessionId.set(finalMessage.chatSessionId);
-          }
-          
-          // Replace streaming message with final message and clear all loading states immediately
-          this.finalizeStreamingMessage(streamingMessageId, finalMessage);
-          this.resolvePendingUserMessage(chatQuery.queryId);
-          this.setIsAPILoading(false);
-          this.setLoading(false);
-        },
-        // onError: Handle streaming errors
-        (error: Error) => {
-          console.error('Streaming error:', error);
-          if (streamingMessageAdded) {
-            this.markStreamingMessageAsError(streamingMessageId);
-          }
-        },
-        // onThinkingChange: show/hide separate Generating... indicator while waiting for generate node
-        (isThinking: boolean) => {
-          if (streamingMessageAdded) {
-            this.setStreamingMessageThinking(streamingMessageId, isThinking);
-          }
-        }
-      );
-    } catch (error) {
-      console.error('Failed to send streaming message', error);
-    } finally {
-      this.setIsAPILoading(false);
-      this.setLoading(false);
-    }
-  }
-
-  /**
-   * Updates a streaming message's content as chunks arrive
-   */
-  private updateStreamingMessage(messageId: string, content: string) {
-    this.messages.update(messages =>
-      messages.map(msg =>
-        msg.messageId === messageId
-          ? { ...msg, answer: content, content, isStreaming: true }
-          : msg
-      )
-    );
-  }
-
-  private setStreamingMessageThinking(messageId: string, isThinking: boolean) {
-    this.messages.update(messages =>
-      messages.map(msg =>
-        msg.messageId === messageId
-          ? { ...msg, isThinking }
-          : msg
-      )
-    );
-  }
-
-  /**
-   * Replaces the streaming placeholder with the final message from server
-   */
-  private finalizeStreamingMessage(streamingMessageId: string, finalMessage: ChatResponse) {
-    this.messages.update(messages =>
-      messages.map(msg =>
-        msg.messageId === streamingMessageId
-          // Preserve the streaming placeholder's trackId so Angular updates the existing
-          ? { ...finalMessage, isStreaming: false, trackId: msg.trackId }
-          : msg
-      )
-    );
-  }
-
-  /**
-   * Marks a streaming message as failed
-   */
-  private markStreamingMessageAsError(messageId: string) {
-    const userMessage = 'Something went wrong. Please try again with a new chat.';
-    this.messages.update(messages =>
-      messages.map(msg =>
-        msg.messageId === messageId
-          ? { 
-              ...msg, 
-              isStreaming: false, 
-              isError: true,
-              answer: userMessage,
-              content: userMessage
-            }
-          : msg
-      )
-    );
-  }
-
-  private resolvePendingUserMessage(localTempId: string) {
-    this.messages.update(messages =>
-      messages.map(message =>
-        message.localTempId === localTempId
-          ? { ...message, isPending: false }
-          : message
-      )
-    );
-  }
-
-  private toChatMessageVM(dto: ChatMessageDTO): ChatResponse {
-    const isUser = dto.actor === ActorType.User;
-    const uniqueTrackId = isUser
-      ? `${dto.messageId}_User_t${++this.trackCounter}`
-      : `${dto.messageId || 'msg'}_t${++this.trackCounter}`;
-    return {
-      id: dto.id,
-      messageId: dto.messageId,
-      trackId: uniqueTrackId,
-      conversationId: Number(dto.conversationId),
-      role: isUser ? 'User' : 'Assistant',
-      answer: dto.content,
-      content: dto.content,
-      timestamp: dto.createdAt,
-      refDocs: dto.refDocs?.length ? dto.refDocs : this.mapChunkDocs(dto),
-      hasFeedback: Boolean(dto.feedback),
-      feedbackId: dto.feedback?.id,
-      isLiked: dto.feedback?.rating === FeedbackRating.Positive,
-      feedbackRating: dto.feedback?.rating,
-      feedbackComments: dto.feedback?.comments,
-      chatSessionId: dto.chatSessionId
-    };
-  }
-
-  private mapChunkDocs(dto: ChatMessageDTO) {
-    if (!dto.chunks_used?.length) {
-      return [];
-    }
-
-    return dto.chunks_used.map(chunk => ({
-      title: chunk.file_name || 'Unknown',
-      url: '',
-      pageNumbers: chunk.page_number ? `Page ${chunk.page_number}` : '',
-    }));
-  }
-
+  /** Service hierarchies — loaded once for the categorised feedback form. */
   async loadServiceHierarchies(): Promise<void> {
     if (this.hierarchiesLoaded) return;
     try {
@@ -600,44 +467,412 @@ export class ChatStore {
     }
   }
 
-  async postFeedback(feedback: FeedbackDTO) {
+  /** Submit feedback — POSTs menabot-ui's /feedback shape. Extra ui_refactoring fields
+   *  (functionId / subFunctionId / serviceId / category) are bundled into `comments`
+   *  as a single human-readable suffix so nothing is lost. */
+  async postFeedback(feedback: FeedbackDTO): Promise<void> {
     this.feedbackResult.set(null);
-    
-    const userId = this.authUser()?.username;
-    const messageId = feedback.messageId;
-    if (!messageId) {
-      return;
-    }
 
-    feedback.userId = String(userId ?? '');
+    if (!feedback.messageId) return;
+
+    const email = this.authService.user?.email || this.userId();
+    feedback.userId = email;
+
+    const ratingNumeric =
+      feedback.rating === FeedbackRating.Positive ? 1 :
+      feedback.rating === FeedbackRating.Negative ? -1 : 0;
+
+    const extras: string[] = [];
+    if (feedback.category) extras.push(`category=${feedback.category}`);
+    if (feedback.functionId) extras.push(`functionId=${feedback.functionId}`);
+    if (feedback.subFunctionId) extras.push(`subFunctionId=${feedback.subFunctionId}`);
+    if (feedback.serviceId) extras.push(`serviceId=${feedback.serviceId}`);
+
+    const baseComment = (feedback.comments ?? '').trim();
+    const tail = extras.length ? ` [${extras.join(', ')}]` : '';
+    const combinedComment = (baseComment + tail).trim();
 
     try {
-      const response = await firstValueFrom(this.chatService.postFeedback(feedback));
-      if (response.result) {
-        //update local message state to reflect feedback given
+      const res = await firstValueFrom(this.chatService.submitFeedback({
+        user_id: email,
+        message_id: feedback.messageId,
+        rating: ratingNumeric,
+        comments: combinedComment || undefined,
+        created_by: email,
+        modified_by: email,
+      }));
+      const ok = !!res && res.status !== 'error';
+      if (ok) {
         this.messages.update(messages =>
           messages.map(msg =>
-            msg.messageId === messageId
-              ? { ...msg, hasFeedback: true, 
-                isLiked: feedback.rating === FeedbackRating.Positive,
-                feedbackComments: feedback.comments,
-                feedbackRating: feedback.rating,
-                feedbackCategory: feedback.category,
-                feedbackFunctionId: feedback.functionId,
-                feedbackSubFunctionId: feedback.subFunctionId,
-                feedbackServiceId: feedback.serviceId
-              }
-              : msg
-          )
+            msg.messageId === feedback.messageId
+              ? {
+                  ...msg,
+                  hasFeedback: true,
+                  isLiked: feedback.rating === FeedbackRating.Positive,
+                  feedbackRating: feedback.rating,
+                  feedbackComments: feedback.comments,
+                  feedbackCategory: feedback.category,
+                  feedbackFunctionId: feedback.functionId,
+                  feedbackSubFunctionId: feedback.subFunctionId,
+                  feedbackServiceId: feedback.serviceId,
+                }
+              : msg,
+          ),
         );
-        const feedBackResult: FeedbackResultVM = {
-          success: true,
-          message:  'Thank you for your feedback!'
-        };
-        this.feedbackResult.set(feedBackResult);
+        this.feedbackResult.set({ success: true, message: 'Thank you for your feedback!' });
       }
-    } catch (error) {
-      console.error('Failed to post feedback', error);
-    } 
+    } catch (err) {
+      console.error('Failed to post feedback', err);
+      this.feedbackResult.set({ success: false, message: 'Failed to submit feedback. Please try again.' });
+    }
+  }
+
+  clearFeedbackResult(): void {
+    this.feedbackResult.set(null);
+  }
+
+  // ── Internal: streaming pipeline (verbatim port of menabot-ui) ──
+
+  private async streamResponse(
+    chatBody?: import('../models/chat.model').ChatRequest,
+    editBody?: import('../models/chat.model').EditRequest,
+    regenBody?: import('../models/chat.model').RegenerateRequest,
+  ): Promise<void> {
+    this.isStreaming.set(true);
+    this.error.set(null);
+    this.abortController = new AbortController();
+
+    const assistantMsg: ChatResponse = {
+      id: 0,
+      messageId: this.generateId(),
+      trackId: `assistant_t${++this.trackCounter}`,
+      role: 'Assistant',
+      conversationId: this.selectedConversationId() ?? 0,
+      chatSessionId: this.selectedSessionId() ?? '',
+      answer: '',
+      content: '',
+      thinkingSteps: [],
+      thinkingCollapsed: false,
+      deepSearchSteps: [],
+      deepSearchCollapsed: false,
+      isStreaming: true,
+      timestamp: new Date(),
+    };
+    this.messages.update(msgs => [...msgs, assistantMsg]);
+
+    let activeStepNode: string | null = null;
+
+    try {
+      const stream = editBody
+        ? this.chatService.streamEdit(editBody, this.abortController.signal)
+        : regenBody
+          ? this.chatService.streamRegenerate(regenBody, this.abortController.signal)
+          : this.chatService.streamChat(chatBody!, this.abortController.signal);
+
+      for await (const event of stream) {
+        this.processSSEEvent(event, assistantMsg.messageId, activeStepNode);
+        if (event.type === 'thought') {
+          activeStepNode = event.node;
+        }
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // user cancelled — expected
+      } else {
+        console.error('Stream error:', err);
+        this.error.set('Failed to get response. Please try again.');
+      }
+    } finally {
+      this.flushContentQueue(assistantMsg.messageId);
+      this.messages.update(msgs =>
+        msgs.map(m =>
+          m.messageId === assistantMsg.messageId
+            ? { ...m, isStreaming: false, thinkingCollapsed: true, deepSearchCollapsed: true, answer: m.content ?? '' }
+            : m,
+        ),
+      );
+      this.isStreaming.set(false);
+      this.abortController = null;
+    }
+  }
+
+  private processSSEEvent(event: SSEEvent, assistantId: string, _activeStepNode: string | null): void {
+    switch (event.type) {
+      case 'thought': {
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.messageId !== assistantId) return m;
+            const steps = (m.thinkingSteps ?? []).map(s =>
+              s.state === 'running' ? { ...s, state: 'done' as const } : s,
+            );
+            steps.push({ node: event.node, message: event.message, state: 'running' });
+            return { ...m, thinkingSteps: steps };
+          }),
+        );
+        break;
+      }
+
+      case 'content': {
+        this.contentQueue += event.content;
+        this.dripAssistantId = assistantId;
+        this.startDrip();
+        break;
+      }
+
+      case 'deep_search': {
+        const dsEvent = event as DeepSearchEvent;
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.messageId !== assistantId) return m;
+            const steps = [...(m.deepSearchSteps ?? []), dsEvent.content];
+            return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
+          }),
+        );
+        break;
+      }
+
+      case 'final': {
+        const final = event as FinalEvent;
+        if (final.cancelled) return;
+
+        const numericChatId = final.chat_id != null ? Number(final.chat_id) : null;
+        if (numericChatId && !Number.isNaN(numericChatId)) {
+          // First response of a brand-new conversation: capture chat_id
+          // and navigate to the URL so refreshing keeps state.
+          if (this.selectedConversationId() == null) {
+            this.selectedConversationId.set(numericChatId);
+            this.router.navigate(['/features/page/chats', numericChatId]);
+          } else {
+            this.selectedConversationId.set(numericChatId);
+          }
+        }
+        if (final.conversation_title) this.conversationTitle.set(final.conversation_title);
+
+        if (final.requires_function_selection) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set(final.function_required_reason ?? null);
+          const msgs = this.messages();
+          for (let i = msgs.length - 1; i >= 0; i--) {
+            if (msgs[i].role === 'User') {
+              this.pendingResendQuery = msgs[i].content ?? msgs[i].answer ?? null;
+              break;
+            }
+          }
+        } else if (final.selected_function) {
+          this.selectedFunction.set(final.selected_function);
+        }
+
+        if (final.function_hint && !final.requires_function_selection && !final.selected_function) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set(final.function_hint);
+        }
+
+        const noAnswerInFinal =
+          (typeof final.ai_content === 'string' && final.ai_content.trim().startsWith('[NO_ANSWER]'));
+        const lastMsg = this.messages().find(m => m.messageId === assistantId);
+        const noAnswerInStream = (lastMsg?.content ?? '').trim().startsWith('[NO_ANSWER]');
+        if ((noAnswerInFinal || noAnswerInStream) && !this.selectedFunction()) {
+          this.chipsHighlighted.set(true);
+          this.functionPromptReason.set('Please select a function to help me search more precisely.');
+          const allMsgs = this.messages();
+          for (let i = allMsgs.length - 1; i >= 0; i--) {
+            if (allMsgs[i].role === 'User') {
+              this.pendingResendQuery = allMsgs[i].content ?? allMsgs[i].answer ?? null;
+              break;
+            }
+          }
+        }
+
+        const parsedActions = this.parseSuggestiveActions(final.suggestive_actions);
+
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.messageId !== assistantId) return m;
+            const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
+            let content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
+
+            const hasNoAnswer =
+              (content ?? '').trim().startsWith('[NO_ANSWER]') ||
+              (typeof final.ai_content === 'string' && final.ai_content.trim().startsWith('[NO_ANSWER]'));
+            if (hasNoAnswer) {
+              const fnCandidates = final.function_candidates ?? [];
+              const fnHint = fnCandidates.length > 0 ? ` (${fnCandidates.join(', ')})` : '';
+              content =
+                `I wasn't able to find a specific answer for your query in the available documents${fnHint}. ` +
+                'To help me get you the best result, could you please select the specific function ' +
+                'your question relates to? This will allow me to search more precisely.';
+            }
+
+            const citationSource = typeof final.ai_content === 'string' ? final.ai_content : content;
+            const citations = this.parseCitations(citationSource ?? '');
+            const finalConvId = numericChatId && !Number.isNaN(numericChatId) ? numericChatId : m.conversationId;
+            return {
+              ...m,
+              content,
+              answer: content,
+              conversationId: finalConvId,
+              thinkingSteps: steps,
+              messageId: final.message_id ?? m.messageId,
+              suggestiveActions: parsedActions,
+              conversationTitle: final.conversation_title ?? null,
+              citations,
+            };
+          }),
+        );
+
+        // Refresh sidebar after first message of a new conversation, so the
+        // newly created title appears.
+        void this.loadConversations(true);
+        break;
+      }
+    }
+  }
+
+  // ── Smooth streaming drip (verbatim from menabot-ui) ──
+
+  private startDrip(): void {
+    if (this.dripTimerId !== null) return;
+    this.dripTimerId = setTimeout(() => this.dripTick(), 0);
+  }
+
+  private dripTick(): void {
+    this.dripTimerId = null;
+    if (!this.contentQueue || !this.dripAssistantId) return;
+
+    const match = this.contentQueue.match(/^\s*\S+\s?/);
+    const end = match ? match[0].length : Math.min(1, this.contentQueue.length);
+    const chunk = this.contentQueue.slice(0, end);
+    this.contentQueue = this.contentQueue.slice(end);
+
+    this.messages.update(msgs =>
+      msgs.map(m =>
+        m.messageId === this.dripAssistantId
+          ? { ...m, content: (m.content ?? '') + chunk }
+          : m,
+      ),
+    );
+
+    if (this.contentQueue) {
+      const delay = this.contentQueue.length > 200 ? 0
+                  : this.contentQueue.length > 80  ? 8
+                  : this.contentQueue.length > 30  ? 16
+                  : 22;
+      this.dripTimerId = setTimeout(() => this.dripTick(), delay);
+    }
+  }
+
+  private flushContentQueue(assistantId: string): void {
+    if (this.dripTimerId !== null) {
+      clearTimeout(this.dripTimerId);
+      this.dripTimerId = null;
+    }
+    if (this.contentQueue) {
+      const remaining = this.contentQueue;
+      this.contentQueue = '';
+      this.messages.update(msgs =>
+        msgs.map(m =>
+          m.messageId === assistantId
+            ? { ...m, content: (m.content ?? '') + remaining }
+            : m,
+        ),
+      );
+    }
+    this.dripAssistantId = null;
+  }
+
+  // ── Helpers ──
+
+  private setIsAPILoading(isLoading: boolean): void {
+    this.pendingApiRequests.update(count => isLoading ? count + 1 : Math.max(0, count - 1));
+  }
+
+  private clearMessages(): void {
+    this.messages.set([]);
+    this.hasMoreMessages.set(false);
+  }
+
+  private generateId(): string {
+    return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private generateSessionId(): string {
+    return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  private toConversationVM(stored: StoredConversation): ConversationsVM {
+    return {
+      id: stored.Id,
+      title: stored.Title,
+      // ConversationType is a free-form string from menabot-ui's backend; default to Web.
+      clientType: ChannelType.Web,
+      createdAt: stored.CreatedAt,
+      modifiedAt: stored.ModifiedAt,
+      chatSessionId: stored.ChatSessionId ?? null,
+    };
+  }
+
+  private async findStoredConversation(chatId: number): Promise<{ ChatSessionId?: string | null; Title: string } | null> {
+    // Prefer the cached sidebar list — avoids a round-trip when navigating between threads.
+    const cached = this.chatConversations().find(c => c.id === chatId);
+    if (cached) {
+      return { ChatSessionId: cached.chatSessionId ?? null, Title: cached.title };
+    }
+    try {
+      const res = await firstValueFrom(this.chatService.getConversations(this.userId()));
+      const stored = (res?.data ?? []).find(c => c.Id === chatId);
+      if (stored) {
+        // Refresh the cache so subsequent lookups stay fast.
+        this.chatConversations.update(list => {
+          if (list.some(c => c.id === stored.Id)) return list;
+          return [...list, this.toConversationVM(stored)];
+        });
+        return { ChatSessionId: stored.ChatSessionId ?? null, Title: stored.Title };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseSuggestiveActions(actions?: SuggestiveAction[]): SuggestiveAction[] | undefined {
+    if (!actions || actions.length === 0) return actions;
+    return actions.map(action => {
+      let shortTitle = action.short_title ?? '';
+      let description = action.description ?? '';
+      const reprMatch = shortTitle.match(/^short_title='([^']*)'\s*description='([^']*)'$/);
+      if (reprMatch) {
+        shortTitle = reprMatch[1];
+        description = reprMatch[2];
+      }
+      return { short_title: shortTitle, description };
+    });
+  }
+
+  private parseCitations(content: string): Citation[] {
+    const citations: Citation[] = [];
+    const citationsBlockMatch = content.match(/\n?\s*Citations:\s*\n([\s\S]*)$/i);
+    const searchContent = citationsBlockMatch ? citationsBlockMatch[1] : content;
+
+    const linePattern = /^\s*((?:\[\d+\])+):?\s*(.+?)\s*$/gm;
+    let lineMatch: RegExpExecArray | null;
+    while ((lineMatch = linePattern.exec(searchContent)) !== null) {
+      const bracketsPart = lineMatch[1];
+      const rawSource = lineMatch[2].replace(/\.+$/, '').trim();
+      if (!rawSource) continue;
+
+      const indexes: number[] = [];
+      const numPattern = /\[(\d+)\]/g;
+      let numMatch: RegExpExecArray | null;
+      while ((numMatch = numPattern.exec(bracketsPart)) !== null) {
+        indexes.push(parseInt(numMatch[1], 10));
+      }
+
+      if (indexes.length > 0) {
+        const isUrl = /^https?:\/\//.test(rawSource);
+        citations.push({ indexes, source: rawSource, isUrl });
+      }
+    }
+    return citations;
   }
 }

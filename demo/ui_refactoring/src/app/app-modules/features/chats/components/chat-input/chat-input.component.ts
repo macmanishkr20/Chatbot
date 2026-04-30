@@ -1,49 +1,75 @@
 import { CommonModule } from '@angular/common';
-import { Component, ElementRef, EventEmitter, inject, Input, Output, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, ElementRef, EventEmitter, inject, Input, Output, ViewChild, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ChatQueryDTO } from '../../models/chat.model';
-import { AuthService } from '../../../../../_shared/messaging-service/auth.service';
-import { AuthUser } from '../../../../../_shared/messaging-service/auth-user';
+import { ChatStore } from '../../services/chat.store';
 import { SvgIconComponent } from '../../../../../_shared/components/svg-icon/svg-icon.component';
+import { FunctionChipsComponent, MENA_FUNCTIONS } from '../function-chips/function-chips.component';
 
+/**
+ * Chat composer.
+ *
+ * Drives `ChatStore.sendMessage()` directly (matching menabot-ui's chat-input
+ * behaviour). Stop / cancel button replaces the send button while a stream
+ * is active. The `send` output remains for any legacy parent that still
+ * binds to it, but `ChatStore` is now the single source of truth.
+ */
 @Component({
   selector: 'app-chat-input',
   imports: [
     CommonModule,
     ReactiveFormsModule,
-    SvgIconComponent
+    SvgIconComponent,
+    FunctionChipsComponent,
   ],
   templateUrl: './chat-input.component.html',
   styleUrls: ['./chat-input.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class ChatInputComponent {
-private authUser = inject(AuthService<AuthUser>);
-private formBuilder = inject(FormBuilder);
+  readonly chat = inject(ChatStore);
+  private formBuilder = inject(FormBuilder);
 
- @ViewChild('msg') textareaRef!: ElementRef<HTMLTextAreaElement>;
+  @ViewChild('msg') textareaRef!: ElementRef<HTMLTextAreaElement>;
 
-
- @Input() placeholder = 'Type your question';
+  @Input() placeholder = 'Type your question';
   @Input() disabled = false;
   @Input() ariaLabel = 'Chat message input';
-  @Input() enterToSend = true;         // Enter sends, Shift+Enter newline
+  @Input() enterToSend = true;
   @Input() shiftToNewLine = true;
-  @Input() maxHeightPx = 160;          // max height for textarea auto-grow
+  @Input() maxHeightPx = 160;
   @Input() maxLength?: number;
+  /** Show MENA function chips below the input. Default true to mirror menabot-ui. */
+  @Input() showFunctionChips = true;
 
+  /** Kept for backwards compatibility — chat-container previously listened to this. */
   @Output() send = new EventEmitter<ChatQueryDTO>();
   @Output() attach = new EventEmitter<void>();
 
   userQueryForm = this.formBuilder.group({
-    message: ['', [Validators.required]]
+    message: ['', [Validators.required]],
   });
 
-  get form(){
+  /** Currently selected MENA function metadata (drives placeholder + pill). */
+  readonly selectedChip = computed(() => {
+    const code = this.chat.selectedFunction();
+    return code ? MENA_FUNCTIONS.find(c => c.code === code) ?? null : null;
+  });
+
+  readonly effectivePlaceholder = computed(() => {
+    const chip = this.selectedChip();
+    return chip ? `Ask about ${chip.full}…` : (this.placeholder || 'Ask me anything...');
+  });
+
+  /** Stream state. */
+  readonly isStreaming = this.chat.isStreaming;
+
+  get form() {
     return this.userQueryForm.controls;
   }
 
-  get message() { 
-    return this.userQueryForm.get('message')?.value || ''; 
+  get message(): string {
+    return this.userQueryForm.get('message')?.value || '';
   }
 
   autoResize(el: HTMLTextAreaElement) {
@@ -59,31 +85,35 @@ private formBuilder = inject(FormBuilder);
     }
   }
 
-  onAttach() { 
-    this.attach.emit(); 
+  onAttach() {
+    this.attach.emit();
   }
- 
-   onSend() {
-    if(this.disabled) {
-      return;
-    }
+
+  onSend() {
+    if (this.disabled || this.isStreaming()) return;
+
     const userMessage = this.message?.trim();
-    if(!userMessage) {
-      return;
-    }
+    if (!userMessage) return;
+
     const chatMessage: ChatQueryDTO = {
-        threadId: 1,
-        queryId: Date.now().toString(),
-        userQuery: userMessage,
-        userEmail: this.authUser.user.email
-      };
-      this.send.emit(chatMessage);
-      this.userQueryForm.reset();
-      
-      // Reset textarea height to initial state
-      if (this.textareaRef?.nativeElement) {
-        this.textareaRef.nativeElement.style.height = 'auto';
-      }
+      threadId: 1,
+      queryId: Date.now().toString(),
+      userQuery: userMessage,
+    };
+    this.send.emit(chatMessage);
+    void this.chat.sendMessage(userMessage);
+
+    this.userQueryForm.reset();
+    if (this.textareaRef?.nativeElement) {
+      this.textareaRef.nativeElement.style.height = 'auto';
+    }
   }
-  
+
+  onCancel() {
+    this.chat.cancelStream();
+  }
+
+  clearFunction() {
+    this.chat.clearFunction();
+  }
 }

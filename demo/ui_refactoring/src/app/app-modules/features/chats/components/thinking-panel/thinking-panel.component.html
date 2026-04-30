@@ -1,0 +1,32 @@
+<div class="thinking-panel" [class.collapsed]="isCollapsed" [class.completed]="allDone">
+  <button type="button" class="thinking-toggle" (click)="toggle()">
+    <span class="thinking-icon">
+      <i class="bi" [ngClass]="allDone ? 'bi-check-circle-fill' : 'bi-gear-fill'"></i>
+    </span>
+    <span class="thinking-label">{{ allDone ? 'Completed' : 'Thinking…' }}</span>
+    <span class="thinking-count">{{ steps().length }} steps</span>
+    <span class="thinking-caret">
+      <i class="bi bi-chevron-right"></i>
+    </span>
+  </button>
+
+  @if (!isCollapsed) {
+    <div class="thinking-steps">
+      @for (step of steps(); track trackByNode($index, step)) {
+        <div class="step" [class.running]="step.state === 'running'" [class.done]="step.state === 'done'">
+          <span class="step-icon">
+            @if (step.state === 'running') {
+              <span class="spinner"></span>
+            } @else if (step.state === 'done') {
+              <span class="checkmark"><i class="bi bi-check"></i></span>
+            } @else {
+              <span class="pending-dot">&#8226;</span>
+            }
+          </span>
+          <span class="step-node">{{ formatNode(step.node) }}</span>
+          <span class="step-msg">{{ step.message }}</span>
+        </div>
+      }
+    </div>
+  }
+</div>

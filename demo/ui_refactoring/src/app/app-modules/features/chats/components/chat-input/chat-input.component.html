@@ -1,35 +1,61 @@
-  <div class="chat-input-container">
+<div class="chat-input-container">
   <div class="chat-input-wrapper">
+
+    @if (selectedChip(); as chip) {
+      <div class="selected-fn-pill" [attr.aria-label]="'Selected function: ' + chip.full">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="code">{{ chip.code }}</span>
+        <span class="full">{{ chip.full }}</span>
+        <button type="button" class="clear-btn" title="Clear function" aria-label="Clear function" (click)="clearFunction()">×</button>
+      </div>
+    }
+
     <form (ngSubmit)="onSend()" [formGroup]="userQueryForm">
       <div class="chat-input-box">
-        
-        <!-- Textarea -->
-        <textarea 
-          #msg 
-          class="px-2 input-textarea" 
-          [placeholder]="placeholder" 
+        <textarea
+          #msg
+          class="px-2 input-textarea"
+          [placeholder]="effectivePlaceholder()"
           formControlName="message"
-          name="message" 
-          rows="1" 
+          name="message"
+          rows="1"
           (input)="autoResize(msg)"
           (keydown)="onKeyDown($event)"
-          draggable="false" 
+          [disabled]="isStreaming()"
+          draggable="false"
           autocomplete="off"
           [attr.aria-label]="ariaLabel"></textarea>
 
-        <!-- Send Button -->
-        <button 
-          class="input-send-btn" 
-          type="submit"
-          [disabled]="form['message'].invalid || disabled"
-          [attr.aria-label]="'Send message'">
-
-          <app-svg-icon name="send-outline" cssClass="send-icon send-icon--outline"
-            ariaLabel="Send"></app-svg-icon>
-          <app-svg-icon name="send-filled" cssClass="send-icon send-icon--filled"
-            ariaLabel="Send"></app-svg-icon>
-        </button>
+        @if (isStreaming()) {
+          <button
+            type="button"
+            class="input-send-btn cancel-btn"
+            title="Stop generating"
+            aria-label="Stop generating"
+            (click)="onCancel()">
+            <i class="bi bi-stop-circle-fill stop-icon"></i>
+          </button>
+        } @else {
+          <button
+            class="input-send-btn"
+            type="submit"
+            [disabled]="form['message'].invalid || disabled"
+            [attr.aria-label]="'Send message'">
+            <app-svg-icon name="send-outline" cssClass="send-icon send-icon--outline"
+              ariaLabel="Send"></app-svg-icon>
+            <app-svg-icon name="send-filled" cssClass="send-icon send-icon--filled"
+              ariaLabel="Send"></app-svg-icon>
+          </button>
+        }
       </div>
     </form>
+
+    @if (showFunctionChips) {
+      <app-function-chips />
+    }
+
+    <div class="input-hint">
+      Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
+    </div>
   </div>
 </div>

@@ -1,0 +1,40 @@
+@use './../../../../../../theme/app' as *;
+
+.suggestive-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.suggestive-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 230, 0, 0.4);
+  background: rgba(255, 230, 0, 0.06);
+  color: $app-font-color;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  max-width: 100%;
+
+  &:hover {
+    background: rgba(255, 230, 0, 0.14);
+    border-color: rgba(255, 230, 0, 0.7);
+  }
+
+  .sa-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 320px;
+  }
+
+  .sa-arrow {
+    font-size: 11px;
+    color: $primary-color;
+  }
+}

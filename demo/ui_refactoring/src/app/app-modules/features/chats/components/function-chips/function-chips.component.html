@@ -1,0 +1,17 @@
+@if (reason(); as r) {
+  <div class="chips-reason">{{ r }}</div>
+}
+
+<div class="chips-row" [class.highlighted]="highlighted()">
+  @for (chip of chips; track trackByCode($index, chip)) {
+    <button type="button"
+            class="chip"
+            [class.selected]="selected() === chip.code"
+            [attr.aria-pressed]="selected() === chip.code"
+            [attr.title]="chip.full"
+            (click)="onPick(chip)">
+      <span class="chip-icon"><i class="bi" [ngClass]="chip.icon"></i></span>
+      <span class="chip-label">{{ chip.label }}</span>
+    </button>
+  }
+</div>

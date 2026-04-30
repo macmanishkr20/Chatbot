@@ -1,0 +1,27 @@
+<div class="deep-search-panel" [class.collapsed]="isCollapsed" [class.completed]="allDone">
+  <button type="button" class="deep-search-toggle" (click)="toggle()">
+    <span class="deep-search-icon">
+      <i class="bi" [ngClass]="allDone ? 'bi-check-circle-fill' : 'bi-globe2'"></i>
+    </span>
+    <span class="deep-search-label">{{ allDone ? 'Deep Search Completed' : 'Deep Search…' }}</span>
+    <span class="deep-search-count">{{ steps().length }} {{ steps().length === 1 ? 'step' : 'steps' }}</span>
+    <span class="deep-search-caret"><i class="bi bi-chevron-right"></i></span>
+  </button>
+
+  @if (!isCollapsed) {
+    <div class="deep-search-steps">
+      @for (step of steps(); track $index) {
+        <div class="ds-step" [class.latest]="$last && isSearching()">
+          <span class="ds-step-icon">
+            @if ($last && isSearching()) {
+              <span class="spinner"></span>
+            } @else {
+              <span class="checkmark"><i class="bi bi-check"></i></span>
+            }
+          </span>
+          <span class="ds-step-msg" [innerHTML]="step"></span>
+        </div>
+      }
+    </div>
+  }
+</div>

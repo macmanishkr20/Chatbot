@@ -43,7 +43,7 @@
         </div>
 
         <div class="chat-input">
-            <app-chat-input [placeholder]="'Type your question'" (send)="onSend($event)"
+            <app-chat-input [placeholder]="'Type your question'" (send)="onSend()"
                 [disabled]="chatStore.loading()"></app-chat-input>
         </div>
     </div>

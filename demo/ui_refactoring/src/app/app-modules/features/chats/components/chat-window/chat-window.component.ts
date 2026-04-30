@@ -1,6 +1,6 @@
-import { Component, computed, effect, inject, OnInit, OnDestroy, signal, ViewChild, ElementRef } from '@angular/core';
+import { Component, computed, effect, inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { ChatMessageComponent } from '../chat-message/chat-message.component';
-import { ChatResponse } from '../../models/chat.model';
+import { ChatResponse, SuggestiveAction } from '../../models/chat.model';
 import { ChatStore } from '../../services/chat.store';
 import { CommonModule } from '@angular/common';
 import { FeedbackRating } from '../../../../../_shared/constants/feedback-rating';
@@ -9,14 +9,12 @@ import { FeedbackDTO, FeedbackFormConfig, FeedbackFormData } from '../../models/
 import { ActivatedRoute } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { FeedbackTag } from '../../../../../_shared/constants/feedback-tag';
-import { SvgIconComponent } from '../../../../../_shared/components/svg-icon/svg-icon.component';
 
 @Component({
   selector: 'app-chat-window',
   imports: [
     ChatMessageComponent,
     CommonModule,
-    SvgIconComponent
   ],
   templateUrl: './chat-window.component.html',
   styleUrl: './chat-window.component.scss',
@@ -29,10 +27,17 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   private route = inject(ActivatedRoute);
   private destroy$ = new Subject<void>();
   loadingOlderMessages = false;
-  readonly thinkingLabel = signal('Thinking...');
-  private thinkingTimer: ReturnType<typeof setTimeout> | null = null;
   private userScrolledUp = false;
   private pendingScrollToLastUser = false;
+
+  /** Index of the last assistant message — drives the regenerate button. */
+  readonly lastAssistantIdx = computed(() => {
+    const msgs = this.chatStore.messages();
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      if (msgs[i].role === 'Assistant') return i;
+    }
+    return -1;
+  });
 
   // Reactive feedback form config — serviceHierarchies from store, loaded once
   readonly feedbackFormConfig = computed<FeedbackFormConfig>(() => ({
@@ -51,25 +56,12 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     effect(() => {
       const feedBackResult = this.chatStore.feedbackResult();
       if (feedBackResult) {
-        this.toastService.show(feedBackResult.message,
-          {
-            classname: feedBackResult.success ? 'bg-success text-light' : 'bg-danger text-light',
-            autohide: true,
-            delay: 3000,
-          });
+        this.toastService.show(feedBackResult.message, {
+          classname: feedBackResult.success ? 'bg-success text-light' : 'bg-danger text-light',
+          autohide: true,
+          delay: 3000,
+        });
         this.chatStore.clearFeedbackResult();
-      }
-    });
-
-    effect(() => {
-      const isWaiting = this.chatStore.loading() && !this.chatStore.messages().some(m => m.isStreaming);
-      if (this.thinkingTimer) {
-        clearTimeout(this.thinkingTimer);
-        this.thinkingTimer = null;
-      }
-      if (isWaiting) {
-        this.thinkingLabel.set('Thinking...');
-        this.thinkingTimer = setTimeout(() => this.thinkingLabel.set('Generating...'), 3000);
       }
     });
 
@@ -90,7 +82,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
       if (this.pendingScrollToLastUser && !loading && messages.length > 0) {
         this.pendingScrollToLastUser = false;
-        this.userScrolledUp = true; // keep at that position; don't snap further down
+        this.userScrolledUp = true;
         requestAnimationFrame(() => this.scrollToLastUserMessage());
         return;
       }
@@ -108,11 +100,6 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
 
       if (!id) {
         this.pendingScrollToLastUser = false;
-        // Only reset state when actually leaving an existing conversation.
-        // When the chat-window mounts fresh from the welcome block (after the
-        // user just sent the first message), selectedConversationId is still
-        // null and messages were just appended — clearing them here would
-        // erase the in-flight message and bounce back to the welcome view.
         if (this.chatStore.selectedConversationId() !== null) {
           this.chatStore.startNewConversation();
         }
@@ -129,16 +116,11 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
-    if (this.thinkingTimer) {
-      clearTimeout(this.thinkingTimer);
-    }
   }
 
   async onMessageScroll(event: Event) {
     const target = event.target as HTMLElement | null;
-    if (!target) {
-      return;
-    }
+    if (!target) return;
 
     const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 50;
     this.userScrolledUp = !atBottom;
@@ -155,7 +137,6 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.loadingOlderMessages = true;
     try {
       await this.chatStore.loadMoreMessages();
-
       requestAnimationFrame(() => {
         const heightDelta = target.scrollHeight - previousScrollHeight;
         if (heightDelta > 0) {
@@ -193,8 +174,6 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.loadingOlderMessages = true;
     try {
       await this.chatStore.loadMoreMessages();
-
-
     } finally {
       this.loadingOlderMessages = false;
     }
@@ -221,11 +200,32 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     } as FeedbackDTO;
 
     await this.chatStore.postFeedback(feedbackToSubmit);
-
   }
 
-  onRegen(m: ChatResponse) {
-    console.log('Regenerated message', m);
+  /** Wire suggestive-action click → resend the question text. */
+  onSuggestiveAction(action: SuggestiveAction): void {
+    void this.chatStore.sendMessage(action.short_title);
+  }
+
+  /** Wire regenerate button → ChatStore.regenerate(). */
+  onRegen(_m: ChatResponse) {
+    void this.chatStore.regenerate();
+  }
+
+  /** Wire user-message edit → ChatStore.editMessage(index, newText). */
+  onEdit(payload: { message: ChatResponse, newText: string }) {
+    if (payload.message.userMessageIndex == null) return;
+    void this.chatStore.editMessage(payload.message.userMessageIndex, payload.newText);
+  }
+
+  /** Toggle inline edit mode for a user message. */
+  onToggleEdit(m: ChatResponse) {
+    this.chatStore.toggleEdit(m.messageId);
+  }
+
+  /** Cancel edit. */
+  onCancelEdit(m: ChatResponse) {
+    this.chatStore.cancelEdit(m.messageId);
   }
 
   onMore(m: ChatResponse) {
@@ -235,5 +235,4 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   onCopy(m: ChatResponse) {
     console.log('Copied message', m);
   }
-
 }

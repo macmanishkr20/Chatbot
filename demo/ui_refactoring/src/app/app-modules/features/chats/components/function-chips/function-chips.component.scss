@@ -1,0 +1,64 @@
+@use './../../../../../../theme/app' as *;
+
+.chips-reason {
+  margin: 0 0 6px 4px;
+  font-size: 0.7rem;
+  color: rgba(255, 230, 0, 0.85);
+}
+
+.chips-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 4px 0;
+  transition: filter 0.25s ease;
+
+  &.highlighted {
+    .chip {
+      animation: chip-shimmer 2s ease-in-out infinite;
+    }
+  }
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(46, 46, 56, 0.6);
+  color: $app-font-color;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+
+  .chip-icon i {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  &:hover {
+    background: rgba(255, 230, 0, 0.1);
+    border-color: rgba(255, 230, 0, 0.5);
+
+    .chip-icon i {
+      color: $primary-color;
+    }
+  }
+
+  &.selected {
+    background: $primary-color;
+    color: #1a1a24;
+    border-color: $primary-color;
+
+    .chip-icon i {
+      color: #1a1a24;
+    }
+  }
+}
+
+@keyframes chip-shimmer {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 230, 0, 0); }
+  50%       { box-shadow: 0 0 0 3px rgba(255, 230, 0, 0.25); }
+}
