@@ -4,8 +4,7 @@
       @if (!onlyMenu) {
       <a class="navbar-brand ps-1 py-0 m-0 d-inline-flex align-items-center" href="#">
         <div class="d-inline-flex align-items-center gap-2">
-          <app-svg-icon name="logo" cssClass="app-logo logo-banner"
-          ariaLabel="MENA Chat BE Logo"></app-svg-icon>
+          <span class="logo-sm d-inline-block"></span>
           <span class="logo-text text-white">{{ title }}</span>
         </div>
       </a>
@@ -20,7 +19,7 @@
                 </div>
                 }
                 @if (hasAvatar) {
-                <img [src]="userImage" class="avatar-img rounded-circle border shadow-sm border-primary" alt="" />
+                <img [src]="userImage" class="avatar-img rounded-circle" alt="" />
                 }
               </a>
 

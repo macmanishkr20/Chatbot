@@ -106,30 +106,19 @@ async def multi_function_search_node(state: RAGState, config: RunnableConfig) ->
         "multi_function_search: trying functions %s", functions_to_try,
     )
 
-    # ── Pre-fetch search results for all candidate functions in parallel ──
-    # Validation (LLM check for [NO_ANSWER]) still runs serially so we can
-    # stop on the first real answer — but we no longer wait for N serial
-    # search round-trips.
-    async def _search_one(fn_name: str) -> list:
-        for ct in fallback_chain:
-            odata_filter = _build_function_filter(fn_name, base_filter, ct)
-            res = await search_service.unified_search(
-                rewritten_query, embedded_query, odata_filter=odata_filter,
-            )
-            if res:
-                return res
-        return []
-
-    prefetched = await asyncio.gather(
-        *[_search_one(fn) for fn in functions_to_try],
-        return_exceptions=False,
-    )
-    results_by_fn = dict(zip(functions_to_try, prefetched))
-
-    # ── Iterate each candidate function (validation phase, serial) ──
+    # ── Iterate each candidate function ──
     for fn in functions_to_try:
         emit_status(f"Searching in **{fn}** function...")
-        results: list = results_by_fn.get(fn, [])
+
+        # Search with content-type fallback (qa_pair → document)
+        results: list = []
+        for ct in fallback_chain:
+            odata_filter = _build_function_filter(fn, base_filter, ct)
+            results = await search_service.unified_search(
+                rewritten_query, embedded_query, odata_filter=odata_filter,
+            )
+            if results:
+                break
 
         if not results:
             emit_status(

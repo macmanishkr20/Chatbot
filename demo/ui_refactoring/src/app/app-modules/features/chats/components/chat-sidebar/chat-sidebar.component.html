@@ -1,15 +1,15 @@
 <div class="chat-container">
 
     <!-- New Side bar -->
-    <input id="navCollapse" type="checkbox" 
-    class="d-none" 
-    aria-hidden="true" 
-    [checked]="sidebarCollapsed" />
+    <input id="navCollapse" type="checkbox"
+    class="d-none"
+    aria-hidden="true"
+    [checked]="sidebarCollapsed"
+    (change)="onCollapseChange($event)" />
 
     <aside class="sidebar">
-        <!-- TOP: brand + collapse/expand -->
+        <!-- TOP: collapse toggle -->
         <div class="sidebar-top d-flex align-items-center gap-2 px-3 py-2">
-            
             <!-- Collapse/Expand toggle -->
             <label for="navCollapse"
              class="sidebar-toggle d-inline-flex border-0 align-items-center justify-content-center gap-1 cursor-pointer"
@@ -20,96 +20,158 @@
             </label>
         </div>
 
+        <!-- New Chat Button -->
+        <div class="new-chat-btn-wrapper px-3 mb-3">
+            <button type="button" class="new-chat-btn" (click)="chatStore.startNewChat()">
+                <i class="bi bi-stars"></i>
+                <span class="label-text">New Chat</span>
+            </button>
+        </div>
+
         <!-- MIDDLE: scrollable sections -->
-        <nav class="sidebar-scroll flex-grow-1 overflow-auto px-2 py-2">
-            <ul class="list-unstyled mb-0">
-                @for(item of sidebarStore.chatSidebarItems(); track item.id) {
-                    <ng-container
-                        *ngTemplateOutlet="navItemTemplate; context: { $implicit: item, level: 0 }" />
-                }
-            </ul>
-        </nav>
+        <nav class="sidebar-scroll flex-grow-1 overflow-auto px-2 py-1">
 
-        <!-- Recursive navigation item template -->
-        <ng-template #navItemTemplate let-item let-level="level">
-            <li class="mb-1">
-                <!-- ACTION TYPE -->
-                @if(item.type === 'action' && item.showInSidebar) {
-                <a class="nav-link d-flex align-items-center gap-2 py-2 rounded cursor-pointer"
-                   [class.active]="sidebarStore.isActive(item.id)"
-                   [ngClass]="getItemClasses(level)"
-                   [attr.title]="item.name"
-                   (click)="item.action?.()">
-                    <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
-                        [ariaLabel]="item.name"></app-svg-icon>
-                    <span class="text-truncate cursor-pointer">{{ item.name }}</span>
-                </a>
-                }
-
-                <!-- LINK TYPE -->
-                @if(item.type === 'link' && item.showInSidebar) {
-                <a [routerLink]="item.path"
-                   class="nav-link d-flex align-items-center gap-2 py-2 rounded cursor-pointer"
-                   [class.active]="sidebarStore.isActive(item.id)"
-                   [ngClass]="getItemClasses(level)"
-                   [attr.title]="item.name">
-                    <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
-                        [ariaLabel]="item.name"></app-svg-icon>
-                    <span class="text-truncate cursor-pointer">{{ item.name }}</span>
-                </a>
-                }
-
-                <!-- GROUP TYPE (expandable with children) -->
-                @if(item.type === 'group' && item.showInSidebar) {
-                <details class="section"
-                         [class.nested-section]="level > 0"
-                         [attr.open]="item.expanded?.() ? '' : null"
-                         (toggle)="sidebarStore.toggleConversation(item, $event)">
-                    <summary class="section-summary d-flex align-items-center gap-2 py-2 rounded"
-                             [ngClass]="getSummaryClasses(level)"
-                             [attr.title]="item.name">
-                        <app-svg-icon [name]="item.icon" cssClass="flex-shrink-0"
-                            [ariaLabel]="item.name" 
-                            (click)="onGroupLabelClick(item, $event)"></app-svg-icon>
-                        <span class="text-truncate cursor-pointer"
-                              (click)="onGroupLabelClick(item, $event)">{{ item.name }}</span>
-                        <i class="bi bi-chevron-right chevron ms-auto"></i>
-                    </summary>
-                    @if(item.expanded?.() && item.children?.()) {
-                    <div class="conversation-list">
-                        <ul class="nav flex-column mt-1 mb-2">
-                            @for(child of (item.children?.() ?? []); track child.id) {
-                                <ng-container
-                                    *ngTemplateOutlet="navItemTemplate; context: { $implicit: child, level: level + 1 }" />
+            <!-- PINNED section -->
+            @if (pinnedConversations().length) {
+                <div class="section-header" (click)="expandIfCollapsed()">
+                    <i class="bi bi-pin-angle-fill pin-icon"></i>
+                    <span class="label-text">Pinned</span>
+                </div>
+                <ul class="list-unstyled mb-3 conversation-list">
+                    @for (conv of pinnedConversations(); track conv.id) {
+                        <li class="conversation-item"
+                            [class.active]="sidebarStore.isActive(String(conv.id))"
+                            (click)="chatStore.selectConversation(conv.id)">
+                            @if (renamingConvId === conv.id) {
+                                <div class="rename-wrapper" (click)="$event.stopPropagation()">
+                                    <input class="rename-input" [(ngModel)]="renameTitle"
+                                           (keydown.enter)="submitRename(conv)"
+                                           (keydown.escape)="cancelRename()" />
+                                    <div class="rename-actions">
+                                        <button type="button" class="rename-btn rename-confirm" title="Confirm"
+                                                (click)="submitRename(conv)">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button type="button" class="rename-btn rename-cancel" title="Cancel"
+                                                (click)="cancelRename()">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            } @else {
+                            <div class="conv-row">
+                                <div class="conv-info">
+                                    <span class="conv-title">{{ conv.title }}</span>
+                                    <span class="conv-date">{{ conv.modifiedAt | date:'MMM d, y' }}</span>
+                                </div>
+                                <!-- <div class="conv-actions" (click)="$event.stopPropagation()">
+                                    <button type="button" class="conv-action-btn" title="Unpin"
+                                            (click)="onPinConversation(conv)">
+                                        <i class="bi bi-pin-angle-fill unpin-icon"></i>
+                                    </button>
+                                    <button type="button" class="conv-action-btn" title="Rename"
+                                            (click)="onRenameConversation(conv)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="conv-action-btn btn-delete" title="Delete"
+                                            (click)="onDeleteConversation(conv)">
+                                        <i class="bi bi-trash3"></i>
+                                    </button>
+                                </div> -->
+                            </div>
                             }
-                        </ul>
-                        <!-- Load more button for conversations -->
-                        @if(item.code === SidebarCodes.ChatHistory && chatStore.hasMoreConversations()) {
-                        <div class="d-grid mt-2 px-2">
-                            <button type="button"
-                                    class="btn btn-sm btn-outline-light"
-                                    [disabled]="chatStore.loadingConversations()"
-                                    (click)="onLoadMoreConversations()">
-                                @if(chatStore.loadingConversations()) {
-                                Loading...
+                        </li>
+                    }
+                </ul>
+            }
+
+            <!-- CONVERSATIONS section -->
+            <details class="section" [attr.open]="conversationsExpanded ? '' : null"
+                     (toggle)="onConversationsToggle($event)">
+                <summary class="section-header section-summary" (click)="expandIfCollapsed()">
+                    <app-svg-icon name="history" cssClass="flex-shrink-0"
+                        ariaLabel="Conversations"></app-svg-icon>
+                    <span class="label-text">Conversations</span>
+                    <i class="bi bi-chevron-right chevron ms-auto"></i>
+                </summary>
+                @if (conversationsExpanded) {
+                    <ul class="list-unstyled conversation-list mt-1">
+                        @for (conv of visibleConversations(); track conv.id) {
+                            <li class="conversation-item"
+                                [class.active]="sidebarStore.isActive(String(conv.id))"
+                                (click)="chatStore.selectConversation(conv.id)">
+                                @if (renamingConvId === conv.id) {
+                                    <div class="rename-wrapper" (click)="$event.stopPropagation()">
+                                        <input class="rename-input" [(ngModel)]="renameTitle"
+                                               (keydown.enter)="submitRename(conv)"
+                                               (keydown.escape)="cancelRename()" />
+                                        <div class="rename-actions">
+                                            <button type="button" class="rename-btn rename-confirm" title="Confirm"
+                                                    (click)="submitRename(conv)">
+                                                <i class="bi bi-check-lg"></i>
+                                            </button>
+                                            <button type="button" class="rename-btn rename-cancel" title="Cancel"
+                                                    (click)="cancelRename()">
+                                                <i class="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                    </div>
                                 } @else {
-                                Load more
+                                <div class="conv-row">
+                                    <div class="conv-info">
+                                        <span class="conv-title">{{ conv.title }}</span>
+                                        <span class="conv-date">{{ conv.modifiedAt | date:'MMM d, y' }}</span>
+                                    </div>
+                                    <!-- <div class="conv-actions" (click)="$event.stopPropagation()">
+                                        <button type="button" class="conv-action-btn" title="Pin"
+                                                (click)="onPinConversation(conv)">
+                                            <i class="bi bi-pin-angle"></i>
+                                        </button>
+                                        <button type="button" class="conv-action-btn" title="Rename"
+                                                (click)="onRenameConversation(conv)">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button" class="conv-action-btn btn-delete" title="Delete"
+                                                (click)="onDeleteConversation(conv)">
+                                            <i class="bi bi-trash3"></i>
+                                        </button>
+                                    </div> -->
+                                </div>
                                 }
+                            </li>
+                        }
+                    </ul>
+                    <!-- Load more -->
+                    @if (hasMoreToShow()) {
+                        <div class="d-grid mt-2 px-2">
+                            <button type="button" class="btn-load-more"
+                                    (click)="onLoadMoreConversations()">
+                                Load more
                             </button>
                         </div>
-                        } @else if(item.code === SidebarCodes.ChatHistory && chatStore.loadingConversations()) {
-                        <div class="text-center text-secondary py-2 small">Loading conversations...</div>
-                        }
-                    </div>
+                    } @else if (chatStore.loadingConversations()) {
+                        <div class="text-center text-secondary py-2 small">Loading...</div>
                     }
-                </details>
                 }
-            </li>
-        </ng-template>
+            </details>
 
-        <!-- BOTTOM: user info -->
+            <!-- Admin links -->
+            @for (item of adminItems; track item.id) {
+                @if (item.showInSidebar) {
+                    <a [routerLink]="item.path"
+                       class="nav-link d-flex align-items-center gap-2 py-2 rounded cursor-pointer mt-2"
+                       [class.active]="sidebarStore.isActive(item.id)"
+                       [attr.title]="item.name">
+                        <app-svg-icon [name]="item.icon!" [cssClass]="'flex-shrink-0 ' + (item.iconColorClass || '')"
+                            [ariaLabel]="item.name"></app-svg-icon>
+                        <span class="text-truncate label-text cursor-pointer">{{ item.name }}</span>
+                    </a>
+                }
+            }
+        </nav>
+
+        <!-- BOTTOM -->
         <div class="sidebar-bottom d-flex align-items-center gap-2 px-3 py-2">
-            
         </div>
     </aside>
 <div class="main flex-grow-1 w-100">

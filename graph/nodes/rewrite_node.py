@@ -5,6 +5,7 @@ Rewrite node — query rewriting, filter extraction, and filter parsing (ASK-onl
 import datetime
 import json
 import re
+from langchain_core.messages import BaseMessage
 from services.telemetry import get_tracer_span
 from graph.state import RAGState
 from prompts.rewrite import (
@@ -140,23 +141,56 @@ def filter_to_vector(filter_string: str) -> dict:
     odata_filter = parse(filter_string)
     return {"filter": odata_filter if odata_filter else None}
 
+# ───────────────── Conversation Context Helper ─────────────────
+
+
+def _format_conversation_context(messages: list[BaseMessage], max_turns: int = 5) -> str:
+    """Format recent conversation messages as context for the rewrite LLM.
+
+    Returns a compact string with the last N user/assistant exchanges so the
+    rewrite LLM can resolve follow-up queries (e.g. "TME:" → full intent).
+    """
+    if not messages:
+        return ""
+
+    # Take the last max_turns*2 messages (user + assistant pairs)
+    recent = messages[-(max_turns * 2):]
+    lines = []
+    for msg in recent:
+        if not isinstance(msg, BaseMessage):
+            continue
+        role = "User" if msg.type == "human" else "Assistant"
+        content = (msg.content or "").strip()
+        if content:
+            # Truncate very long messages to keep context concise
+            if len(content) > 300:
+                content = content[:300] + "..."
+            lines.append(f"{role}: {content}")
+
+    return "\n".join(lines)
+
+
 # ───────────────── LLM Rewrite Call ─────────────────
 
 
 @retry_with_llm_backoff()
-async def _rewrite_filters_query(query_with_filter: dict, llm_model: str) -> dict:
+async def _rewrite_filters_query(query_with_filter: dict, llm_model: str, conversation_context: str = "") -> dict:
     """
     Rewrite query and extract structured filter using LLM.
+    Includes conversation context to resolve follow-up queries.
     """
+    # Build the user message with conversation context if available
+    user_content = ""
+    if conversation_context:
+        user_content += f"<conversation_history>\n{conversation_context}\n</conversation_history>\n\n"
+    user_content += rewrite_query_filter_user_template(
+        query_with_filter["query"],
+        query_with_filter["filter"],
+    )
+
     messages = [
         {"role": "system", "content": REWRITE_QUERY_FILTER_SYSTEM_PROMPT},
-        {
-            "role": "user",
-            "content": rewrite_query_filter_user_template(
-                query_with_filter["query"],
-                query_with_filter["filter"],
-            ),
-        },
+        {"role": "user", "content": user_content},
     ]
 
     client = create_async_client(
@@ -242,6 +276,12 @@ async def rewrite_node(state: RAGState) -> dict:
         source_url = state.get("source_url", [])
         llm_model = get_llm_model("rewrite_query")
 
+        # Build conversation context from messages for follow-up resolution
+        raw_messages = state.get("messages", [])
+        # Exclude the last message (current user input) — it's already in user_input
+        history_messages = raw_messages[:-1] if raw_messages else []
+        conversation_context = _format_conversation_context(history_messages)
+
         # ASK-only
         if input_type == "ask":
             query_with_filter = {
@@ -252,7 +292,7 @@ async def rewrite_node(state: RAGState) -> dict:
                 },
             }
 
-            rewritten_query = await _rewrite_filters_query(query_with_filter, llm_model)
+            rewritten_query = await _rewrite_filters_query(query_with_filter, llm_model, conversation_context)
 
             #Parse and sanitize filters
             structured_filter = filter_to_vector(

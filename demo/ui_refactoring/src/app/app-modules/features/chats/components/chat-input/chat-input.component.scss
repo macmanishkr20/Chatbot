@@ -14,33 +14,21 @@
 .chat-input-box {
   position: relative;
   display: flex;
-  align-items: flex-end;
-  gap: 0.75rem;
-  padding: 0.25rem 0.5rem;
-  border-radius: 40px;
-  backdrop-filter: blur(5px);
-  justify-content: space-between;
   align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 40px;
+  background: rgba(30, 30, 44, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  justify-content: space-between;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
 
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    padding: 1px;
-    border-radius: inherit;
-    background: linear-gradient(
-      135deg,
-      #FFE600 0%,
-      #FFE600 40%,
-      #FF32FF 79%,
-      #FF3C00 100%
-    );
-    opacity: 0.35;
-    mask:
-      linear-gradient(#000 0 0) content-box,
-      linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
+  &:focus-within {
+    border-color: rgba(56, 189, 248, 0.5);
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2), 0 4px 24px rgba(0, 0, 0, 0.15);
   }
 }
 
@@ -62,16 +50,19 @@
 
 .input-textarea {
   flex: 1;
-  min-height: 30px;
+  min-height: 36px;
   max-height: 160px;
-  padding: 0;
+  padding: 6px 0;
   border: none;
   outline: none;
   background: transparent;
   resize: none;
   font-size: 0.875rem;
   line-height: 1.5;
+  color: #fff;
   overflow-y: auto;
+  display: flex;
+  align-items: center;
 
   &:focus {
     outline: none;
@@ -79,8 +70,7 @@
   }
 
   &::placeholder {
-    color: #fff;
-    opacity: 0.85;
+    color: rgba(255, 255, 255, 0.5);
   }
 
   /* Custom scrollbar */
@@ -93,11 +83,11 @@
   }
 
   &::-webkit-scrollbar-thumb {
-    background: #cbd5e0;
+    background: rgba(255, 255, 255, 0.15);
     border-radius: 3px;
 
     &:hover {
-      background: #a0aec0;
+      background: rgba(255, 255, 255, 0.25);
     }
   }
 }
@@ -105,18 +95,17 @@
 .input-send-btn {
   position: relative;
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   padding: 0;
   border: none;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.08);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  transition: opacity 0.15s ease;
-  margin: 0.25rem;
+  transition: background 0.15s ease, opacity 0.15s ease;
 
   ::ng-deep .send-icon {
     display: inline-flex;
@@ -142,12 +131,13 @@
 
   &:hover:not(:disabled),
   &:focus-visible:not(:disabled) {
+    background: rgba(255, 255, 255, 0.14);
     ::ng-deep .send-icon--outline { opacity: 0; }
     ::ng-deep .send-icon--filled { opacity: 1; }
   }
 
   &:disabled {
-    opacity: 0.5;
+    opacity: 0.4;
     cursor: not-allowed;
   }
 
@@ -165,8 +155,8 @@
   padding: 4px 10px;
   margin: 0 0 8px 8px;
   border-radius: 999px;
-  background: rgba(255, 230, 0, 0.12);
-  border: 1px solid rgba(255, 230, 0, 0.5);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.35);
   color: #fff;
   font-size: 0.7rem;
 
@@ -174,8 +164,8 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: #ffe600;
-    box-shadow: 0 0 6px rgba(255, 230, 0, 0.6);
+    background: #ffffff;
+    box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
   }
 
   .code {
@@ -213,12 +203,12 @@
   margin-top: 6px;
   text-align: center;
   font-size: 0.65rem;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(255, 255, 255, 0.4);
 
   kbd {
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.18);
-    color: rgba(255, 255, 255, 0.85);
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.75);
     padding: 1px 5px;
     border-radius: 4px;
     font-size: 0.6rem;
@@ -234,7 +224,7 @@
 
   .chat-input-box {
     gap: 0.5rem;
-    padding: 0.625rem 0.875rem;
+    padding: 0.5rem 0.875rem;
   }
 }
 

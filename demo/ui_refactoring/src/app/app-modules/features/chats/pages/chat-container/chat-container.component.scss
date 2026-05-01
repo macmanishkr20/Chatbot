@@ -127,6 +127,7 @@
     .card-body {
         display: flex;
         flex-direction: column;
+        font-family:'EYInterstate-Light', sans-serif !important;
 
         .card-text {
             margin-bottom: 0.5rem;
@@ -136,6 +137,8 @@
         // Service name pinned to the bottom so it aligns across all cards
         > span {
             margin-top: auto;
+            font-family: 'EYInterstate-Regular', sans-serif !important;
+
         }
     }
 

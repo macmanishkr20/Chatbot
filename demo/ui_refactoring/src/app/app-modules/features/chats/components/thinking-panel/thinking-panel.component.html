@@ -3,14 +3,14 @@
     <span class="thinking-icon">
       <i class="bi" [ngClass]="allDone ? 'bi-check-circle-fill' : 'bi-gear-fill'"></i>
     </span>
-    <span class="thinking-label">{{ allDone ? 'Completed' : 'Thinking…' }}</span>
+    <span class="thinking-label" [class.fade-text]="!allDone">{{ allDone ? 'Completed' : thinkingLabel() }}</span>
     <span class="thinking-count">{{ steps().length }} steps</span>
     <span class="thinking-caret">
-      <i class="bi bi-chevron-right"></i>
+      <!--<i class="bi bi-chevron-right"></i>-->
     </span>
   </button>
 
-  @if (!isCollapsed) {
+  <!-- @if (!isCollapsed) {
     <div class="thinking-steps">
       @for (step of steps(); track trackByNode($index, step)) {
         <div class="step" [class.running]="step.state === 'running'" [class.done]="step.state === 'done'">
@@ -28,5 +28,5 @@
         </div>
       }
     </div>
-  }
+  } -->
 </div>

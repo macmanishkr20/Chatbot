@@ -3,17 +3,61 @@
 .avatar {
   height: 1.8rem;
   width: 1.8rem;
-  margin-top: 0.5rem;
+  margin-top: 0;
   background-color: $app-netural-background;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-img {
-  height: 2rem;
-  width: 2rem;
-  margin-top: 0.2rem;
-  border-width: 2px !important;
+  height: 2.2rem;
+  width: 2.2rem;
+  margin-top: 0;
+  border: 2px solid rgba(56, 189, 248, 0.6) !important;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.4) !important;
+  object-fit: cover;
+  vertical-align: middle;
 }
 
 .seconday-menu .navbar-dark .navbar-nav .nav-item {
   min-width: auto;
+  display: flex;
+  align-items: center;
+}
+
+.seconday-menu .navbar-dark .navbar-nav .nav-link {
+  display: flex;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+// Profile dropdown - glass styling
+:host ::ng-deep .dropdown-menu,
+:host ::ng-deep [ngbDropdownMenu] {
+  background: rgba(20, 20, 30, 0.9) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  padding: 8px 0 !important;
+  min-width: 160px;
+
+  .dropdown-item,
+  a[ngbDropdownItem] {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 0.8rem !important;
+    padding: 8px 16px !important;
+    border-left: none !important;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover, &:focus {
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #fff !important;
+      border-left: none !important;
+    }
+  }
 }

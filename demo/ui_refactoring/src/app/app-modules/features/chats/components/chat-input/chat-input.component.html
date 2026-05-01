@@ -1,6 +1,7 @@
 <div class="chat-input-container">
   <div class="chat-input-wrapper">
 
+    <!-- Selected function chip pill hidden for now
     @if (selectedChip(); as chip) {
       <div class="selected-fn-pill" [attr.aria-label]="'Selected function: ' + chip.full">
         <span class="dot" aria-hidden="true"></span>
@@ -9,6 +10,7 @@
         <button type="button" class="clear-btn" title="Clear function" aria-label="Clear function" (click)="clearFunction()">×</button>
       </div>
     }
+    -->
 
     <form (ngSubmit)="onSend()" [formGroup]="userQueryForm">
       <div class="chat-input-box">
@@ -50,9 +52,11 @@
       </div>
     </form>
 
+    <!-- Function chips hidden for now
     @if (showFunctionChips) {
       <app-function-chips />
     }
+    -->
 
     <div class="input-hint">
       Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line

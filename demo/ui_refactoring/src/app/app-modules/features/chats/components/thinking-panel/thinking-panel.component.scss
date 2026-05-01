@@ -2,21 +2,23 @@
 
 .thinking-panel {
   margin-bottom: 8px;
-  border-radius: 10px;
-  background: rgba(46, 46, 56, 0.55);
+  border-radius: 14px;
+  background: rgba(30, 30, 44, 0.55);
   border: 1px solid rgba(255, 255, 255, 0.08);
   overflow: hidden;
   font-size: 0.75rem;
   color: $app-font-color;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  width: 100%;
 
   &.completed {
-    background: rgba(34, 197, 94, 0.08);
-    border-color: rgba(34, 197, 94, 0.25);
+    background: rgba(30, 30, 44, 0.45);
+    border-color: rgba(255, 255, 255, 0.1);
 
     .thinking-icon,
-    .thinking-label,
-    .thinking-count,
-    .thinking-caret {
+    .thinking-label {
       color: #22c55e;
     }
   }
@@ -30,13 +32,13 @@
   width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 7px 12px;
   background: none;
   border: none;
   cursor: pointer;
   color: $app-font-color;
-  font-size: 0.75rem;
+  font-size: 0.68rem;
   transition: background 0.15s;
 
   &:hover {
@@ -45,26 +47,45 @@
 }
 
 .thinking-icon {
-  font-size: 13px;
-  color: #94a3b8;
+  font-size: 12px;
   display: inline-flex;
+  color: rgba(56, 189, 248, 0.5);
+  text-shadow: 0 0 6px rgba(56, 189, 248, 0.3);
 
-  i { font-size: 13px; }
+  i {
+    font-size: 12px;
+    opacity: 0.7;
+    filter: drop-shadow(0 0 3px rgba(56, 189, 248, 0.4));
+  }
 }
 
 .thinking-panel:not(.collapsed):not(.completed) .thinking-icon i {
   animation: tp-spin 2s linear infinite;
+  color: rgba(56, 189, 248, 0.6);
+  filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5));
 }
 
 .thinking-label {
-  font-weight: 600;
-  letter-spacing: -0.005em;
+  font-weight: 500;
+  font-size: 0.68rem;
+  letter-spacing: 0.01em;
+  color: rgba(56, 189, 248, 0.85);
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+
+  &.fade-text {
+    animation: tp-cycle 0.6s ease;
+  }
+}
+
+@keyframes tp-cycle {
+  0% { opacity: 0; transform: translateY(4px); filter: blur(2px); }
+  100% { opacity: 1; transform: translateY(0); filter: blur(0); }
 }
 
 .thinking-count {
   margin-left: auto;
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.7rem;
+  color: rgba(56, 189, 248, 0.4);
+  font-size: 0.62rem;
 }
 
 .thinking-caret {
@@ -81,7 +102,7 @@
   flex-direction: column;
   gap: 4px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);
-  background: rgba(0, 0, 0, 0.18);
+  background: rgba(0, 0, 0, 0.1);
 }
 
 .step {
@@ -92,6 +113,10 @@
 
   &.running {
     font-weight: 500;
+  }
+
+  &.done .step-node {
+    color: #22c55e;
   }
 }
 

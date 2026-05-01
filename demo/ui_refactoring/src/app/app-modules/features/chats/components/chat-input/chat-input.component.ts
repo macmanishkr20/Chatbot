@@ -32,7 +32,7 @@ export class ChatInputComponent {
 
   @ViewChild('msg') textareaRef!: ElementRef<HTMLTextAreaElement>;
 
-  @Input() placeholder = 'Type your question';
+  @Input() placeholder = 'Ask me anything on MENA...';
   @Input() disabled = false;
   @Input() ariaLabel = 'Chat message input';
   @Input() enterToSend = true;
@@ -58,7 +58,7 @@ export class ChatInputComponent {
 
   readonly effectivePlaceholder = computed(() => {
     const chip = this.selectedChip();
-    return chip ? `Ask about ${chip.full}…` : (this.placeholder || 'Ask me anything...');
+    return chip ? `Ask about ${chip.full}…` : (this.placeholder || 'Ask me anything on MENA...');
   });
 
   /** Stream state. */

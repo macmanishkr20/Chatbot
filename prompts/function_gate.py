@@ -78,6 +78,18 @@ The user's currently selected function is provided as context only. Do
 NOT bias the classification toward it — your job is to describe the query.
 </task>
 
+<conversation_context_rules>
+If a <conversation_history> block is provided before the query, use it to
+understand the user's intent. Short follow-up inputs (e.g. "TME:", "SCS",
+"Risk") are often the user selecting a function in response to a prior
+assistant message that asked them to choose. In such cases:
+- Treat the follow-up as an explicit function mention (add to
+  mentioned_functions).
+- Set verdict to "match" and function to the matched code.
+- Consider the FULL conversation context — the user's original question
+  combined with this function selection.
+</conversation_context_rules>
+
 <output_format>
 Return ONLY the structured object with these fields:
 - verdict: "match" | "ambiguous" | "unclassified" | "not_applicable"

@@ -69,6 +69,9 @@ export class ChatMessageComponent implements OnInit {
   /** Local edit text buffer (driven by the user message bubble). */
   editBuffer = '';
 
+  /** Copy tooltip visibility. */
+  showCopyTooltip = false;
+
   readonly citationsExpanded = signal<boolean>(false);
 
   @ViewChild('feedbackModalTpl', { static: true }) feedbackModalTpl!: TemplateRef<unknown>;
@@ -91,9 +94,21 @@ export class ChatMessageComponent implements OnInit {
   isUser() {
     return this.message.role === 'User';
   }
+
+  /** Whether the streaming cursor should show — only true if actively streaming content. */
+  get showStreamingCursor(): boolean {
+    if (!this.message.isStreaming) return false;
+    // If thinking steps are all done and we have content, streaming is visually complete
+    const steps = this.message.thinkingSteps;
+    if (steps && steps.length > 0 && steps.every(s => s.state === 'done') && (this.message.content ?? this.message.answer)) {
+      return false;
+    }
+    return true;
+  }
+
   showActions(m: ChatResponse) {
     return this.actionsFor.includes(m.role) && (m.answer ?? m.content ?? '').trim().length > 0
-      && !m.isStreaming;
+      && !this.showStreamingCursor;
   }
 
   // ── Citations (assistant) ──
@@ -208,6 +223,8 @@ export class ChatMessageComponent implements OnInit {
   copyContent() {
     const text = this.message.content ?? this.message.answer ?? '';
     navigator.clipboard.writeText(text);
+    this.showCopyTooltip = true;
+    setTimeout(() => (this.showCopyTooltip = false), 2000);
     this.copy.emit(this.message);
   }
 

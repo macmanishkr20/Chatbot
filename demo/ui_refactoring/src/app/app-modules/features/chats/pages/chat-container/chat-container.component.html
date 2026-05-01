@@ -5,7 +5,7 @@
             <div class="welcome-content">
                 <div class="d-flex flex-column align-items-center text-center">
                     <img src="/assets/bot.png" alt="bot-image" class="img-avatar" />
-                    <h4 class="mt-4 mb-0">Hi {{this.authUser?.fullName}}, How can I assist you today?</h4>
+                    <h4 class="mt-4 mb-0">Hi {{this.authUser?.firstName}}, How can I assist you today?</h4>
                 </div>
 
                 <span class="welcome-subtitle d-block mt-3">Have a specific topic in mind, Let me know so that I can support you better</span>
@@ -43,7 +43,7 @@
         </div>
 
         <div class="chat-input">
-            <app-chat-input [placeholder]="'Type your question'" (send)="onSend()"
+            <app-chat-input [placeholder]="'Ask me anything on MENA...'" (send)="onSend()"
                 [disabled]="chatStore.loading()"></app-chat-input>
         </div>
     </div>

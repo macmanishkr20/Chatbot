@@ -15,6 +15,7 @@ export interface PaginationVM {
 
 export interface NavItem extends GenericResponse {
   icon?: string;              // e.g., 'bi bi-house'
+  iconColorClass?: string;    // CSS class for icon color
   path?: string;              // for single routing menu
   externalUrl?: string;       // optional for external links
   badge?: string | number;    // optional small badge
@@ -124,6 +125,7 @@ export interface ChatMessageVM {
   thinkingCollapsed?: boolean;
   deepSearchSteps?: string[];
   deepSearchCollapsed?: boolean;
+  deepSearchDone?: boolean;
   suggestiveActions?: SuggestiveAction[];
   citations?: Citation[];
   conversationTitle?: string | null;

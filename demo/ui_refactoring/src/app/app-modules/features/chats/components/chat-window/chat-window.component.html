@@ -1,4 +1,12 @@
-<div class="chat-messages" #messagesContainer (scroll)="onMessageScroll($event)">
+<div class="chat-window-wrapper">
+    <!-- Conversation topic header -->
+    @if (chatStore.conversationTitle()) {
+        <div class="conversation-header">
+            <span class="conversation-title">{{ chatStore.conversationTitle() }}</span>
+        </div>
+    }
+
+    <div class="chat-messages" #messagesContainer (scroll)="onMessageScroll($event)">
     @if(loadingOlderMessages){
         <div class="text-center mb-3">
             <span class="spinner-border spinner-border-sm" role="status"></span>
@@ -32,4 +40,5 @@
                     (click)="chatStore.error.set(null)"></button>
         </div>
     }
+</div>
 </div>

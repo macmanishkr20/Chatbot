@@ -1,7 +1,7 @@
 @use './../../../../../../theme/app' as *;
 
 .message-wrapper {
-	max-width: 75%;
+	max-width: 50%;
 	min-width: 200px;
 
 	@media (max-width: 768px) {
@@ -14,23 +14,70 @@
 	}
 }
 
+// ── Action buttons (hover-only, outside bubbles) ──
 .message-actions {
-	/* Always visible at bottom of bubble */
-	opacity: 0.7;
+	opacity: 0;
 	transition: opacity 0.2s ease;
+	pointer-events: none;
+}
+
+// Show on hover of the entire message row
+.message-row:hover .message-actions {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.copy-btn-wrapper {
+	position: relative;
+	display: inline-flex;
+	align-items: center;
+}
+
+.copy-tooltip {
+	position: absolute;
+	bottom: 100%;
+	left: 0;
+	margin-bottom: 4px;
+	white-space: nowrap;
+	font-size: 11px;
+	padding: 4px 8px;
+	border-radius: 4px;
+	background: rgba(255, 255, 255, 0.08);
+	backdrop-filter: blur(8px);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: rgba(255, 255, 255, 0.85);
+	animation: copyFadeOut 2s ease forwards;
+	pointer-events: none;
+}
+
+@keyframes copyFadeOut {
+	0%, 50% { opacity: 1; }
+	100% { opacity: 0; }
+}
+
+.action-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
+	border: none;
+	background: rgba(255, 255, 255, 0.06);
+	border-radius: 6px;
+	color: rgba(255, 255, 255, 0.6);
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 0.15s, color 0.15s;
 
 	&:hover {
-		opacity: 1;
+		background: rgba(255, 255, 255, 0.12);
+		color: #fff;
 	}
 
-	.btn-link {
-		text-decoration: none;
-		opacity: 0.8;
-		transition: opacity 0.15s ease;
-
-		&:hover {
-			opacity: 1;
-		}
+	&:disabled {
+		opacity: 0.4;
+		cursor: not-allowed;
 	}
 }
 
@@ -66,18 +113,17 @@
 .markdown-body {
 	word-break: break-word;
 	overflow-wrap: break-word;
-	overflow: hidden;
+	overflow: visible;
 	min-width: 0;
 	width: 100%;
-	white-space: normal; // prevent inheriting pre-wrap from parent; marked.parse trailing \n renders as blank line
+	white-space: normal;
 }
 
 .chat-bubble {
-	vertical-align: top; // d-inline-block defaults to baseline, leaving a descender gap below
+	vertical-align: top;
 }
 
-// User message bubble styling — purple gradient to match design.
-// The host element receives [attr.data-role]="message.role" from chat-window.
+// User message bubble styling
 :host([data-role="User"]) .chat-bubble {
 	background: linear-gradient(
 		135deg,
@@ -88,20 +134,95 @@
 	color: #fff;
 	border-radius: 14px;
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+	backdrop-filter: blur(12px);
+}
+
+// Assistant message bubble — glass styling
+:host([data-role="Assistant"]) .chat-bubble {
+	background: rgba(30, 30, 44, 0.55);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	color: #fff;
+	border-radius: 14px;
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	max-width: 680px;
+	width: 100%;
+	display: block;
+}
+
+// Make thinking panel, citations match assistant bubble width
+:host([data-role="Assistant"]) {
+	app-thinking-panel,
+	app-deep-search-panel,
+	.citations-bubble {
+		width: 100%;
+		max-width: 680px;
+	}
 }
 
 // ── Inline edit form ──
 .edit-form {
-	background: rgba(46, 46, 56, 0.6);
-	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: rgba(30, 30, 44, 0.55);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 12px;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	width: 500px;
+	max-width: 100%;
 
 	.edit-textarea {
-		background: rgba(0, 0, 0, 0.25);
+		background: transparent;
 		color: #fff;
-		border-color: rgba(255, 255, 255, 0.18);
+		border: none;
+		font-size: 0.8rem;
+		resize: vertical;
+		min-height: 60px;
+		width: 100%;
 
 		&:focus {
-			background: rgba(0, 0, 0, 0.35);
+			background: transparent;
+			color: #fff;
+			box-shadow: none;
+			border: none;
+		}
+	}
+}
+
+// ── Edit action buttons (below bubble) ──
+.edit-actions {
+	.btn-submit {
+		padding: 5px 14px;
+		border-radius: 20px;
+		font-size: 0.7rem;
+		font-weight: 600;
+		background: transparent;
+		color: #38bdf8;
+		border: 1.5px solid #38bdf8;
+		box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+		cursor: pointer;
+		transition: box-shadow 0.2s, background 0.2s;
+
+		&:hover {
+			box-shadow: 0 0 14px rgba(56, 189, 248, 0.5);
+			background: rgba(56, 189, 248, 0.08);
+		}
+	}
+
+	.btn-cancel {
+		padding: 5px 14px;
+		border-radius: 20px;
+		font-size: 0.7rem;
+		font-weight: 600;
+		background: rgba(255, 255, 255, 0.06);
+		color: rgba(255, 255, 255, 0.8);
+		border: 1px solid rgba(255, 255, 255, 0.2);
+		cursor: pointer;
+		transition: background 0.2s;
+
+		&:hover {
+			background: rgba(255, 255, 255, 0.12);
 			color: #fff;
 		}
 	}
@@ -118,7 +239,7 @@
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: rgba(255, 230, 0, 0.7);
+		background: rgba(255, 255, 255, 0.7);
 		animation: streaming-bounce 1.2s infinite ease-in-out both;
 	}
 
@@ -131,10 +252,15 @@
 	40%           { transform: scale(1);   opacity: 1; }
 }
 
-// ── Citations (assistant) ──
-.citations-section {
-	border-top: 1px solid rgba(255, 255, 255, 0.07);
-	padding-top: 6px;
+// ── Citations (separate glass collapsible bubble) ──
+.citations-bubble {
+	background: rgba(30, 30, 44, 0.5);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 14px;
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	padding: 10px 14px;
 
 	.citations-header {
 		display: inline-flex;
@@ -144,9 +270,10 @@
 		width: 100%;
 		background: transparent;
 		border: 0;
-		padding: 4px 0;
+		padding: 2px 0;
 		color: rgba(255, 255, 255, 0.75);
 		font-size: 0.7rem;
+		font-weight: 600;
 		cursor: pointer;
 
 		&:hover {
@@ -157,15 +284,21 @@
 	.citations-header-left {
 		display: inline-flex;
 		align-items: center;
-		gap: 4px;
-		font-weight: 600;
+		gap: 6px;
 
-		i { font-size: 13px; }
+		i { font-size: 14px; color: rgba(255, 255, 255, 0.75); }
+	}
+
+	.citations-count {
+		color: rgba(255, 255, 255, 0.5);
+		font-weight: 400;
+		font-size: 0.7rem;
+		margin-left: 4px;
 	}
 
 	.citations-chevron {
 		transition: transform 0.2s ease;
-		font-size: 11px;
+		font-size: 12px;
 
 		&.expanded {
 			transform: rotate(180deg);
@@ -175,40 +308,50 @@
 	.citations-body {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 6px 0 2px;
+		gap: 6px;
+		padding: 8px 0 2px;
 		font-size: 0.7rem;
+		border-top: 1px solid rgba(255, 255, 255, 0.06);
+		margin-top: 6px;
 	}
 
 	.citation-link,
 	.citation-doc {
-		color: rgba(56, 189, 248, 0.95);
+		color: #38bdf8;
 		word-break: break-all;
 
 		span {
-			color: rgba(255, 255, 255, 0.65);
+			color: #38bdf8;
 			font-style: italic;
-			margin-right: 1px;
+			font-size: 0.7rem;
+			margin-right: 2px;
 		}
 	}
 
 	.citation-link {
 		text-decoration: underline;
 
-		&:hover { color: #38bdf8; }
+		&:hover { color: #7dd3fc; }
 	}
 
 	.citation-doc {
-		color: rgba(255, 255, 255, 0.85);
+		color: #38bdf8;
 	}
 }
 
-// Streaming markdown body cursor (subtle)
+// Streaming markdown body cursor — 1px thin bar, only visible while streaming
+.markdown-body::after {
+	content: none;
+}
+
 .markdown-body.streaming::after {
-	content: '▍';
+	content: '';
 	display: inline-block;
+	width: 1px;
+	height: 1em;
 	margin-left: 2px;
-	color: rgba(255, 230, 0, 0.7);
+	background: rgba(255, 255, 255, 0.8);
+	vertical-align: text-bottom;
 	animation: streaming-cursor 1s steps(2) infinite;
 }
 
@@ -217,11 +360,10 @@
 	50.01%, 100% { opacity: 0; }
 }
 
-// Inline citation reference style (rendered by safe-markdown.pipe — kept here so the look matches menabot-ui)
+// Inline citation reference style [1], [2], etc.
 :host ::ng-deep .citation-ref {
-	color: rgba(56, 189, 248, 0.9);
+	color: #38bdf8;
 	font-style: italic;
-	font-size: 0.65rem;
+	font-size: 0.7rem;
 	margin: 0 1px;
 }
-

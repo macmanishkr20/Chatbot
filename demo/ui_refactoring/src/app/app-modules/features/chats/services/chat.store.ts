@@ -571,7 +571,7 @@ export class ChatStore {
           : this.chatService.streamChat(chatBody!, this.abortController.signal);
 
       for await (const event of stream) {
-        this.processSSEEvent(event, assistantMsg.messageId, activeStepNode);
+        this.processSSEEvent(event, assistantMsg.trackId!, activeStepNode);
         if (event.type === 'thought') {
           activeStepNode = event.node;
         }
@@ -584,10 +584,10 @@ export class ChatStore {
         this.error.set('Failed to get response. Please try again.');
       }
     } finally {
-      this.flushContentQueue(assistantMsg.messageId);
+      this.flushContentQueue(assistantMsg.trackId!);
       this.messages.update(msgs =>
         msgs.map(m =>
-          m.messageId === assistantMsg.messageId
+          m.trackId === assistantMsg.trackId
             ? { ...m, isStreaming: false, thinkingCollapsed: true, deepSearchCollapsed: true, answer: m.content ?? '' }
             : m,
         ),
@@ -597,12 +597,12 @@ export class ChatStore {
     }
   }
 
-  private processSSEEvent(event: SSEEvent, assistantId: string, _activeStepNode: string | null): void {
+  private processSSEEvent(event: SSEEvent, assistantTrackId: string, _activeStepNode: string | null): void {
     switch (event.type) {
       case 'thought': {
         this.messages.update(msgs =>
           msgs.map(m => {
-            if (m.messageId !== assistantId) return m;
+            if (m.trackId !== assistantTrackId) return m;
             const steps = (m.thinkingSteps ?? []).map(s =>
               s.state === 'running' ? { ...s, state: 'done' as const } : s,
             );
@@ -615,8 +615,19 @@ export class ChatStore {
 
       case 'content': {
         this.contentQueue += event.content;
-        this.dripAssistantId = assistantId;
+        this.dripAssistantId = assistantTrackId;
         this.startDrip();
+
+        // Mark deep search as done once content starts arriving
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.trackId !== assistantTrackId) return m;
+            if (m.deepSearchSteps?.length && !m.deepSearchDone) {
+              return { ...m, deepSearchDone: true, deepSearchCollapsed: true };
+            }
+            return m;
+          }),
+        );
         break;
       }
 
@@ -624,7 +635,7 @@ export class ChatStore {
         const dsEvent = event as DeepSearchEvent;
         this.messages.update(msgs =>
           msgs.map(m => {
-            if (m.messageId !== assistantId) return m;
+            if (m.trackId !== assistantTrackId) return m;
             const steps = [...(m.deepSearchSteps ?? []), dsEvent.content];
             return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
           }),
@@ -660,7 +671,8 @@ export class ChatStore {
             }
           }
         } else if (final.selected_function) {
-          this.selectedFunction.set(final.selected_function);
+          // Commented out: function chip selection on response
+          // this.selectedFunction.set(final.selected_function);
         }
 
         if (final.function_hint && !final.requires_function_selection && !final.selected_function) {
@@ -670,7 +682,7 @@ export class ChatStore {
 
         const noAnswerInFinal =
           (typeof final.ai_content === 'string' && final.ai_content.trim().startsWith('[NO_ANSWER]'));
-        const lastMsg = this.messages().find(m => m.messageId === assistantId);
+        const lastMsg = this.messages().find(m => m.trackId === assistantTrackId);
         const noAnswerInStream = (lastMsg?.content ?? '').trim().startsWith('[NO_ANSWER]');
         if ((noAnswerInFinal || noAnswerInStream) && !this.selectedFunction()) {
           this.chipsHighlighted.set(true);
@@ -688,7 +700,7 @@ export class ChatStore {
 
         this.messages.update(msgs =>
           msgs.map(m => {
-            if (m.messageId !== assistantId) return m;
+            if (m.trackId !== assistantTrackId) return m;
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
             let content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
 
@@ -747,7 +759,7 @@ export class ChatStore {
 
     this.messages.update(msgs =>
       msgs.map(m =>
-        m.messageId === this.dripAssistantId
+        m.trackId === this.dripAssistantId
           ? { ...m, content: (m.content ?? '') + chunk }
           : m,
       ),
@@ -762,7 +774,7 @@ export class ChatStore {
     }
   }
 
-  private flushContentQueue(assistantId: string): void {
+  private flushContentQueue(trackId: string): void {
     if (this.dripTimerId !== null) {
       clearTimeout(this.dripTimerId);
       this.dripTimerId = null;
@@ -772,7 +784,7 @@ export class ChatStore {
       this.contentQueue = '';
       this.messages.update(msgs =>
         msgs.map(m =>
-          m.messageId === assistantId
+          m.trackId === trackId
             ? { ...m, content: (m.content ?? '') + remaining }
             : m,
         ),

@@ -1,23 +1,32 @@
 @import "../../../theme/app";
 
 .avatar {
-  height: 1.5rem;
-  width: 1.5rem;
+  height: 1.6rem;
+  width: 1.6rem;
   background-color: $app-netural-background;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .avatar-img {
-  height: 1.5rem;
-  width: 1.5rem;
-  border-width: 2px !important;
+  height: 1.6rem;
+  width: 1.6rem;
+  border: 1.5px solid rgba(56, 189, 248, 0.6) !important;
+  box-shadow: 0 0 6px rgba(56, 189, 248, 0.35);
+  object-fit: cover;
+  vertical-align: middle;
+}
+
+// Header bar
+:host ::ng-deep .seconday-menu .navbar {
+  display: flex !important;
+  align-items: center;
 }
 
 .seconday-menu .navbar-dark {
   min-width: auto;
-  min-height: 2rem;
-  padding-top: 0.15rem;
-  padding-bottom: 0.15rem;
-  // Match banner.png — dark left fading into deep indigo/purple on the right
+  padding: 0.25rem 0.75rem;
   background: linear-gradient(
     90deg,
     #1c1c2b 0%,
@@ -28,12 +37,23 @@
 }
 
 .seconday-menu .container-fluid {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+  padding: 0 0.5rem;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between;
+}
+
+// Ensure navbar-collapse doesn't collapse on this layout
+.seconday-menu .navbar-collapse {
+  display: flex !important;
+  flex-basis: auto;
+  justify-content: flex-end;
+  align-items: center;
 }
 
 .seconday-menu .navbar-brand {
   margin-right: 0;
+  padding: 0;
 }
 
 .seconday-menu app-svg-icon.app-logo {
@@ -55,4 +75,35 @@
   line-height: 1;
   display: inline-flex;
   align-items: center;
+  padding-top: 0.4rem;
+}
+
+// Profile dropdown - glass styling
+:host ::ng-deep .dropdown-menu,
+:host ::ng-deep [ngbDropdownMenu] {
+  background: rgba(20, 20, 30, 0.92) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
+  padding: 8px 0 !important;
+  min-width: 160px;
+
+  .dropdown-item,
+  a[ngbDropdownItem],
+  input[ngbDropdownItem] {
+    background: transparent !important;
+    color: rgba(255, 255, 255, 0.8) !important;
+    font-size: 0.78rem !important;
+    padding: 8px 16px !important;
+    border-left: none !important;
+    border: none !important;
+    transition: background 0.15s, color 0.15s;
+
+    &:hover, &:focus {
+      background: rgba(255, 255, 255, 0.08) !important;
+      color: #fff !important;
+    }
+  }
 }

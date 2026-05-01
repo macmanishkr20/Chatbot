@@ -87,7 +87,8 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
         return;
       }
 
-      if (!this.userScrolledUp) {
+      // Always scroll to bottom during streaming or if user hasn't scrolled up
+      if (isStreaming || !this.userScrolledUp) {
         requestAnimationFrame(() => this.scrollToBottom());
       }
     });
@@ -122,7 +123,7 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     const target = event.target as HTMLElement | null;
     if (!target) return;
 
-    const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 50;
+    const atBottom = target.scrollTop + target.clientHeight >= target.scrollHeight - 150;
     this.userScrolledUp = !atBottom;
 
     const nearTop = target.scrollTop <= 80;

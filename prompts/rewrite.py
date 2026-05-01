@@ -83,6 +83,19 @@ request consisting of:
   2. An optional OData-style filter expression.
 </task>
 
+<conversation_context_rules>
+If a <conversation_history> block is provided, use it to resolve
+ambiguous or short follow-up queries. For example:
+- If the previous exchange was about "suppliers with MSAs" and the current
+  query is just "TME:", expand it to the full intent (e.g. "Why are we
+  expected to use suppliers with MSAs and hotels on the transient program
+  in TME?").
+- If the current query is a complete, self-contained question, ignore
+  the conversation history.
+- Always produce a standalone, self-contained search query that captures
+  the full user intent without requiring any prior context to understand.
+</conversation_context_rules>
+
 <important>
 The MENA function filter is applied separately by the orchestrator using
 the user's selected function. You MUST NOT include "function" in the

@@ -5,6 +5,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timezone
+import os
 from typing import List, Optional, Tuple
 import uuid
 
@@ -92,7 +93,7 @@ class SQLChatClient:
 
     def _build_credential(self):
         """Build Azure AD credential for SQL auth."""
-        client_id = os.getenv("AZURE_CLIENT_ID", "").strip()
+        # client_id = os.getenv("AZURE_CLIENT_ID", "").strip()
         return DefaultAzureCredential()  
     
     def _build_managed_identity_connection_string(self) -> str:
@@ -397,6 +398,7 @@ class SQLChatClient:
         def _run():
             conn = self._get_connection()
             cursor = conn.cursor()
+            print("[LOG]----app_query.ai_content_free_form: ", app_query.ai_content_free_form, flush=True)
             try:
                 cursor.execute(
                     """
