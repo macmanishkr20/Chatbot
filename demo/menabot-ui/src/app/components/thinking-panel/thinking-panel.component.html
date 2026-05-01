@@ -1,7 +1,7 @@
 <div class="thinking-panel" [class.collapsed]="isCollapsed" [class.completed]="allDone">
   <button class="thinking-toggle" (click)="toggle()">
     <span class="thinking-icon"><span class="mat-icon">{{ allDone ? 'check_circle' : 'settings' }}</span></span>
-    <span class="thinking-label">{{ allDone ? 'Completed' : 'Thinking&hellip;' }}</span>
+    <span class="thinking-label" [class.fade-text]="!allDone">{{ allDone ? 'Completed' : thinkingLabel() }}</span>
     <span class="thinking-count">{{ steps().length }} steps</span>
     <span class="thinking-caret"><span class="mat-icon">chevron_right</span></span>
   </button>
