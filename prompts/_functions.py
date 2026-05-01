@@ -81,7 +81,7 @@ MENA_FUNCTIONS_CATALOG = """\
     • Contract templates, NDAs, pre‑bid agreements
     • Legal review and contractual guidance
     • Professional Indemnity Insurance (PII)
-    • Data protection and privacy guidance
+    • Data protection and privacy guidance, AML/KYC compliance obligations
     • Legal policies and governance
     • GCO templates and policy finder support
  

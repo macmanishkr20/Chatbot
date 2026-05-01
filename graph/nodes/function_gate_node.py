@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import AzureChatOpenAI
 from pydantic import BaseModel, Field
@@ -125,6 +125,31 @@ def _eq(a: str | None, b: str | None) -> bool:
     return na == search_b or na == chip_b or nb == search_a or nb == chip_a
 
 
+def _format_conversation_context(messages: list[BaseMessage], max_turns: int = 5) -> str:
+    """Format recent conversation messages as context for the function gate LLM.
+
+    Returns a compact string with the last N user/assistant exchanges so the
+    LLM can resolve follow-up queries (e.g. "TME:" is a function selection
+    related to the prior question about suppliers).
+    """
+    if not messages:
+        return ""
+
+    recent = messages[-(max_turns * 2):]
+    lines = []
+    for msg in recent:
+        if not isinstance(msg, BaseMessage):
+            continue
+        role = "User" if msg.type == "human" else "Assistant"
+        content = (msg.content or "").strip()
+        if content:
+            if len(content) > 300:
+                content = content[:300] + "..."
+            lines.append(f"{role}: {content}")
+
+    return "\n".join(lines)
+
+
 async def function_gate_node(state: RAGState) -> dict:
     """Validate / derive the MENA function selection before search."""
     user_input = (state.get("user_input") or "").strip()
@@ -134,14 +159,27 @@ async def function_gate_node(state: RAGState) -> dict:
     selected = state.get("function") or []
     selected_code = selected[0] if selected else None
 
+    # Build conversation context for follow-up resolution
+    raw_messages = state.get("messages", [])
+    history_messages = raw_messages[:-1] if raw_messages else []
+    conversation_context = _format_conversation_context(history_messages)
+
+    # Include conversation history in the prompt so the LLM can resolve
+    # short follow-ups like "TME:" to the full prior intent
+    human_message = ""
+    if conversation_context:
+        # Escape braces in conversation context to prevent ChatPromptTemplate interpolation
+        escaped_context = conversation_context.replace("{", "{{").replace("}", "}}")
+        human_message += f"<conversation_history>\n{escaped_context}\n</conversation_history>\n\n"
+    human_message += (
+        "User's currently selected function: {selected}\n\n"
+        "Query: {query}"
+    )
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", FUNCTION_GATE_PROMPT),
-            (
-                "human",
-                "User's currently selected function: {selected}\n\n"
-                "Query: {query}",
-            ),
+            ("human", human_message),
         ]
     )
     chain = prompt | _get_llm().with_structured_output(FunctionGateVerdict)

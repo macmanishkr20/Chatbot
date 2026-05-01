@@ -25,6 +25,7 @@ def _build_credential():
     # tenant_id = os.getenv("AZURE_TENANT_ID", "").strip()  ###need to take it from keyvault
     client_id = os.getenv("AZURE_CLIENT_ID", "").strip()
     # client_secret = os.getenv("AZURE_CLIENT_SECRET", "").strip()
+    
 
     # In PROD, prefer Managed Identity / Azure CLI chain.
     if env == "PROD":
@@ -33,7 +34,6 @@ def _build_credential():
         #     managed_identity_client_id=(client_id or None),
         # )
         return DefaultAzureCredential()
-
     # if tenant_id and client_id and client_secret:
     #     logger.info(
     #         "Using ClientSecretCredential for Key Vault auth tenant_id=%s client_id=%s",
