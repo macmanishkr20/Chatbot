@@ -80,3 +80,13 @@ class RAGState(TypedDict, total=False):
     # ── Output ──
     response: dict | None
     error_info: dict | None
+
+    # ── Retrieval grading (CRAG — Corrective RAG) ──
+    grader_score: float | None
+    grader_retry_count: int
+    grader_passed: bool | None
+
+    # ── Multi-step agent (parallel search — Phase 2) ──
+    plan_type: str | None          # "simple" | "complex"
+    sub_queries: list | None       # [{"function": str, "query": str}] from planner
+    parallel_results: list | None  # [{"function": str, "events": list}] from parallel search
