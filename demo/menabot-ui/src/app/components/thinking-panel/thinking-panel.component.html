@@ -1,26 +1,55 @@
-<div class="thinking-panel" [class.collapsed]="isCollapsed" [class.completed]="allDone">
+<div class="thinking-panel" [class.collapsed]="isCollapsed()" [class.completed]="allDone()">
   <button class="thinking-toggle" (click)="toggle()">
-    <span class="thinking-icon"><span class="mat-icon">{{ allDone ? 'check_circle' : 'settings' }}</span></span>
-    <span class="thinking-label" [class.fade-text]="!allDone">{{ allDone ? 'Completed' : thinkingLabel() }}</span>
+    <span class="thinking-icon"><span class="mat-icon">{{ allDone() ? 'check_circle' : 'settings' }}</span></span>
+    <span class="thinking-label" [class.fade-text]="!allDone()">{{ allDone() ? 'Thought process' : rotatingLabel() }}</span>
     <span class="thinking-count">{{ steps().length }} steps</span>
-    <span class="thinking-caret"><span class="mat-icon">chevron_right</span></span>
+    <span class="thinking-caret"><span class="mat-icon">expand_more</span></span>
   </button>
 
-  @if (!isCollapsed) {
-    <div class="thinking-steps">
-      @for (step of steps(); track trackByNode($index, step)) {
-        <div class="step" [class.running]="step.state === 'running'" [class.done]="step.state === 'done'">
-          <span class="step-icon">
-            @if (step.state === 'running') {
-              <span class="spinner"></span>
-            } @else if (step.state === 'done') {
-              <span class="checkmark"><span class="mat-icon">check</span></span>
-            } @else {
-              <span class="pending-dot">&#8226;</span>
+  @if (!isCollapsed()) {
+    <div class="tree">
+      @for (group of stepGroups(); track trackByKey($index, group)) {
+        <div class="tree-group" [class.done]="group.state === 'done'" [class.running]="group.state === 'running'">
+          <!-- Group header (parent node) -->
+          <div class="tree-node parent" (click)="toggleGroup(group)">
+            <span class="parent-icon">
+              @if (group.state === 'done') {
+                <span class="mat-icon done-circle">check_circle</span>
+              } @else if (group.state === 'running') {
+                <span class="spinner"></span>
+              } @else {
+                <span class="mat-icon pending-circle">radio_button_unchecked</span>
+              }
+            </span>
+            <span class="parent-label">{{ group.state === 'done' ? group.summary : group.label }}</span>
+            @if (group.steps.length > 0) {
+              <span class="mat-icon group-chevron" [class.rotated]="!group.collapsed">expand_more</span>
             }
-          </span>
-          <span class="step-node">{{ formatNode(step.node) }}</span>
-          <span class="step-msg">{{ step.message }}</span>
+          </div>
+
+          <!-- Child steps (with tree connector lines) -->
+          @if (!group.collapsed) {
+            <div class="tree-children">
+              @for (step of group.steps; track trackByNode($index, step); let isLast = $last) {
+                <div class="tree-child" [class.last-child]="isLast">
+                  <span class="branch-line">
+                    <span class="branch-v"></span>
+                    <span class="branch-h"></span>
+                  </span>
+                  <span class="child-icon">
+                    @if (step.state === 'running') {
+                      <span class="mat-icon child-action-icon active">{{ step.icon || 'circle' }}</span>
+                    } @else if (step.state === 'done') {
+                      <span class="mat-icon child-action-icon done">{{ step.icon || 'check' }}</span>
+                    } @else {
+                      <span class="mat-icon child-action-icon pending">{{ step.icon || 'circle' }}</span>
+                    }
+                  </span>
+                  <span class="child-label">{{ step.message }}</span>
+                </div>
+              }
+            </div>
+          }
         </div>
       }
     </div>

@@ -5,21 +5,25 @@
     </span>
     <span class="deep-search-label">{{ allDone ? 'Deep Search Completed' : 'Deep Search&hellip;' }}</span>
     <span class="deep-search-count">{{ steps().length }} {{ steps().length === 1 ? 'step' : 'steps' }}</span>
-    <span class="deep-search-caret"><span class="mat-icon">chevron_right</span></span>
+    <span class="deep-search-caret"><span class="mat-icon">expand_more</span></span>
   </button>
 
   @if (!isCollapsed) {
-    <div class="deep-search-steps">
-      @for (step of steps(); track $index) {
-        <div class="ds-step" [class.latest]="$last && isSearching()">
-          <span class="ds-step-icon">
-            @if ($last && isSearching()) {
+    <div class="tree-children">
+      @for (step of steps(); track $index; let isLast = $last) {
+        <div class="tree-child" [class.last-child]="isLast">
+          <span class="branch-line">
+            <span class="branch-v"></span>
+            <span class="branch-h"></span>
+          </span>
+          <span class="child-icon">
+            @if (isLast && isSearching()) {
               <span class="spinner"></span>
             } @else {
-              <span class="checkmark"><span class="mat-icon">check</span></span>
+              <span class="mat-icon child-action-icon">travel_explore</span>
             }
           </span>
-          <span class="ds-step-msg" [innerHTML]="step"></span>
+          <span class="child-label" [innerHTML]="step.content"></span>
         </div>
       }
     </div>

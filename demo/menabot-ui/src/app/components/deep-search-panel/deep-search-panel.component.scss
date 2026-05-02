@@ -10,6 +10,8 @@
   box-shadow: var(--glass-inner-highlight), 0 6px 18px -10px rgba(56, 189, 248, 0.15);
 }
 
+// ── Toggle (Parent Header) ──
+
 .deep-search-toggle {
   width: 100%;
   display: flex;
@@ -42,6 +44,8 @@
 .collapsed .deep-search-icon {
   animation: none;
 }
+
+// ── Completed State ──
 
 .completed {
   background: rgba(34, 197, 94, 0.08);
@@ -83,52 +87,104 @@
   transition: transform 0.25s;
   color: var(--text-muted);
 
-  .mat-icon { font-size: 14px; }
+  .mat-icon { font-size: 16px; }
 }
 
 .collapsed .deep-search-caret {
-  transform: rotate(0deg);
+  transform: rotate(-90deg);
 }
 
-.deep-search-panel:not(.collapsed) .deep-search-caret {
-  transform: rotate(90deg);
-}
+// ── Tree Children with Connector Lines ──
 
-.deep-search-steps {
-  padding: 6px 14px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.tree-children {
+  padding: 4px 14px 12px 24px;
   border-top: 1px solid rgba(56, 189, 248, 0.15);
   background: var(--glass-bg-subtle);
 }
 
-.completed .deep-search-steps {
+.completed .tree-children {
   border-top-color: rgba(34, 197, 94, 0.15);
 }
 
-.ds-step {
+.tree-child {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
   padding: 4px 0;
-  color: var(--text-primary);
-  transition: color 0.2s;
+  position: relative;
+  padding-left: 22px;
+}
 
-  &.latest {
-    font-weight: 500;
+// Branch connector lines (│ and ├─ / └─)
+.branch-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+}
+
+// Vertical line │
+.branch-v {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.15);
+
+  .last-child & {
+    height: 50%;
   }
 }
 
-.ds-step-icon {
+// Horizontal branch ─
+.branch-h {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 16px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.completed .branch-v,
+.completed .branch-h {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+// ── Child Icons ──
+
+.child-icon {
   width: 16px;
   height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 1px;
 }
+
+.child-action-icon {
+  font-size: 14px;
+  color: #38bdf8;
+
+  .completed & {
+    color: #38bdf8;
+  }
+}
+
+.child-label {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+
+  :host ::ng-deep strong {
+    font-weight: 600;
+  }
+}
+
+// ── Spinner ──
 
 .spinner {
   display: inline-block;
@@ -140,22 +196,7 @@
   animation: spin 0.8s linear infinite;
 }
 
-.checkmark {
-  color: #22c55e;
-  font-size: 13px;
-  font-weight: 700;
-
-  .mat-icon { font-size: 13px; }
-}
-
-.ds-step-msg {
-  font-size: 12px;
-  line-height: 1.45;
-
-  :host ::ng-deep strong {
-    font-weight: 600;
-  }
-}
+// ── Animations ──
 
 @keyframes spin {
   to { transform: rotate(360deg); }

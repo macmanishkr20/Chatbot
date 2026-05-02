@@ -1,6 +1,15 @@
-import { Component, ChangeDetectionStrategy, input, effect, signal, OnDestroy } from '@angular/core';
+import { Component, ChangeDetectionStrategy, input, effect, signal, computed, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ThinkingStep } from '../../models/chat.models';
+import { ThinkingStep, StepGroup } from '../../models/chat.models';
+
+/** Metadata for each step group — labels, icons, completion summaries. */
+const GROUP_META: Record<string, { label: string; icon: string; summary: string }> = {
+  preparation:   { label: 'Preparing',            icon: 'inventory_2',    summary: 'Loaded context' },
+  understanding: { label: 'Understanding query',   icon: 'lightbulb',      summary: 'Query analyzed' },
+  retrieval:     { label: 'Searching knowledge',   icon: 'travel_explore', summary: 'Found relevant sources' },
+  quality:       { label: 'Evaluating quality',    icon: 'verified',       summary: 'Quality verified' },
+  response:      { label: 'Generating answer',     icon: 'smart_toy',      summary: 'Response ready' },
+};
 
 @Component({
   selector: 'app-thinking-panel',
@@ -36,13 +45,63 @@ export class ThinkingPanelComponent implements OnDestroy {
   private phraseIndex = 0;
 
   /** Currently displayed thinking label (rotates while running). */
-  readonly thinkingLabel = signal('Looking into it…');
+  readonly rotatingLabel = signal('Looking into it…');
 
   /** Interval handle for rotating phrases. */
   private rotateInterval: ReturnType<typeof setInterval> | null = null;
 
+  /** Track collapsed state per group key (user overrides). */
+  private readonly groupCollapseOverrides = signal<Map<string, boolean>>(new Map());
+
+  /** Build hierarchical step groups from flat steps. */
+  readonly stepGroups = computed<StepGroup[]>(() => {
+    const steps = this.steps();
+    const overrides = this.groupCollapseOverrides();
+    const groupMap = new Map<string, StepGroup>();
+
+    for (const step of steps) {
+      const key = step.group || 'other';
+      if (!groupMap.has(key)) {
+        const meta = GROUP_META[key] || { label: key, icon: 'settings', summary: 'Done' };
+        groupMap.set(key, {
+          key,
+          label: meta.label,
+          icon: meta.icon,
+          summary: meta.summary,
+          steps: [],
+          state: 'pending',
+          collapsed: false,
+        });
+      }
+      const g = groupMap.get(key)!;
+      g.steps.push(step);
+    }
+
+    // Determine group state and collapsed
+    for (const g of groupMap.values()) {
+      const hasRunning = g.steps.some(s => s.state === 'running');
+      const allDone = g.steps.every(s => s.state === 'done');
+
+      if (hasRunning) {
+        g.state = 'running';
+      } else if (allDone) {
+        g.state = 'done';
+      }
+
+      // Apply user override if exists, otherwise auto-collapse completed groups
+      const override = overrides.get(g.key);
+      if (override !== undefined) {
+        g.collapsed = override;
+      } else {
+        g.collapsed = g.state === 'done';
+      }
+    }
+
+    return [...groupMap.values()];
+  });
+
   constructor() {
-    // Auto-collapse when all steps complete; rotate the label while running.
+    // Auto-collapse panel when all steps complete; rotate the label while running.
     effect(() => {
       const s = this.steps();
       const done = s.length > 0 && s.every(step => step.state === 'done');
@@ -60,38 +119,44 @@ export class ThinkingPanelComponent implements OnDestroy {
     this.stopRotation();
   }
 
-  /** Effective collapsed state. */
-  get isCollapsed(): boolean {
+  /** Effective collapsed state for the whole panel. */
+  isCollapsed(): boolean {
     return this.localCollapsed !== null ? this.localCollapsed : this.collapsed();
   }
 
   /** Whether all steps are completed. */
-  get allDone(): boolean {
+  allDone(): boolean {
     const s = this.steps();
     return s.length > 0 && s.every(step => step.state === 'done');
   }
 
   toggle(): void {
-    this.localCollapsed = !this.isCollapsed;
+    this.localCollapsed = !this.isCollapsed();
+  }
+
+  /** Toggle a group's collapsed state. */
+  toggleGroup(group: StepGroup): void {
+    const newState = !group.collapsed;
+    const current = this.groupCollapseOverrides();
+    const updated = new Map(current);
+    updated.set(group.key, newState);
+    this.groupCollapseOverrides.set(updated);
+  }
+
+  trackByKey(_: number, group: StepGroup): string {
+    return group.key;
   }
 
   trackByNode(_: number, step: ThinkingStep): string {
     return step.node;
   }
 
-  /** Friendly label for the step's node name. */
-  formatNode(node: string): string {
-    return node
-      .replace(/_/g, ' ')
-      .replace(/\b\w/g, c => c.toUpperCase());
-  }
-
   private startRotation(): void {
     this.phraseIndex = 0;
-    this.thinkingLabel.set(this.thinkingPhrases[0]);
+    this.rotatingLabel.set(this.thinkingPhrases[0]);
     this.rotateInterval = setInterval(() => {
       this.phraseIndex = (this.phraseIndex + 1) % this.thinkingPhrases.length;
-      this.thinkingLabel.set(this.thinkingPhrases[this.phraseIndex]);
+      this.rotatingLabel.set(this.thinkingPhrases[this.phraseIndex]);
     }, 5000);
   }
 

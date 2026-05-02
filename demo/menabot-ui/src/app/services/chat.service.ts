@@ -6,6 +6,7 @@ import {
   Citation,
   Conversation,
   DeepSearchEvent,
+  DeepSearchStep,
   FinalEvent,
   SSEEvent,
   SuggestiveAction,
@@ -465,7 +466,13 @@ export class ChatService {
             const steps = (m.thinkingSteps ?? []).map(s =>
               s.state === 'running' ? { ...s, state: 'done' as const } : s
             );
-            steps.push({ node: event.node, message: event.message, state: 'running' });
+            steps.push({
+              node: event.node,
+              message: event.message,
+              state: 'running',
+              group: event.group || '',
+              icon: event.icon || 'settings',
+            });
             return { ...m, thinkingSteps: steps };
           })
         );
@@ -484,7 +491,11 @@ export class ChatService {
         this.messages.update(msgs =>
           msgs.map(m => {
             if (m.id !== assistantId) return m;
-            const steps = [...(m.deepSearchSteps ?? []), dsEvent.content];
+            const step: DeepSearchStep = {
+              content: dsEvent.content,
+              icon: dsEvent.icon || 'travel_explore',
+            };
+            const steps = [...(m.deepSearchSteps ?? []), step];
             return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
           })
         );
