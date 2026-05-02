@@ -13,7 +13,7 @@ def _group_by_function(results: list) -> tuple[dict[str, list], dict[str, float]
     groups: dict[str, list] = defaultdict(list)
     scores: dict[str, float] = defaultdict(float)
     for r in results:
-        fn = r.get("function") or "unknown"
+        fn = (r.get("function") or "unknown").strip()
         groups[fn].append(r)
         scores[fn] += r.get("@search.reranker_score", 0.0)
     return dict(groups), dict(scores)

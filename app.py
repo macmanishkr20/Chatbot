@@ -114,6 +114,18 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
     "multi_function_search": {
         "Deep Search": "Searching across multiple functions…"
     },
+    "planner": {
+        "Planning": "Analyzing query complexity…"
+    },
+    "parallel_search": {
+        "Searching": "Searching multiple functions in parallel…"
+    },
+    "synthesize": {
+        "Combining": "Merging results…"
+    },
+    "grader": {
+        "Quality": "Checking relevance…"
+    },
     "generate": {
         "Response": "Forming response…"
     },
@@ -314,7 +326,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
     auto_selected_function: list[str] | None = None
 
     # ── Side-channel for real-time deep search status delivery ──
-    # The multi_function_search_node pushes status messages here as they
+    # The parallel_search_node pushes status messages here as they
     # happen.  We drain the queue between graph chunks for near-real-time
     # delivery to the frontend (instead of batching at node completion).
     deep_search_queue: asyncio.Queue = asyncio.Queue()
@@ -333,7 +345,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 yield sse_format({
                     "type": "deep_search",
                     "content": status,
-                    "node": "multi_function_search",
+                    "node": "parallel_search",
                 })
             except asyncio.QueueEmpty:
                 break
@@ -406,7 +418,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
             yield sse_format({
                 "type": "deep_search",
                 "content": status,
-                "node": "multi_function_search",
+                "node": "parallel_search",
             })
         except asyncio.QueueEmpty:
             break
@@ -522,6 +534,28 @@ async def chat_api(
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
         current_state["content_type"] = query.content_type or "qa_pair"
+
+        # If the previous turn failed to find an answer (error_info set or
+        # AI responded with "select the specific function"), clear the stale
+        # auto-selected function so the user can pick a new one without conflict.
+        # However, if the user explicitly selected a DIFFERENT chip for this turn,
+        # respect that selection (don't clear it).
+        prev_error = current_state.get("error_info")
+        prev_ai = current_state.get("ai_content") or ""
+        prev_asked_for_function = "select the specific function" in prev_ai
+        if prev_error or prev_asked_for_function:
+            prev_function = current_state.get("functions_found") or []
+            # If the user's chip matches what was previously auto-selected,
+            # it's the frontend echoing back — clear it.
+            # If the chip is different, the user actively chose — keep it.
+            user_chip_is_new = (
+                query.function
+                and query.function != prev_function
+                and set(query.function) != set(prev_function)
+            )
+            if not user_chip_is_new:
+                current_state["function"] = []
+            current_state["functions_found"] = []
         # Reset per-turn transient fields (preserve citation_map for multi-turn)
         current_state["events"] = []
         current_state["error_info"] = None
@@ -533,6 +567,12 @@ async def chat_api(
         current_state["requires_function_selection"] = False
         current_state["function_required_reason"] = None
         current_state["function_hint"] = None
+        current_state["grader_score"] = None
+        current_state["grader_retry_count"] = 0
+        current_state["grader_passed"] = None
+        current_state["plan_type"] = None
+        current_state["sub_queries"] = None
+        current_state["parallel_results"] = None
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -621,6 +661,12 @@ async def regenerate_chat(
         current_state["response"] = None
         current_state["suggestive_actions"] = None
         current_state["conversation_title"] = None
+        current_state["grader_score"] = None
+        current_state["grader_retry_count"] = 0
+        current_state["grader_passed"] = None
+        current_state["plan_type"] = None
+        current_state["sub_queries"] = None
+        current_state["parallel_results"] = None
         state = current_state
     else:
         raise HTTPException(status_code=404, detail="No conversation state found")
@@ -704,6 +750,12 @@ async def edit_message(
             "requires_function_selection": False,
             "function_required_reason": None,
             "function_hint": None,
+            "grader_score": None,
+            "grader_retry_count": 0,
+            "grader_passed": None,
+            "plan_type": None,
+            "sub_queries": None,
+            "parallel_results": None,
         }
     if not current_state or not current_state.get("messages"):
         logger.warning(
@@ -787,6 +839,12 @@ async def edit_message(
         "requires_function_selection": False,
         "function_required_reason": None,
         "function_hint": None,
+        "grader_score": None,
+        "grader_retry_count": 0,
+        "grader_passed": None,
+        "plan_type": None,
+        "sub_queries": None,
+        "parallel_results": None,
     }
 
     return StreamingResponse(

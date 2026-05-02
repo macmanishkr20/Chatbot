@@ -126,3 +126,14 @@ TITLE_MAX_LENGTH = int(os.getenv("TITLE_MAX_LENGTH", "60"))
 
 # ── Input validation ──
 MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))
+
+# ── Retrieval grading (CRAG — Corrective RAG) ──
+GRADER_RELEVANCE_THRESHOLD = float(os.getenv("GRADER_RELEVANCE_THRESHOLD", "0.5"))
+GRADER_MAX_RETRIES = int(os.getenv("GRADER_MAX_RETRIES", "1"))
+GRADER_MAX_TOKENS = int(os.getenv("GRADER_MAX_TOKENS", "150"))
+GRADER_TEMPERATURE = float(os.getenv("GRADER_TEMPERATURE", "0.0"))
+
+# ── Parallel search / Planner (Phase 2) ──
+PARALLEL_SEARCH_TIMEOUT = int(os.getenv("PARALLEL_SEARCH_TIMEOUT", "10000"))  # ms per function
+PLANNER_MAX_TOKENS = int(os.getenv("PLANNER_MAX_TOKENS", "200"))
+PLANNER_TEMPERATURE = float(os.getenv("PLANNER_TEMPERATURE", "0.0"))
