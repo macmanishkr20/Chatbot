@@ -94,46 +94,88 @@ _STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
 
 _NODE_THOUGHT: dict[str, dict[str, str]] = {
     "Supervisor": {
-        "Intent": "Aligning intent…"
+        "display": "Intent",
+        "message": "Aligning intent…",
+        "group": "preparation",
+        "icon": "assistant",
     },
     "load_memory": {
-        "Recall": "Reconnecting context…"
+        "display": "Recall",
+        "message": "Reconnecting context…",
+        "group": "preparation",
+        "icon": "history",
     },
     "function_gate": {
-        "Routing": "Confirming MENA function…"
+        "display": "Routing",
+        "message": "Confirming MENA function…",
+        "group": "preparation",
+        "icon": "route",
     },
     "rewrite": {
-        "Focus": "Clarifying focus…"
+        "display": "Focus",
+        "message": "Clarifying focus…",
+        "group": "understanding",
+        "icon": "edit_note",
     },
     "embed": {
-        "Meaning": "Interpreting meaning…"
+        "display": "Meaning",
+        "message": "Interpreting meaning…",
+        "group": "understanding",
+        "icon": "psychology",
     },
     "search": {
-        "Relevance": "Finding relevance…"
+        "display": "Relevance",
+        "message": "Finding relevance…",
+        "group": "retrieval",
+        "icon": "search",
     },
     "multi_function_search": {
-        "Deep Search": "Searching across multiple functions…"
+        "display": "Deep Search",
+        "message": "Searching across multiple functions…",
+        "group": "retrieval",
+        "icon": "manage_search",
     },
     "planner": {
-        "Planning": "Analyzing query complexity…"
+        "display": "Planning",
+        "message": "Analyzing query complexity…",
+        "group": "retrieval",
+        "icon": "account_tree",
     },
     "parallel_search": {
-        "Searching": "Searching multiple functions in parallel…"
+        "display": "Searching",
+        "message": "Searching multiple functions in parallel…",
+        "group": "retrieval",
+        "icon": "manage_search",
     },
     "synthesize": {
-        "Combining": "Merging results…"
+        "display": "Combining",
+        "message": "Merging results…",
+        "group": "retrieval",
+        "icon": "merge",
     },
     "grader": {
-        "Quality": "Checking relevance…"
+        "display": "Quality",
+        "message": "Checking relevance…",
+        "group": "quality",
+        "icon": "checklist",
     },
     "generate": {
-        "Response": "Forming response…"
+        "display": "Response",
+        "message": "Forming response…",
+        "group": "response",
+        "icon": "auto_fix_high",
     },
     "persist": {
-        "Flow": "Maintaining continuity…"
+        "display": "Flow",
+        "message": "Maintaining continuity…",
+        "group": "response",
+        "icon": "save",
     },
     "save_memory": {
-        "Memory": "Storing insight…"
+        "display": "Memory",
+        "message": "Storing insight…",
+        "group": "response",
+        "icon": "bookmark",
     }
 }
 
@@ -342,10 +384,22 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
         while not deep_search_queue.empty():
             try:
                 status = deep_search_queue.get_nowait()
+                # Pick icon based on step content
+                if "Found" in status:
+                    ds_icon = "check_circle"
+                elif "Combining" in status:
+                    ds_icon = "merge"
+                elif "timed out" in status or "failed" in status:
+                    ds_icon = "error_outline"
+                elif "No results" in status:
+                    ds_icon = "search_off"
+                else:
+                    ds_icon = "search"
                 yield sse_format({
                     "type": "deep_search",
                     "content": status,
                     "node": "parallel_search",
+                    "icon": ds_icon,
                 })
             except asyncio.QueueEmpty:
                 break
@@ -369,11 +423,18 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     seen_nodes.add(node)
                     thought_entry = _NODE_THOUGHT.get(node)
                     if thought_entry:
-                        display_name, message = next(iter(thought_entry.items()))
+                        display_name = thought_entry["display"]
+                        message = thought_entry["message"]
                     else:
                         display_name, message = node, f"Processing {node}..."
                     logger.debug("thought (updates) node=%s", node)
-                    yield sse_format({"type": "thought", "node": display_name, "message": message})
+                    yield sse_format({
+                        "type": "thought",
+                        "node": display_name,
+                        "message": message,
+                        "group": thought_entry.get("group", "") if thought_entry else "",
+                        "icon": thought_entry.get("icon", "settings") if thought_entry else "settings",
+                    })
 
                     # ── Supervisor RESPOND prose delivery ──
                     # Supervisor uses with_structured_output so its LLM tokens
@@ -403,10 +464,17 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 seen_nodes.add(node)
                 thought_entry = _NODE_THOUGHT.get(node)
                 if thought_entry:
-                    display_name, message = next(iter(thought_entry.items()))
+                    display_name = thought_entry["display"]
+                    message = thought_entry["message"]
                 else:
                     display_name, message = node, f"Processing {node}..."
-                yield sse_format({"type": "thought", "node": display_name, "message": message})
+                yield sse_format({
+                    "type": "thought",
+                    "node": display_name,
+                    "message": message,
+                    "group": thought_entry.get("group", "") if thought_entry else "",
+                    "icon": thought_entry.get("icon", "settings") if thought_entry else "settings",
+                })
 
             if chunk_msg.content and node in _STREAMABLE_NODES:
                 yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
@@ -415,10 +483,21 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
     while not deep_search_queue.empty():
         try:
             status = deep_search_queue.get_nowait()
+            if "Found" in status:
+                ds_icon = "check_circle"
+            elif "Combining" in status:
+                ds_icon = "merge"
+            elif "timed out" in status or "failed" in status:
+                ds_icon = "error_outline"
+            elif "No results" in status:
+                ds_icon = "search_off"
+            else:
+                ds_icon = "search"
             yield sse_format({
                 "type": "deep_search",
                 "content": status,
                 "node": "parallel_search",
+                "icon": ds_icon,
             })
         except asyncio.QueueEmpty:
             break
