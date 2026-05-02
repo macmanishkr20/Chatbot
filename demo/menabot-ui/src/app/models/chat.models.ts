@@ -3,6 +3,8 @@ export interface ThoughtEvent {
   type: 'thought';
   node: string;
   message: string;
+  group?: string;
+  icon?: string;
 }
 
 export interface ContentEvent {
@@ -62,6 +64,7 @@ export interface DeepSearchEvent {
   type: 'deep_search';
   node: string;
   content: string;
+  icon?: string;
 }
 
 export type SSEEvent = ThoughtEvent | ContentEvent | DeepSearchEvent | FinalEvent;
@@ -86,6 +89,25 @@ export interface ThinkingStep {
   node: string;
   message: string;
   state: 'pending' | 'running' | 'done';
+  group?: string;    // Grouping key for hierarchical display
+  icon?: string;     // Material Icon name
+}
+
+/** Group container for hierarchical thinking step display. */
+export interface StepGroup {
+  key: string;       // group key (e.g., "understanding")
+  label: string;     // display label (e.g., "Understanding query")
+  icon: string;      // group-level icon
+  summary: string;   // shown when collapsed after completion
+  steps: ThinkingStep[];
+  state: 'pending' | 'running' | 'done';
+  collapsed: boolean;
+}
+
+/** Deep search step with icon metadata. */
+export interface DeepSearchStep {
+  content: string;   // HTML content
+  icon?: string;     // Material Icon name
 }
 
 /** A single message in the chat window. */
@@ -97,7 +119,7 @@ export interface ChatMessage {
   userMessageIndex?: number;
   thinkingSteps?: ThinkingStep[];
   thinkingCollapsed?: boolean;
-  deepSearchSteps?: string[];
+  deepSearchSteps?: DeepSearchStep[];
   deepSearchCollapsed?: boolean;
   suggestiveActions?: SuggestiveAction[];
   chatId?: string | number | null;

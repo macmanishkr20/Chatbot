@@ -10,6 +10,8 @@
   box-shadow: var(--glass-inner-highlight), 0 6px 18px -10px rgba(15, 23, 42, 0.18);
 }
 
+// ── Toggle Button ──
+
 .thinking-toggle {
   width: 100%;
   display: flex;
@@ -28,7 +30,6 @@
   }
 }
 
-// ── Default thinking icon: cyan glow while running ──
 .thinking-icon {
   font-size: 14px;
   display: inline-flex;
@@ -54,7 +55,6 @@
   animation: none;
 }
 
-// ── Running label: cyan-tinted with rotating-phrase fade-in ──
 .thinking-label {
   font-weight: 600;
   letter-spacing: -0.005em;
@@ -71,7 +71,8 @@
   100% { opacity: 1; transform: translateY(0);   filter: blur(0); }
 }
 
-// ── Completed: green glow takes over ──
+// ── Completed State ──
+
 .completed {
   background: rgba(34, 197, 94, 0.08);
   border-color: rgba(34, 197, 94, 0.25);
@@ -110,91 +111,205 @@
   transition: transform 0.25s;
   color: var(--text-muted);
 
-  .mat-icon { font-size: 14px; }
+  .mat-icon { font-size: 16px; }
 }
 
 .collapsed .thinking-caret {
-  transform: rotate(0deg);
+  transform: rotate(-90deg);
 }
 
-.thinking-panel:not(.collapsed) .thinking-caret {
-  transform: rotate(90deg);
-}
+// ── Tree Structure ──
 
-.thinking-steps {
-  padding: 6px 14px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.tree {
+  padding: 10px 14px 14px;
   border-top: 1px solid var(--glass-border-soft);
   background: var(--glass-bg-subtle);
 }
 
-.step {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 4px 0;
-  color: var(--text-primary);
-  transition: color 0.2s;
+.completed .tree {
+  border-top-color: rgba(34, 197, 94, 0.15);
+}
 
-  &.running {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
+.tree-group {
+  margin-bottom: 6px;
 
-  &.done {
-    color: var(--text-primary);
+  &:last-child {
+    margin-bottom: 0;
   }
 }
 
-.step-icon {
+// ── Parent (Group) Node ──
+
+.tree-node.parent {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.parent-icon {
+  width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.done-circle {
+  font-size: 18px;
+  color: #22c55e;
+  filter: drop-shadow(0 0 2px rgba(34, 197, 94, 0.3));
+}
+
+.pending-circle {
+  font-size: 18px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.parent-label {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.group-chevron {
+  font-size: 16px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  margin-left: auto;
+
+  &.rotated {
+    transform: rotate(180deg);
+  }
+}
+
+// ── Children with Tree Branch Connector Lines ──
+
+.tree-children {
+  padding-left: 9px; // Align branch start with parent icon center
+  animation: slideDown 0.15s ease-out;
+}
+
+.tree-child {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  position: relative;
+  padding-left: 22px;
+}
+
+// Branch connector lines
+.branch-line {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 22px;
+  pointer-events: none;
+}
+
+// Vertical line │
+.branch-v {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.15);
+
+  .last-child & {
+    height: 50%;
+  }
+}
+
+// Horizontal branch ─
+.branch-h {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 16px;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.completed .branch-v,
+.completed .branch-h {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+// ── Child Icons (action-type icons from backend) ──
+
+.child-icon {
   width: 16px;
   height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  margin-top: 1px;
 }
+
+.child-action-icon {
+  font-size: 14px;
+
+  &.active {
+    color: #38bdf8;
+    animation: spin 1.5s linear infinite;
+  }
+
+  &.done {
+    color: #38bdf8;
+  }
+
+  &.pending {
+    color: rgba(255, 255, 255, 0.25);
+  }
+}
+
+.completed .child-action-icon.done {
+  color: #38bdf8;
+}
+
+.child-label {
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+// ── Spinner ──
 
 .spinner {
   display: inline-block;
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
   border: 2px solid #38bdf8;
   border-top-color: transparent;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
-.checkmark {
-  color: #22c55e;
-  font-size: 13px;
-  font-weight: 700;
-
-  .mat-icon { font-size: 13px; }
-}
-
-.pending-dot {
-  color: var(--text-muted);
-  opacity: 0.5;
-  font-size: 16px;
-}
-
-.step-node {
-  font-weight: 600;
-  font-size: 12px;
-  min-width: 80px;
-  flex-shrink: 0;
-  letter-spacing: 0.01em;
-}
-
-.step-msg {
-  font-size: 12px;
-  line-height: 1.45;
-}
+// ── Animations ──
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
