@@ -1,16 +1,20 @@
 """
 LangChain tool wrappers around services.lms_client.
 
-Tools are split into READ-ONLY and WRITE buckets so the ReAct graph can
-gate writes through a confirmation step (HITL) before they execute.
+Today the upstream HR system exposes only a single read endpoint
+(``GET /api/LeaveSnapshot?email=…``). Read tools project from that
+snapshot; write / holiday tools call into the client and surface its
+``LMSNotImplementedError`` cleanly so the LLM can tell the user what
+isn't available yet.
 
 Each tool returns a JSON-serialisable dict — the ReAct loop converts
 those into ``ToolMessage`` content for the next LLM turn.
 """
 from __future__ import annotations
 
+import contextvars
 import logging
-from datetime import date as _date, datetime, timedelta
+from datetime import date as _date, datetime
 from typing import Any
 
 from langchain_core.tools import tool
@@ -20,6 +24,7 @@ from services.lms_client import (
     LeaveBalance,
     LeaveRequest,
     LMSError,
+    LMSNotImplementedError,
     LMSValidationError,
     get_lms_client,
 )
@@ -30,10 +35,10 @@ logger = logging.getLogger(__name__)
 # ── Context plumbing ────────────────────────────────────────────────────
 #
 # Tools defined with @tool can't see the LangGraph state directly, so we
-# carry the per-request identity in a contextvar set by the agent. This
-# is much cleaner than threading kwargs through every tool signature.
-
-import contextvars
+# carry the per-request identity in a contextvar set by the agent.
+# `email` is the LeaveSnapshot key; `employee_id` is kept for parity
+# with other agents and falls back to the email when no separate id is
+# available.
 
 _CONTEXT: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
     "lms_tool_context",
@@ -41,15 +46,15 @@ _CONTEXT: contextvars.ContextVar[dict[str, Any]] = contextvars.ContextVar(
 )
 
 
-def set_tool_context(*, session_id: str, employee_id: str, location: str | None,
-                     manager_id: str | None, today: _date) -> contextvars.Token:
+def set_tool_context(*, session_id: str, email: str, employee_id: str | None = None,
+                     location: str | None = None, today: _date | None = None) -> contextvars.Token:
     """Bind the per-call context for the LMS toolbelt. Returns a token to reset."""
     return _CONTEXT.set({
         "session_id": session_id,
-        "employee_id": employee_id,
+        "email": email,
+        "employee_id": employee_id or email,
         "location": location or "ALL",
-        "manager_id": manager_id,
-        "today": today,
+        "today": today or datetime.now().date(),
     })
 
 
@@ -59,7 +64,7 @@ def reset_tool_context(token: contextvars.Token) -> None:
 
 def _ctx() -> dict[str, Any]:
     c = _CONTEXT.get()
-    if not c.get("session_id") or not c.get("employee_id"):
+    if not c.get("session_id") or not c.get("email"):
         raise RuntimeError(
             "LMS tool called without a bound context — "
             "call set_tool_context() first.",
@@ -101,13 +106,28 @@ def _serialise_holiday(h: Holiday) -> dict:
     }
 
 
-def _parse_date(value: str | _date) -> _date:
-    if isinstance(value, _date):
-        return value
-    return datetime.fromisoformat(str(value)).date()
+# ── Read-only tools (backed by /api/LeaveSnapshot) ─────────────────────
 
+@tool
+async def get_leave_snapshot() -> dict:
+    """Return the full leave snapshot for the current user as raw JSON.
 
-# ── Read-only tools ────────────────────────────────────────────────────
+    Use this when the user asks anything about their leave (balance,
+    pending requests, anything else surfaced by the HR system) — it
+    contains every field the upstream returns, so the answer can be
+    derived from one call.
+    """
+    ctx = _ctx()
+    try:
+        snapshot = await get_lms_client().get_leave_snapshot(
+            session_id=ctx["session_id"],
+            email=ctx["email"],
+        )
+        return {"ok": True, "snapshot": snapshot}
+    except LMSError as exc:
+        logger.warning("get_leave_snapshot failed: %s", exc)
+        return {"ok": False, "error": str(exc)}
+
 
 @tool
 async def get_leave_balance(leave_type: str | None = None) -> dict:
@@ -121,7 +141,7 @@ async def get_leave_balance(leave_type: str | None = None) -> dict:
     try:
         balances = await get_lms_client().get_leave_balance(
             session_id=ctx["session_id"],
-            employee_id=ctx["employee_id"],
+            email=ctx["email"],
             leave_type=leave_type,
         )
         return {"ok": True, "balances": [_serialise_balance(b) for b in balances]}
@@ -137,13 +157,19 @@ async def get_pending_leaves() -> dict:
     try:
         requests = await get_lms_client().get_pending_leaves(
             session_id=ctx["session_id"],
-            employee_id=ctx["employee_id"],
+            email=ctx["email"],
         )
         return {"ok": True, "requests": [_serialise_request(r) for r in requests]}
     except LMSError as exc:
         logger.warning("get_pending_leaves failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
+
+# ── Tools backed by capabilities the upstream doesn't expose yet ────────
+#
+# These call into the client which raises LMSNotImplementedError — we
+# surface the error cleanly so the LLM tells the user what isn't
+# available rather than fabricating an answer.
 
 @tool
 async def get_holiday_calendar(year: int | None = None, month: int | None = None) -> dict:
@@ -163,12 +189,12 @@ async def get_holiday_calendar(year: int | None = None, month: int | None = None
             month=month,
         )
         return {"ok": True, "holidays": [_serialise_holiday(h) for h in holidays]}
+    except LMSNotImplementedError as exc:
+        return {"ok": False, "error": str(exc), "kind": "not_implemented"}
     except LMSError as exc:
         logger.warning("get_holiday_calendar failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
-
-# ── Write tools (must go through confirmation in the agent) ─────────────
 
 @tool
 async def apply_leave(start_date: str, end_date: str, leave_type: str = "Annual",
@@ -183,20 +209,17 @@ async def apply_leave(start_date: str, end_date: str, leave_type: str = "Annual"
     """
     ctx = _ctx()
     try:
-        sd = _parse_date(start_date)
-        ed = _parse_date(end_date)
-    except ValueError:
-        return {"ok": False, "error": "Invalid date format. Use YYYY-MM-DD."}
-    try:
         req = await get_lms_client().apply_leave(
             session_id=ctx["session_id"],
-            employee_id=ctx["employee_id"],
-            start_date=sd,
-            end_date=ed,
+            email=ctx["email"],
+            start_date=start_date,
+            end_date=end_date,
             leave_type=leave_type,
             reason=reason,
         )
         return {"ok": True, "request": _serialise_request(req)}
+    except LMSNotImplementedError as exc:
+        return {"ok": False, "error": str(exc), "kind": "not_implemented"}
     except LMSValidationError as exc:
         return {"ok": False, "error": str(exc), "kind": "validation"}
     except LMSError as exc:
@@ -215,157 +238,33 @@ async def cancel_leave(request_id: str) -> dict:
     try:
         await get_lms_client().cancel_leave(
             session_id=ctx["session_id"],
-            employee_id=ctx["employee_id"],
+            email=ctx["email"],
             request_id=request_id,
         )
         return {"ok": True, "cancelled_request_id": request_id}
+    except LMSNotImplementedError as exc:
+        return {"ok": False, "error": str(exc), "kind": "not_implemented"}
     except LMSError as exc:
         logger.warning("cancel_leave failed: %s", exc)
         return {"ok": False, "error": str(exc)}
 
 
-# ── Recommendation tool (deterministic — no LLM) ────────────────────────
-
-@tool
-async def recommend_leave_window(days: int, prefer_long_weekends: bool = True,
-                                 from_date: str | None = None,
-                                 horizon_days: int = 90) -> dict:
-    """Suggest leave windows that maximise time off relative to balance + holidays.
-
-    Args:
-        days: Number of leave days to take (1–14).
-        prefer_long_weekends: When True, ranks options that bridge a
-            holiday or weekend higher.
-        from_date: Earliest date to consider (ISO YYYY-MM-DD). Defaults to
-            today.
-        horizon_days: Look-ahead window. Default 90 days.
-
-    Returns up to 3 ranked windows with the *blocked* time-off count
-    (calendar days from the first leave day to the day before the
-    employee returns).
-    """
-    ctx = _ctx()
-    if days < 1 or days > 14:
-        return {"ok": False, "error": "days must be between 1 and 14."}
-
-    today = _parse_date(from_date) if from_date else ctx["today"]
-    horizon_end = today + timedelta(days=max(7, min(horizon_days, 365)))
-
-    # ── Gather holidays in the horizon (single upstream call) ──
-    try:
-        holidays = await get_lms_client().get_holiday_calendar(
-            session_id=ctx["session_id"],
-            location=ctx["location"],
-            year=today.year,
-        )
-        if horizon_end.year != today.year:
-            holidays += await get_lms_client().get_holiday_calendar(
-                session_id=ctx["session_id"],
-                location=ctx["location"],
-                year=horizon_end.year,
-            )
-    except LMSError as exc:
-        return {"ok": False, "error": f"Could not load holidays: {exc}"}
-
-    holiday_dates = {h.holiday_date for h in holidays}
-
-    # ── Gather balance to make sure we don't over-recommend ──
-    try:
-        balances = await get_lms_client().get_leave_balance(
-            session_id=ctx["session_id"],
-            employee_id=ctx["employee_id"],
-        )
-    except LMSError:
-        balances = []
-    annual = next((b for b in balances if b.leave_type.lower() == "annual"), None)
-    available = annual.available_days if annual else float(days)
-    if days > available:
-        return {
-            "ok": False,
-            "error": (
-                f"Requested {days} day(s) but only {available:.1f} day(s) of "
-                f"Annual leave available."
-            ),
-        }
-
-    # ── Rank candidate windows ──
-    candidates = []
-    cursor = today
-    while cursor <= horizon_end:
-        # Build the leave window (skip weekends in the count)
-        leave_days_used = 0
-        d = cursor
-        leave_dates: list[_date] = []
-        while leave_days_used < days and d <= horizon_end:
-            if d.weekday() < 5:  # Mon–Fri
-                leave_dates.append(d)
-                leave_days_used += 1
-            d += timedelta(days=1)
-
-        if leave_days_used < days:
-            break
-
-        first = leave_dates[0]
-        last = leave_dates[-1]
-
-        # Calendar span = from leave_start through next working day - 1 (the day before return)
-        # plus any preceding/following weekend or public holiday that bridges.
-        span_start = first
-        span_end = last
-        # Extend forward through weekends + holidays
-        probe = last + timedelta(days=1)
-        while probe.weekday() >= 5 or probe in holiday_dates:
-            span_end = probe
-            probe += timedelta(days=1)
-            if (probe - last).days > 7:
-                break
-        # Extend backward through weekends + holidays
-        probe = first - timedelta(days=1)
-        while probe.weekday() >= 5 or probe in holiday_dates:
-            span_start = probe
-            probe -= timedelta(days=1)
-            if (first - probe).days > 7:
-                break
-
-        blocked_days = (span_end - span_start).days + 1
-        savings_ratio = blocked_days / max(days, 1)
-
-        score = blocked_days + (2 if prefer_long_weekends and blocked_days > days else 0)
-
-        candidates.append({
-            "leave_start": first.isoformat(),
-            "leave_end": last.isoformat(),
-            "calendar_start": span_start.isoformat(),
-            "calendar_end": span_end.isoformat(),
-            "leave_days": days,
-            "calendar_days_off": blocked_days,
-            "savings_ratio": round(savings_ratio, 2),
-            "_score": score,
-        })
-
-        # Step forward by ~1 week to cover variety
-        cursor += timedelta(days=7)
-
-    candidates.sort(key=lambda c: c["_score"], reverse=True)
-    top = []
-    for c in candidates:
-        c.pop("_score", None)
-        top.append(c)
-        if len(top) >= 3:
-            break
-
-    return {"ok": True, "windows": top, "available_days": available}
-
-
 # ── Toolbelt exports ────────────────────────────────────────────────────
 
+# Read-only tools the agent uses by default. These three exclusively
+# back onto /api/LeaveSnapshot, so they're zero-cost beyond the first
+# call within a session (cached client-side).
 READ_TOOLS = [
+    get_leave_snapshot,
     get_leave_balance,
     get_pending_leaves,
     get_holiday_calendar,
-    recommend_leave_window,
 ]
 
+# Write tools — gated through the ReAct loop's HITL confirmation step.
+# Today these always return ``not_implemented`` from the upstream.
+# When the upstream wires apply / cancel, the client implementation is
+# the only thing that needs to change; this list stays the same.
 WRITE_TOOLS = [
     apply_leave,
     cancel_leave,

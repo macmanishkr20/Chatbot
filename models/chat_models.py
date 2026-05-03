@@ -43,6 +43,14 @@ class UserChatQuery(BaseModel):
     is_free_form: bool
 
     user_id: str
+    # Optional. When the auth identity (``user_id``, e.g. an email)
+    # differs from the EmployeeId used in the analytical tables
+    # (``UserExpenses.EmployeeId`` / ``UserScoreboard.EmployeeId`` —
+    # typically GPN / Workday id), the frontend can send the resolved
+    # employee identifier here so the analytical agents apply RLS on
+    # the correct column. When omitted, the agents fall back to
+    # ``user_id``.
+    employee_id: Optional[str] = None
     chat_id: str | None = None
     chat_session_id: str | None = None
     config: Optional[dict] = Field(

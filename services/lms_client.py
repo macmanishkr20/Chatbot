@@ -11,10 +11,22 @@ NEVER calls HTTP directly — all calls go through this module so that:
     during a single chat conversation,
   * the agent layer stays mockable (tests swap in a ``FakeLMSClient``).
 
-Configuration (env or Key Vault, all optional during early rollout):
+Active endpoint (live):
+    GET {LMS_BASE_URL}/api/LeaveSnapshot?email={email}
+        — returns a snapshot containing balance + pending leaves +
+          related metadata in a single payload. The exact response
+          shape is parsed best-effort by ``_parse_snapshot()``; the
+          raw JSON is also exposed so the LLM can answer questions
+          the typed accessors don't anticipate.
 
-  LMS_BASE_URL              base URL, e.g. https://hr.example.com/api/v1
-  LMS_API_KEY               API key sent as ``X-API-Key``
+Endpoints not yet wired by the upstream system (holidays / apply /
+cancel) raise ``LMSNotImplementedError`` so the agent surfaces a clear
+"not available" message instead of fabricating data.
+
+Configuration (env or Key Vault):
+
+  LMS_BASE_URL              base URL, e.g. http://10.151.110.162:8087
+  LMS_API_KEY               optional; sent as ``X-API-Key`` if set
   LMS_TIMEOUT_MS            per-request timeout (default 8000)
   LMS_CACHE_TTL_SECONDS     read cache TTL (default 60)
   LMS_CIRCUIT_FAILS         consecutive failures before opening (default 5)
@@ -57,17 +69,14 @@ class LMSCircuitOpen(LMSError):
     """Circuit breaker is open — we refused to call upstream."""
 
 
+class LMSNotImplementedError(LMSError):
+    """Capability is not yet exposed by the upstream HR system."""
+
+
 # ── Circuit breaker ────────────────────────────────────────────────────
 
 @dataclass
 class _CircuitBreaker:
-    """Simple async-safe failure-window breaker.
-
-    Closed → calls flow.
-    Open   → calls fail fast with LMSCircuitOpen for ``cooldown_sec``.
-    Half-open probe → first call after cooldown is allowed; on success
-                      the breaker closes; on failure it re-opens.
-    """
     fail_threshold: int = 5
     cooldown_sec: float = 30.0
     failures: int = 0
@@ -80,7 +89,6 @@ class _CircuitBreaker:
                 return
             elapsed = time.monotonic() - self.opened_at
             if elapsed >= self.cooldown_sec:
-                # half-open — let one call through
                 self.opened_at = None
                 self.failures = 0
                 return
@@ -114,8 +122,6 @@ class _CachedEntry:
 
 
 class _TTLCache:
-    """Tiny async-safe TTL cache keyed by (session_id, op_name, args_hash)."""
-
     def __init__(self) -> None:
         self._data: dict[tuple, _CachedEntry] = {}
         self._lock = asyncio.Lock()
@@ -135,14 +141,13 @@ class _TTLCache:
             self._data[key] = _CachedEntry(value=value, expires_at=time.monotonic() + ttl)
 
     async def invalidate(self, prefix: tuple) -> None:
-        """Drop all entries whose key starts with ``prefix`` — used on writes."""
         async with self._lock:
             keys = [k for k in self._data if k[:len(prefix)] == prefix]
             for k in keys:
                 self._data.pop(k, None)
 
 
-# ── Client ─────────────────────────────────────────────────────────────
+# ── Typed projections of the leave snapshot ────────────────────────────
 
 @dataclass
 class LeaveBalance:
@@ -174,11 +179,125 @@ class Holiday:
     is_optional: bool = False
 
 
+# ── Snapshot parsing ───────────────────────────────────────────────────
+
+# The upstream payload shape is not formally documented. We parse it
+# defensively, accepting common variants:
+#
+#   { "balances": [ { "leaveType": "...", "available": ..., ... }, ... ] }
+#   { "leaveBalances": [ ... ] }
+#   { "AnnualBalance": ..., "SickBalance": ... }
+#
+# whichever appears, plus a `raw` echo so the LLM can read fields we
+# didn't anticipate.
+
+def _to_float(value: Any) -> float:
+    try:
+        if value is None or value == "":
+            return 0.0
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _ci_get(d: dict, *keys: str, default: Any = None) -> Any:
+    """Case-insensitive dict lookup over the supplied keys."""
+    if not isinstance(d, dict):
+        return default
+    lookup = {k.lower(): v for k, v in d.items()}
+    for k in keys:
+        v = lookup.get(k.lower())
+        if v is not None:
+            return v
+    return default
+
+
+def _parse_snapshot_balances(snapshot: dict) -> list[LeaveBalance]:
+    """Pull a list of LeaveBalance from a snapshot payload."""
+    out: list[LeaveBalance] = []
+
+    # ── Variant A: explicit list of balance items ──
+    items = _ci_get(snapshot, "balances", "leaveBalances", "leave_balances")
+    if isinstance(items, list):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            out.append(LeaveBalance(
+                leave_type=str(_ci_get(item, "leaveType", "leave_type", "type", default="Annual")),
+                available_days=_to_float(_ci_get(item, "available", "availableDays", "balance", "remaining")),
+                accrued_days=_to_float(_ci_get(item, "accrued", "accruedDays", "entitlement", "total")),
+                used_days=_to_float(_ci_get(item, "used", "usedDays", "consumed", "taken")),
+                pending_days=_to_float(_ci_get(item, "pending", "pendingDays", "inApproval")),
+            ))
+        if out:
+            return out
+
+    # ── Variant B: flat <Type>Balance fields ──
+    flat_types = ["Annual", "Sick", "Casual", "Maternity", "Paternity", "Compassionate"]
+    for t in flat_types:
+        bal = _ci_get(snapshot, f"{t}Balance", f"{t.lower()}Balance")
+        if bal is not None:
+            out.append(LeaveBalance(
+                leave_type=t,
+                available_days=_to_float(bal),
+                accrued_days=_to_float(_ci_get(snapshot, f"{t}Entitlement", f"{t.lower()}Entitlement", default=bal)),
+                used_days=_to_float(_ci_get(snapshot, f"{t}Used", f"{t.lower()}Used", default=0)),
+                pending_days=_to_float(_ci_get(snapshot, f"{t}Pending", f"{t.lower()}Pending", default=0)),
+            ))
+    return out
+
+
+def _parse_snapshot_requests(snapshot: dict) -> list[LeaveRequest]:
+    """Pull a list of LeaveRequest from a snapshot payload."""
+    items = _ci_get(snapshot, "pendingRequests", "leaveRequests", "requests", "pending_leaves")
+    if not isinstance(items, list):
+        return []
+
+    def _d(value: Any) -> date:
+        if isinstance(value, date):
+            return value
+        if value is None:
+            return date.today()
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00")).date()
+        except ValueError:
+            return date.today()
+
+    out: list[LeaveRequest] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        submitted = _ci_get(item, "submittedAt", "createdAt", "submitted_at")
+        try:
+            submitted_dt = (
+                datetime.fromisoformat(str(submitted).replace("Z", "+00:00"))
+                if submitted else None
+            )
+        except ValueError:
+            submitted_dt = None
+        out.append(LeaveRequest(
+            request_id=str(_ci_get(item, "id", "requestId", "request_id", default="")),
+            employee_id=str(_ci_get(item, "employeeId", "employee_id", default="")),
+            leave_type=str(_ci_get(item, "leaveType", "leave_type", "type", default="Annual")),
+            start_date=_d(_ci_get(item, "startDate", "start_date", "from")),
+            end_date=_d(_ci_get(item, "endDate", "end_date", "to")),
+            days=_to_float(_ci_get(item, "days", "duration", "totalDays")),
+            status=str(_ci_get(item, "status", "state", default="pending")).lower(),
+            reason=_ci_get(item, "reason", "comments"),
+            submitted_at=submitted_dt,
+        ))
+    return out
+
+
+# ── Client ─────────────────────────────────────────────────────────────
+
 class LMSClient:
     """Singleton facade for the upstream Leave Management System.
 
-    Read methods are cached per chat-session. Write methods invalidate the
-    relevant cache slice and bypass the cache.
+    The active endpoint exposes a single ``LeaveSnapshot`` per email.
+    Read accessors (balance / pending) extract from that snapshot;
+    write accessors (apply / cancel) and holiday lookups are not yet
+    wired and raise ``LMSNotImplementedError``.
     """
 
     _instance: "LMSClient | None" = None
@@ -211,208 +330,94 @@ class LMSClient:
 
     # ── Public API ─────────────────────────────────────────────────────
 
+    async def get_leave_snapshot(
+        self,
+        *,
+        session_id: str,
+        email: str,
+    ) -> dict:
+        """Return the raw LeaveSnapshot JSON for an employee email.
+
+        Cached per (session_id, email) for ``LMS_CACHE_TTL_SECONDS``.
+        The agent's read tools project from this single payload so we
+        only round-trip the upstream once per chat session.
+        """
+        if not email:
+            raise LMSValidationError("email is required for LeaveSnapshot.")
+
+        cache_key = (session_id, "snapshot", email.lower())
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        body = await self._call(
+            "GET",
+            "/api/LeaveSnapshot",
+            params={"email": email},
+            stub=self._stub_snapshot,
+        )
+        # Some servers wrap the payload in {"data": {...}}; flatten when seen.
+        if isinstance(body, dict) and isinstance(body.get("data"), dict) and "balances" not in body:
+            body = body["data"]
+
+        await self._cache.set(cache_key, body, ttl=self._cache_ttl)
+        return body
+
     async def get_leave_balance(
         self,
         *,
         session_id: str,
-        employee_id: str,
+        email: str,
         leave_type: str | None = None,
     ) -> list[LeaveBalance]:
-        cache_key = (session_id, "balance", employee_id, leave_type or "")
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-        body = await self._call(
-            "GET",
-            f"/employees/{employee_id}/leave-balances",
-            params={"type": leave_type} if leave_type else None,
-            stub=self._stub_balance,
-        )
-        result = [self._parse_balance(item) for item in body.get("balances", [])]
-        await self._cache.set(cache_key, result, ttl=self._cache_ttl)
-        return result
+        snapshot = await self.get_leave_snapshot(session_id=session_id, email=email)
+        balances = _parse_snapshot_balances(snapshot)
+        if leave_type:
+            wanted = leave_type.strip().lower()
+            balances = [b for b in balances if b.leave_type.lower() == wanted]
+        return balances
 
     async def get_pending_leaves(
         self,
         *,
         session_id: str,
-        employee_id: str,
+        email: str,
     ) -> list[LeaveRequest]:
-        cache_key = (session_id, "pending", employee_id)
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-        body = await self._call(
-            "GET",
-            f"/employees/{employee_id}/leave-requests",
-            params={"status": "pending"},
-            stub=self._stub_pending,
-        )
-        result = [self._parse_request(item) for item in body.get("requests", [])]
-        await self._cache.set(cache_key, result, ttl=self._cache_ttl)
-        return result
+        snapshot = await self.get_leave_snapshot(session_id=session_id, email=email)
+        return _parse_snapshot_requests(snapshot)
 
-    async def get_holiday_calendar(
-        self,
-        *,
-        session_id: str,
-        location: str,
-        year: int,
-        month: int | None = None,
-    ) -> list[Holiday]:
-        cache_key = (session_id, "holidays", location.lower(), year, month or 0)
-        cached = await self._cache.get(cache_key)
-        if cached is not None:
-            return cached
-        params = {"location": location, "year": year}
-        if month:
-            params["month"] = month
-        body = await self._call(
-            "GET",
-            "/holidays",
-            params=params,
-            stub=self._stub_holidays,
+    async def get_holiday_calendar(self, **_kwargs) -> list[Holiday]:
+        raise LMSNotImplementedError(
+            "Holiday calendar lookup is not yet wired — only LeaveSnapshot "
+            "is available right now.",
         )
-        result = [self._parse_holiday(item) for item in body.get("holidays", [])]
-        await self._cache.set(cache_key, result, ttl=self._cache_ttl * 4)
-        return result
 
-    async def apply_leave(
-        self,
-        *,
-        session_id: str,
-        employee_id: str,
-        start_date: date,
-        end_date: date,
-        leave_type: str,
-        reason: str | None = None,
-        idempotency_key: str | None = None,
-    ) -> LeaveRequest:
-        if end_date < start_date:
-            raise LMSValidationError("end_date must be on or after start_date.")
-        # Idempotency: include session_id so retries within a chat don't duplicate.
-        idem = idempotency_key or f"{session_id}:{employee_id}:{start_date}:{end_date}:{leave_type}"
-        body = await self._call(
-            "POST",
-            f"/employees/{employee_id}/leave-requests",
-            json_body={
-                "start_date": start_date.isoformat(),
-                "end_date": end_date.isoformat(),
-                "leave_type": leave_type,
-                "reason": reason,
-            },
-            headers={"Idempotency-Key": idem},
-            stub=self._stub_apply,
+    async def apply_leave(self, **_kwargs) -> LeaveRequest:
+        raise LMSNotImplementedError(
+            "Leave application via the chatbot is not yet wired — please "
+            "submit through the regular HR portal for now.",
         )
-        await self._cache.invalidate((session_id, "balance"))
-        await self._cache.invalidate((session_id, "pending"))
-        return self._parse_request(body.get("request", body))
 
-    async def cancel_leave(
-        self,
-        *,
-        session_id: str,
-        employee_id: str,
-        request_id: str,
-    ) -> bool:
-        await self._call(
-            "DELETE",
-            f"/employees/{employee_id}/leave-requests/{request_id}",
-            stub=self._stub_cancel,
+    async def cancel_leave(self, **_kwargs) -> bool:
+        raise LMSNotImplementedError(
+            "Leave cancellation via the chatbot is not yet wired — please "
+            "cancel through the regular HR portal for now.",
         )
-        await self._cache.invalidate((session_id, "balance"))
-        await self._cache.invalidate((session_id, "pending"))
-        return True
 
-    # ── Stubs (used when LMS_BASE_URL is unset — early rollout) ─────────
+    # ── Stub (used when LMS_BASE_URL is unset — local/dev rollout) ─────
 
     @staticmethod
-    def _stub_balance(*_args, **_kwargs) -> dict:
+    def _stub_snapshot(method: str, path: str, params: dict | None, **_) -> dict:
         return {
+            "email": (params or {}).get("email", ""),
             "balances": [
-                {"leave_type": "Annual",  "available": 18.0, "accrued": 25.0, "used": 7.0, "pending": 0.0},
-                {"leave_type": "Sick",    "available": 10.0, "accrued": 10.0, "used": 0.0, "pending": 0.0},
-                {"leave_type": "Casual",  "available": 5.0,  "accrued": 5.0,  "used": 0.0, "pending": 0.0},
+                {"leaveType": "Annual",  "available": 18.0, "accrued": 25.0, "used": 7.0, "pending": 0.0},
+                {"leaveType": "Sick",    "available": 10.0, "accrued": 10.0, "used": 0.0, "pending": 0.0},
+                {"leaveType": "Casual",  "available": 5.0,  "accrued": 5.0,  "used": 0.0, "pending": 0.0},
             ],
+            "pendingRequests": [],
+            "_stub": True,
         }
-
-    @staticmethod
-    def _stub_pending(*_args, **_kwargs) -> dict:
-        return {"requests": []}
-
-    @staticmethod
-    def _stub_holidays(*_args, **_kwargs) -> dict:
-        # Generic placeholder — real HR system returns location-specific dates.
-        return {
-            "holidays": [
-                {"name": "New Year's Day", "date": "2026-01-01", "location": "ALL", "optional": False},
-                {"name": "National Day",   "date": "2026-12-02", "location": "AE", "optional": False},
-            ],
-        }
-
-    @staticmethod
-    def _stub_apply(method: str, path: str, json_body: dict | None, **_) -> dict:
-        body = json_body or {}
-        return {
-            "request": {
-                "id": f"stub-{int(time.time())}",
-                "employee_id": path.split("/")[2] if "employees" in path else "unknown",
-                "leave_type": body.get("leave_type", "Annual"),
-                "start_date": body.get("start_date"),
-                "end_date": body.get("end_date"),
-                "days": 1.0,
-                "status": "pending",
-                "reason": body.get("reason"),
-                "submitted_at": datetime.utcnow().isoformat(),
-            },
-        }
-
-    @staticmethod
-    def _stub_cancel(*_args, **_kwargs) -> dict:
-        return {"status": "cancelled"}
-
-    # ── Parsers ────────────────────────────────────────────────────────
-
-    @staticmethod
-    def _parse_balance(item: dict) -> LeaveBalance:
-        return LeaveBalance(
-            leave_type=str(item.get("leave_type", "Annual")),
-            available_days=float(item.get("available", 0) or 0),
-            accrued_days=float(item.get("accrued", 0) or 0),
-            used_days=float(item.get("used", 0) or 0),
-            pending_days=float(item.get("pending", 0) or 0),
-        )
-
-    @staticmethod
-    def _parse_request(item: dict) -> LeaveRequest:
-        def _d(v: Any) -> date:
-            if isinstance(v, date):
-                return v
-            return datetime.fromisoformat(str(v)).date()
-        submitted = item.get("submitted_at")
-        return LeaveRequest(
-            request_id=str(item.get("id") or item.get("request_id") or ""),
-            employee_id=str(item.get("employee_id") or ""),
-            leave_type=str(item.get("leave_type") or "Annual"),
-            start_date=_d(item.get("start_date")),
-            end_date=_d(item.get("end_date")),
-            days=float(item.get("days") or 0),
-            status=str(item.get("status") or "pending"),
-            reason=item.get("reason"),
-            submitted_at=datetime.fromisoformat(submitted) if submitted else None,
-        )
-
-    @staticmethod
-    def _parse_holiday(item: dict) -> Holiday:
-        d = item.get("date")
-        if isinstance(d, str):
-            d = datetime.fromisoformat(d).date()
-        return Holiday(
-            name=str(item.get("name") or "Holiday"),
-            holiday_date=d if isinstance(d, date) else date.today(),
-            location=str(item.get("location") or "ALL"),
-            is_optional=bool(item.get("optional", False)),
-        )
 
     # ── Core HTTP call with retries + breaker ──────────────────────────
 
@@ -432,19 +437,21 @@ class LMSClient:
                 raise LMSError(
                     f"No upstream configured and no stub for {method} {path}",
                 )
-            return stub(method=method, path=path, json_body=json_body)
+            return stub(method=method, path=path, params=params, json_body=json_body)
 
         await self._breaker.before_call()
 
         try:
-            import httpx  # local import — keeps the dep optional during installs
+            import httpx
         except ImportError as exc:
             raise LMSError(
                 "httpx is required to call the upstream LMS. "
                 "Install it with `pip install httpx`.",
             ) from exc
 
-        request_headers = {"Content-Type": "application/json"}
+        request_headers = {"Accept": "application/json"}
+        if json_body is not None:
+            request_headers["Content-Type"] = "application/json"
         if self._api_key:
             request_headers["X-API-Key"] = self._api_key
         if headers:
@@ -464,7 +471,7 @@ class LMSClient:
                         json=json_body,
                         headers=request_headers,
                     )
-                if resp.status_code == 401 or resp.status_code == 403:
+                if resp.status_code in (401, 403):
                     raise LMSAuthError(f"Auth failed ({resp.status_code}) for {method} {path}.")
                 if 400 <= resp.status_code < 500:
                     raise LMSValidationError(
@@ -481,7 +488,6 @@ class LMSClient:
                 await self._breaker.on_success()
                 return body if isinstance(body, dict) else {"data": body}
             except (LMSValidationError, LMSAuthError):
-                # 4xx — don't retry, don't trip the breaker
                 raise
             except Exception as exc:
                 last_exc = exc
@@ -490,7 +496,7 @@ class LMSClient:
                     attempt + 1, max_retries + 1, method, path, exc,
                 )
                 if attempt < max_retries:
-                    await asyncio.sleep(0.5 * (2 ** attempt))  # 0.5, 1.0
+                    await asyncio.sleep(0.5 * (2 ** attempt))
                     continue
 
         await self._breaker.on_failure()

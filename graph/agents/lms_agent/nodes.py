@@ -91,8 +91,10 @@ def _get_llm_with_tools(allow_writes: bool):
 
 
 def _build_system_message(state: LMSAgentState) -> SystemMessage:
+    email = state.get("user_id") or "(unknown)"
     return SystemMessage(content=LMS_SYSTEM_PROMPT.format(
-        employee_id=state.get("employee_id") or "(unknown)",
+        email=email,
+        employee_id=state.get("employee_id") or email,
         employee_name=state.get("employee_name") or "(unknown)",
         office_location=state.get("office_location") or "(unset)",
         country=state.get("country") or "(unset)",
@@ -123,11 +125,16 @@ async def react_loop_node(state: LMSAgentState) -> dict:
     """
     with get_tracer_span("lms.react_loop"):
         sid = state.get("chat_session_id") or "no-session"
-        emp = state.get("employee_id") or state.get("user_id") or ""
-        if not emp:
+        # The /api/LeaveSnapshot endpoint keys on email — supervisor
+        # stamps the auth email into ``user_id``. ``employee_id`` (when
+        # supplied) is kept on the context for parity with the other
+        # agents but is NOT used by the LMS upstream.
+        email = state.get("user_id") or ""
+        emp = state.get("employee_id") or email
+        if not email:
             return {
                 "messages": [AIMessage(content=(
-                    "I couldn't resolve your employee identity from this "
+                    "I couldn't resolve your account email from this "
                     "session — please sign in again or contact HR."
                 ))],
                 "ai_content": "Identity not resolved.",
@@ -136,9 +143,9 @@ async def react_loop_node(state: LMSAgentState) -> dict:
 
         token = set_tool_context(
             session_id=sid,
+            email=email,
             employee_id=emp,
             location=state.get("office_location"),
-            manager_id=state.get("manager_id"),
             today=datetime.now().date(),
         )
         try:

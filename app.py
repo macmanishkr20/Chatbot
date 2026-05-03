@@ -87,7 +87,18 @@ _cancel_signals: dict[str, bool] = {}
 # with_structured_output(RouteResponse) which streams JSON fragments,
 # not user-facing prose. Supervisor's RESPOND content is delivered via
 # the "updates" mode instead (see stream_generator).
-_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
+#
+# `synthesize` is shared by:
+#   * rag_graph multi-function flow — internal; emits no LLM tokens.
+#   * expense / scoreboard agents   — narrates analytical results, does stream.
+# Adding it here is safe because the rag synthesize doesn't emit content
+# tokens; only the analytical synthesize does.
+#
+# `react_loop` is the LMS agent's tool-using turn — its final natural-
+# language reply streams back to the user.
+_STREAMABLE_NODES: frozenset[str] = frozenset({
+    "generate", "search", "synthesize", "react_loop",
+})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
@@ -134,6 +145,26 @@ _NODE_THOUGHT: dict[str, dict[str, str]] = {
     },
     "save_memory": {
         "Memory": "Storing insight…"
+    },
+    # ── Expense / Scoreboard analytical agents ──
+    "resolve_role": {
+        "Access": "Checking access permissions…"
+    },
+    "understand_query": {
+        "Reading": "Reading the question…"
+    },
+    "execute_query": {
+        "Querying": "Querying the data…"
+    },
+    "privacy_gate": {
+        "Privacy": "Verifying permissions…"
+    },
+    # ── LMS agent ──
+    "enrich_context": {
+        "Context": "Loading your profile…"
+    },
+    "react_loop": {
+        "Working": "Working through it…"
     }
 }
 
@@ -239,12 +270,20 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
 
 async def _build_initial_state(query: UserChatQuery) -> dict:
     """Convert a UserChatQuery into the initial RAGState dict."""
+    # Resolve the analytical-agent identity. When the frontend sends an
+    # explicit ``employee_id`` (e.g. resolved GPN / Workday id) we honour
+    # it; otherwise the agents fall back to ``user_id`` (typically the
+    # auth email) for the EmployeeId lookup in UserExpenses /
+    # UserScoreboard / AgentUserRoles.
+    employee_id = (query.employee_id or "").strip() or query.user_id
+
     return {
         "messages": [HumanMessage(content=query.user_input)],
         "input_type": query.input_type.value,
         "user_input": query.user_input,
         "is_free_form": query.is_free_form,
         "user_id": query.user_id,
+        "employee_id": employee_id,
         "chat_id": query.chat_id,
         "chat_session_id": query.chat_session_id,
         "message_id": query.message_id,
