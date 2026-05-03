@@ -1,13 +1,21 @@
 """
-Supervisor agent — routes incoming requests to the appropriate sub-graph
-or responds directly for greetings and simple clarifications.
+Supervisor agent — routes incoming requests to the appropriate specialist
+agent (registered through ``graph.agents``) or responds directly for
+greetings and simple clarifications.
 
-Currently supported routes:
-  - RESPOND  : direct reply (greetings, clarifications, general questions)
-  - rag_graph: knowledge retrieval pipeline
+Built-in routes:
+  - RESPOND      — direct reply (greetings, clarifications, general).
+  - rag_graph    — knowledge retrieval pipeline (registered by default).
 
-Future routes (not yet wired):
-  - LMSAgent, ClaimAgent, ExpenseAgent, …
+Additional agents (LMS, Expense, Scoreboard, …) plug in by calling
+``register_agent(AgentSpec(...))`` in their package's ``__init__.py``.
+The supervisor reads the registry at compile time and exposes:
+
+  * The agent names as the ``RouteResponse.next`` Literal options.
+  * Each agent's description in the system prompt's worker block.
+  * Each agent's sub-graph as a workflow node.
+
+Disabled agents (env flag ``ENABLE_<NAME>_AGENT=false``) are skipped.
 """
 
 import asyncio
@@ -19,39 +27,57 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import AzureChatOpenAI
 from langgraph.graph import END, START, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 
 from config import (
     AZURE_OPENAI_CHAT_API_VERSION,
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
-from graph.rag_graph import build_rag_graph
-from graph.state import RAGState
-from graph.nodes.persist_node import persist_node
-from graph.nodes.memory_node import save_memory_node
-from prompts.supervisor_prompt import FEW_SHOT_EXAMPLES, supervisor_system_prompt
-from services.memory_store import get_azure_sql_store, get_persistent_memory_checkpoint_saver_async
+import graph.agents  # noqa: F401 — side-effect: registers built-in agents
+from graph.agents import AGENT_RESPOND, AgentRegistry, AgentSpec
 from graph.context_manager import prepare_supervisor_messages
-from services.openai_client import  get_llm_model
+from graph.nodes.memory_node import save_memory_node
+from graph.nodes.persist_node import persist_node
+from graph.state import RAGState
+from prompts.supervisor_prompt import (
+    FEW_SHOT_EXAMPLES,
+    render_worker_descriptions,
+    render_worker_routing_rules,
+    supervisor_system_prompt,
+)
+from services.memory_store import (
+    get_azure_sql_store,
+    get_persistent_memory_checkpoint_saver_async,
+)
+from services.openai_client import get_llm_model
 
 logger = logging.getLogger(__name__)
 
-MEMBERS = ["rag_graph"]
-OPTIONS_FOR_NEXT = ["RESPOND"] + MEMBERS
 
 # Lock for thread-safe singleton initialisation under async concurrency
 _init_lock = asyncio.Lock()
 
 
-def _build_system_prompt() -> str:
-    """Build the system prompt with fresh dates — called per-request so
-    dates never go stale if the server runs across midnight."""
+def _enabled_specs() -> list[AgentSpec]:
+    """All currently enabled agent specs (env flags applied)."""
+    return AgentRegistry.list(only_enabled=True)
+
+
+def _build_system_prompt(specs: list[AgentSpec]) -> str:
+    """Render the supervisor system prompt with fresh dates and the
+    current registry-derived workers block.
+
+    Built per-request so date references never go stale and so newly
+    registered / disabled agents take effect immediately on next call.
+    """
     now = datetime.now()
     return supervisor_system_prompt.format(
         current_date=now.strftime("%Y-%m-%d"),
         current_date_readable=now.strftime("%A, %B %d, %Y"),
         tomorrow_date=(now + timedelta(days=1)).strftime("%Y-%m-%d"),
+        worker_descriptions=render_worker_descriptions(specs),
+        worker_routing_rules=render_worker_routing_rules(specs),
     ) + FEW_SHOT_EXAMPLES
 
 
@@ -71,29 +97,47 @@ class SuggestiveActionResponse(BaseModel):
     )
 
 
-class RouteResponse(BaseModel):
-    next: Literal["RESPOND", "rag_graph"] = Field(
-        description="The next step in the workflow"
-    )
-    suggestive_actions: list[ActionResponse] | None = Field(
-        default=None,
-        description="Suggestive actions for the user in their preferred language",
-    )
-    response: str | None = Field(
-        default=None,
-        description="Optional direct response to the user in their preferred language",
+def _build_route_response_model(options: list[str]) -> type[BaseModel]:
+    """Construct ``RouteResponse`` with ``next: Literal[options]`` at runtime.
+
+    Pydantic's ``with_structured_output`` needs a Literal so the LLM is
+    constrained to valid agent names. The set of options depends on the
+    registry, which can change between deployments / feature flags, so we
+    build the model dynamically here.
+    """
+    if not options:
+        # Defensive: at minimum "RESPOND" is always an option.
+        options = [AGENT_RESPOND]
+    next_type = Literal.__getitem__(tuple(options))  # type: ignore[arg-type]
+    return create_model(
+        "RouteResponse",
+        next=(next_type, Field(description="The next step in the workflow")),
+        suggestive_actions=(
+            Optional[list[ActionResponse]],
+            Field(default=None, description="Suggestive follow-up actions"),
+        ),
+        response=(
+            Optional[str],
+            Field(default=None, description="Optional direct response when next=RESPOND"),
+        ),
     )
 
 
 # ── Supervisor Graph ──
 
 class SupervisorGraph:
-    """Supervisor agent graph for routing and direct responses."""
+    """Supervisor agent graph for routing and direct responses.
+
+    Members are sourced from ``graph.agents.AgentRegistry`` at compile time.
+    """
 
     def __init__(self):
         self._compiled_graph = None
         self._checkpoint_saver = None
         self._memory_store = None
+        self._members: list[str] = []
+        self._options: list[str] = []
+        self._route_response_model: type[BaseModel] | None = None
         self.llm = AzureChatOpenAI(
             azure_deployment=get_llm_model("events"),
             api_key=AZURE_OPENAI_KEY,
@@ -106,13 +150,17 @@ class SupervisorGraph:
             max_retries=2,
         )
 
+    # ── Routing chain ──
+
     def _create_supervisor_chain(self, state: RAGState):
         """Build the supervisor routing chain for the given state.
 
-        The system prompt is built per-request via _build_system_prompt()
-        so that date references are always fresh.
+        The system prompt is rebuilt per-request via _build_system_prompt()
+        so dates and the (potentially flag-toggled) registry are always
+        fresh.
         """
-        system_prompt = _build_system_prompt()
+        specs = _enabled_specs()
+        system_prompt = _build_system_prompt(specs)
         lang = state.get("preferred_language") or "English"
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -120,17 +168,14 @@ class SupervisorGraph:
                 MessagesPlaceholder(variable_name="messages"),
                 ("human", f"Ensure your response is in language: {lang}"),
             ]
-        ).partial(options=str(OPTIONS_FOR_NEXT), members=", ".join(MEMBERS))
-        return prompt | self.llm.with_structured_output(RouteResponse)
+        ).partial(
+            options=str(self._options),
+            members=", ".join(self._members),
+        )
+        return prompt | self.llm.with_structured_output(self._route_response_model)
 
     async def supervisor_agent(self, state: RAGState) -> Dict[str, Any]:
-        """Route requests and provide direct responses when appropriate.
-
-        Before invoking the LLM, messages are trimmed to fit within the
-        token budget via context_manager.prepare_supervisor_messages().
-        Older messages are condensed into a summary so the LLM retains
-        context without exceeding the context window.
-        """
+        """Route requests and provide direct responses when appropriate."""
         # ── Token-aware message trimming ──
         raw_messages = state.get("messages", [])
         existing_summary = state.get("summary", "")
@@ -139,8 +184,6 @@ class SupervisorGraph:
         )
 
         # ── Inject citation context for multi-turn resolution ──
-        # When the user says "tell me more about [2]", the supervisor
-        # needs this context to route correctly to rag_graph.
         citation_map = state.get("citation_map")
         if citation_map:
             citation_lines = ["Previous citation references:"]
@@ -151,28 +194,30 @@ class SupervisorGraph:
             from langchain_core.messages import SystemMessage as _SM
             trimmed_messages.append(_SM(content="\n".join(citation_lines)))
 
-        # Replace messages in state copy for this LLM call only
         trimmed_state = {**state, "messages": trimmed_messages, "summary": updated_summary}
 
         supervisor_chain = self._create_supervisor_chain(trimmed_state)
         result = await supervisor_chain.ainvoke(trimmed_state)
 
-        if result.next == "RESPOND" and result.response:
+        # ``result`` is an instance of the dynamically built RouteResponse
+        next_target = getattr(result, "next", AGENT_RESPOND)
+        response_text = getattr(result, "response", None)
+        suggestive = getattr(result, "suggestive_actions", None)
+
+        if next_target == AGENT_RESPOND and response_text:
             return {
-                "messages": [AIMessage(content=result.response)],
-                # Set ai_content + is_free_form so persist_node can save the
-                # greeting/direct reply to SQL (chat history).
-                "ai_content": result.response,
+                "messages": [AIMessage(content=response_text)],
+                "ai_content": response_text,
                 "is_free_form": True,
-                "suggestive_actions": result.suggestive_actions,
+                "suggestive_actions": suggestive,
                 "summary": updated_summary,
-                "next": result.next,
+                "next": next_target,
             }
 
         return {
-            "messages": [AIMessage(content=result.response or "")],
-            "next": result.next,
-            "suggestive_actions": result.suggestive_actions,
+            "messages": [AIMessage(content=response_text or "")],
+            "next": next_target,
+            "suggestive_actions": suggestive,
             "summary": updated_summary,
         }
 
@@ -180,36 +225,55 @@ class SupervisorGraph:
     def _get_next(state: RAGState) -> str:
         return state["next"]
 
+    # ── Workflow construction ──
+
     def _build_workflow(self) -> StateGraph:
-        """Build and configure the supervisor workflow graph.
+        """Build the supervisor workflow.
 
-        RESPOND path: Supervisor → persist → save_memory → END
-          Ensures greetings and direct replies are saved to SQL so they
-          appear in the user's chat history (/conversations endpoint).
+        Layout:
+          START → Supervisor
+                    ├─ RESPOND      → persist → save_memory → END
+                    ├─ rag_graph    → END         (rag has its own persist)
+                    ├─ <agent_b>    → END
+                    └─ <agent_c>    → END
 
-        rag_graph path: Supervisor → rag_graph → END
-          rag_graph internally runs: load_memory → rewrite → embed →
-          search → generate → persist → save_memory → END
+        Each agent is responsible for its own persist + save_memory tail
+        when it produces a structured answer (this matches how rag_graph
+        already works). The RESPOND path runs persist + save_memory in the
+        supervisor itself so greetings still appear in chat history.
         """
-        rag_graph = build_rag_graph(memory_store=self._memory_store)
-        workflow = StateGraph(RAGState)
-        workflow.add_node("rag_graph", rag_graph)
-        workflow.add_node("Supervisor", self.supervisor_agent)
+        specs = _enabled_specs()
+        self._members = [s.name for s in specs]
+        self._options = [AGENT_RESPOND, *self._members]
+        self._route_response_model = _build_route_response_model(self._options)
 
-        # persist + save_memory are shared by both paths so greetings and
-        # direct RESPOND replies are stored in SQL chat history.
+        workflow = StateGraph(RAGState)
+        workflow.add_node("Supervisor", self.supervisor_agent)
         workflow.add_node("persist", persist_node)
         workflow.add_node("save_memory", save_memory_node)
 
-        # RESPOND routes to persist (not END) so the reply is persisted.
-        conditional_map = {member: member for member in MEMBERS}
-        conditional_map["RESPOND"] = "persist"
+        # Conditional routing map: every member name → its own node;
+        # RESPOND → the shared persist node.
+        conditional_map: dict[str, str] = {AGENT_RESPOND: "persist"}
+
+        for spec in specs:
+            sub_graph = spec.build_subgraph(
+                store=self._memory_store,
+                checkpointer=self._checkpoint_saver,
+            )
+            workflow.add_node(spec.name, sub_graph)
+            workflow.add_edge(spec.name, END)
+            conditional_map[spec.name] = spec.name
 
         workflow.add_conditional_edges("Supervisor", self._get_next, conditional_map)
         workflow.add_edge(START, "Supervisor")
-        workflow.add_edge("rag_graph", END)
         workflow.add_edge("persist", "save_memory")
         workflow.add_edge("save_memory", END)
+
+        logger.info(
+            "SupervisorGraph: built workflow with members=%s",
+            self._members,
+        )
 
         return workflow
 
