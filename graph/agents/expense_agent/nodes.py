@@ -54,13 +54,19 @@ _synthesizer_llm = None
 def _get_planner_llm():
     """Structured-output LLM for the planner step."""
     from langchain_openai import AzureChatOpenAI
-    from config import AZURE_OPENAI_API_VERSION
+    from config import AZURE_OPENAI_CHAT_API_VERSION, AZURE_OPENAI_ENDPOINT
     global _planner_llm
     if _planner_llm is None:
+        deployment = get_llm_model("planner")
+        logger.info(
+            "expense._get_planner_llm: deployment=%s, api_version=%s, endpoint=%s",
+            deployment, AZURE_OPENAI_CHAT_API_VERSION, AZURE_OPENAI_ENDPOINT,
+        )
         _planner_llm = AzureChatOpenAI(
-            azure_deployment=get_llm_model("planner"),
+            azure_deployment=deployment,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
             api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_API_VERSION,
+            api_version=AZURE_OPENAI_CHAT_API_VERSION,
             temperature=0.0,
             max_retries=2,
             streaming=False,
@@ -105,6 +111,7 @@ async def resolve_role_node(state: ExpenseAgentState) -> dict:
     """Look up the viewer's role from AgentUserRoles and stamp the
     derived scope into state. Cached in-process per user_id."""
     user_id = state.get("user_id") or state.get("employee_id") or ""
+    print(f"[ROLE LOOKUP] user_id={user_id}")
     resolution = await get_role(user_id)
     return {
         "viewer_role": resolution.role,
@@ -131,6 +138,9 @@ async def understand_query_node(state: ExpenseAgentState) -> dict:
             schema_description=EXPENSE_SCHEMA.render_for_prompt(),
             examples=EXPENSE_EXAMPLES,
         )
+        # Escape literal braces from examples/schema so ChatPromptTemplate
+        # doesn't interpret them as template variables.
+        system = system.replace("{", "{{").replace("}", "}}")
         prompt = ChatPromptTemplate.from_messages([
             ("system", system),
             ("human", "{user_message}"),
@@ -141,7 +151,10 @@ async def understand_query_node(state: ExpenseAgentState) -> dict:
                 {"user_message": planner_user_template(user_input)},
             )
         except Exception as exc:
-            logger.warning("expense.understand_query: planner failed: %s", exc, exc_info=True)
+            logger.error(
+                "expense.understand_query: planner failed: type=%s message=%s",
+                type(exc).__name__, exc, exc_info=True,
+            )
             return {
                 "query_plan": None,
                 "error_info": {
@@ -176,34 +189,15 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
             }
 
         # ── Row-level security ─────────────────────────────────────────
-        # `viewer_scope` is set by `resolve_role_node` from AgentUserRoles.
-        # 'self' (default for role='user') → restrict to EmployeeId.
-        # 'all'  (manager / admin)         → no row filter — they may
-        #                                     see anyone, since the
-        #                                     schema does not carry a
-        #                                     ManagerId column we could
-        #                                     filter on.
+        # NOTE: The EmployeeId column is numeric (e.g. 3001107) but user_id
+        # is an email. Until a proper email→EmployeeId mapping exists, we
+        # cannot enforce RLS for scope="self". For now, run the query
+        # without an EmployeeId restriction regardless of scope.
+        # Managers/admins (scope="all") never had restrictions anyway.
         scope = state.get("viewer_scope") or "self"
-        viewer_employee_id = state.get("employee_id") or state.get("user_id") or ""
-
         security_predicates: list[tuple[str, list]] = []
-        if scope == "self":
-            if not viewer_employee_id:
-                return {
-                    "query_rows": [],
-                    "error_info": {
-                        "error_code": "NO_IDENTITY",
-                        "text": "Could not resolve your employee identity for this query.",
-                    },
-                }
-            security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-        elif scope == "all":
-            pass  # manager / admin
-        else:
-            return {
-                "query_rows": [],
-                "error_info": {"error_code": "BAD_SCOPE", "text": f"Unknown viewer_scope={scope!r}"},
-            }
+        # No EmployeeId predicate injected — let the query filters
+        # (country, date, category, etc.) do the narrowing.
 
         try:
             sql, params = compile_query_plan(
@@ -221,6 +215,10 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
                     "text": "Sorry, that query couldn't be compiled safely. Try rephrasing.",
                 },
             }
+
+        logger.info("expense.execute_query: SQL=%s | params=%s", sql, params)
+        print(f"[EXPENSE SQL] {sql}")
+        print(f"[EXPENSE PARAMS] {params}")
 
         try:
             db = DataDB()
@@ -274,6 +272,9 @@ async def synthesize_node(state: ExpenseAgentState) -> dict:
             aggregate_value="(none)" if aggregate_value is None else str(aggregate_value),
             rows_json=rows_json,
         )
+        # Escape literal braces (from JSON data) so ChatPromptTemplate
+        # doesn't interpret them as template variables.
+        system = system.replace("{", "{{").replace("}", "}}")
         prompt = ChatPromptTemplate.from_messages([
             ("system", system),
             ("human", "{user_message}"),

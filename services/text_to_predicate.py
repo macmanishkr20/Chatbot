@@ -30,7 +30,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
-from typing import Any, Literal, Optional, Sequence
+from typing import Any, Literal, Optional, Sequence, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -103,8 +103,8 @@ class FilterClause(BaseModel):
 
     column: str
     op: Operator
-    value: Any | None = None
-    values: list[Any] | None = None  # for `in` / `between`
+    value: Union[str, int, float, bool, None] = None
+    values: Optional[list[Union[str, int, float]]] = None  # for `in` / `between`
     fy_label: str | None = None      # for FY-typed columns: "FY26"
     fq_label: str | None = None      # for FQ-typed columns: "Q3" (paired with fy_label)
 
@@ -299,13 +299,15 @@ def compile_query_plan(
             group_by_parts.append(_check_ident(spec.name))
 
     else:  # list / rank
-        if not plan.select_columns:
+        # Strip wildcard "*" — treat it as "no specific columns" (select all).
+        cols_requested = [c for c in plan.select_columns if c != "*"]
+        if not cols_requested:
             # Default to all groupable + a few measure columns
             select_cols = [c.name for c in schema.columns if c.groupable or c.aggregatable]
             if not select_cols:
                 select_cols = [c.name for c in schema.columns[:8]]
         else:
-            select_cols = plan.select_columns
+            select_cols = cols_requested
         for col in select_cols:
             spec = _check_column(col, schema)
             select_parts.append(_check_ident(spec.name))
@@ -341,7 +343,9 @@ def compile_query_plan(
 
     # ── ORDER BY ──
     order_by_clause = ""
-    if plan.order_by:
+    # Skip ORDER BY for simple aggregates (no GROUP BY) — the result is a
+    # single row so ordering is meaningless and causes SQL errors.
+    if plan.order_by and not (plan.intent == "aggregate" and not group_by_parts):
         order_parts = []
         for o in plan.order_by:
             spec = schema.column(o.column)
@@ -358,13 +362,18 @@ def compile_query_plan(
     elif plan.intent == "rank" and plan.aggregate_column:
         spec = _check_column(plan.aggregate_column, schema, must_be={"aggregatable"})
         order_by_clause = f" ORDER BY {_check_ident(spec.name)} DESC"
-    elif schema.default_order_by:
+    elif plan.intent != "aggregate" and schema.default_order_by:
+        # Only apply default ordering for list/rank — not simple aggregates.
         spec = _check_column(schema.default_order_by, schema)
         order_by_clause = f" ORDER BY {_check_ident(spec.name)} DESC"
 
     # ── TOP (SQL Server) — preferred over LIMIT for compatibility ──
-    effective_limit = min(plan.limit or 50, hard_row_cap)
-    top_clause = f" TOP ({int(effective_limit)})"
+    # Skip TOP for simple aggregates (single-row result).
+    if plan.intent == "aggregate" and not group_by_parts:
+        top_clause = ""
+    else:
+        effective_limit = min(plan.limit or 50, hard_row_cap)
+        top_clause = f" TOP ({int(effective_limit)})"
 
     sql = f"SELECT{top_clause} {select_clause} FROM {table}{where_clause}{group_by_clause}{order_by_clause}"
 

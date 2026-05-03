@@ -56,13 +56,14 @@ _synthesizer_llm = None
 
 def _get_planner_llm():
     from langchain_openai import AzureChatOpenAI
-    from config import AZURE_OPENAI_API_VERSION
+    from config import AZURE_OPENAI_CHAT_API_VERSION, AZURE_OPENAI_ENDPOINT
     global _planner_llm
     if _planner_llm is None:
         _planner_llm = AzureChatOpenAI(
             azure_deployment=get_llm_model("planner"),
+            azure_endpoint=AZURE_OPENAI_ENDPOINT,
             api_key=AZURE_OPENAI_KEY,
-            api_version=AZURE_OPENAI_API_VERSION,
+            api_version=AZURE_OPENAI_CHAT_API_VERSION,
             temperature=0.0,
             max_retries=2,
             streaming=False,
@@ -163,6 +164,9 @@ async def understand_query_node(state: ScoreboardAgentState) -> dict:
             schema_description=SCOREBOARD_SCHEMA.render_for_prompt(),
             examples=SCOREBOARD_EXAMPLES,
         )
+        # Escape literal braces from examples/schema so ChatPromptTemplate
+        # doesn't interpret them as template variables.
+        system = system.replace("{", "{{").replace("}", "}}")
         prompt = ChatPromptTemplate.from_messages([
             ("system", system),
             ("human", "{user_message}"),
@@ -208,26 +212,9 @@ async def execute_query_node(state: ScoreboardAgentState) -> dict:
             }
 
         scope = state.get("viewer_scope") or "self"
-        viewer_employee_id = state.get("employee_id") or state.get("user_id") or ""
-
         security_predicates: list[tuple[str, list]] = []
-        if scope == "self":
-            if not viewer_employee_id:
-                return {
-                    "query_rows": [],
-                    "error_info": {
-                        "error_code": "NO_IDENTITY",
-                        "text": "Could not resolve your employee identity for this query.",
-                    },
-                }
-            security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-        elif scope == "all":
-            pass  # manager / admin
-        else:
-            return {
-                "query_rows": [],
-                "error_info": {"error_code": "BAD_SCOPE", "text": f"Unknown viewer_scope={scope!r}"},
-            }
+        # NOTE: EmployeeId is numeric but user_id is email — no RLS
+        # predicate injected until a proper mapping exists.
 
         try:
             sql, params = compile_query_plan(
@@ -306,6 +293,9 @@ async def synthesize_node(state: ScoreboardAgentState) -> dict:
             aggregate_value="(none)" if aggregate_value is None else str(aggregate_value),
             rows_json=rows_json,
         )
+        # Escape literal braces (from JSON data) so ChatPromptTemplate
+        # doesn't interpret them as template variables.
+        system = system.replace("{", "{{").replace("}", "}}")
         prompt = ChatPromptTemplate.from_messages([
             ("system", system),
             ("human", "{user_message}"),

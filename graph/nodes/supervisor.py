@@ -20,6 +20,7 @@ Disabled agents (env flag ``ENABLE_<NAME>_AGENT=false``) are skipped.
 
 import asyncio
 import logging
+import re
 from datetime import datetime, timedelta
 from typing import Any, Dict, Literal, Optional
 
@@ -57,6 +58,98 @@ logger = logging.getLogger(__name__)
 
 # Lock for thread-safe singleton initialisation under async concurrency
 _init_lock = asyncio.Lock()
+
+
+# ── Deterministic Pre-Router ──────────────────────────────────────────────
+# Keyword-based routing that fires BEFORE the LLM supervisor. This ensures
+# unambiguous queries with domain-specific terms are always routed correctly
+# regardless of LLM judgment. Only genuinely ambiguous queries fall through
+# to the LLM.
+
+# Scoreboard KPI terms (column names / abbreviations users would mention)
+_SCOREBOARD_KEYWORDS = re.compile(
+    r"\b("
+    r"GTER|ANSR|TER|NUI|"
+    r"global\s*margin|eng\s*margin|"
+    r"utilization|utilisation|"
+    r"weighted\s*pipeline|"
+    r"global\s*sales|"
+    r"billing|collection|"
+    r"backlog|"
+    r"revenue\s*days|"
+    r"plan\s*attainment|plan\s*achieved|"
+    r"scoreboard|scorecard|"
+    r"KPI|performance\s*metric"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# Expense-specific terms (transaction data, not policy)
+_EXPENSE_KEYWORDS = re.compile(
+    r"\b("
+    r"expense[s]?|reimbursement|"
+    r"expense\s*type|air\s*travel|hotel|meals?|"
+    r"vendor[s]?|receipt|"
+    r"approval\s*status|payment\s*status|"
+    r"cost\s*center|engagement\s*code|"
+    r"transaction\s*amount|reimbursement\s*amount|"
+    r"report\s*(?:id|name)|"
+    r"country\s*of\s*purchase|city\s*of\s*purchase"
+    r")\b",
+    re.IGNORECASE,
+)
+
+# LMS / Leave terms
+_LMS_KEYWORDS = re.compile(
+    r"\b("
+    r"leave\s*balance|leave\s*taken|"
+    r"annual\s*leave|sick\s*leave|"
+    r"casual\s*leave|maternity|paternity|"
+    r"leave\s*type|leave\s*status|"
+    r"apply\s*(?:for\s*)?leave|"
+    r"days?\s*(?:off|remaining)|"
+    r"PTO|time\s*off|vacation"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _deterministic_route(user_input: str, available_agents: list[str]) -> str | None:
+    """Return an agent name if keywords unambiguously match, else None.
+
+    Only routes when EXACTLY ONE agent matches. If multiple match (ambiguous)
+    or none match, returns None to let the LLM decide.
+    """
+    if not user_input:
+        return None
+
+    matches: list[tuple[str, int]] = []
+
+    if "scoreboard_agent" in available_agents and _SCOREBOARD_KEYWORDS.search(user_input):
+        matches.append(("scoreboard_agent", len(_SCOREBOARD_KEYWORDS.findall(user_input))))
+
+    if "expense_agent" in available_agents and _EXPENSE_KEYWORDS.search(user_input):
+        matches.append(("expense_agent", len(_EXPENSE_KEYWORDS.findall(user_input))))
+
+    if "lms_agent" in available_agents and _LMS_KEYWORDS.search(user_input):
+        matches.append(("lms_agent", len(_LMS_KEYWORDS.findall(user_input))))
+
+    if not matches:
+        return None
+
+    if len(matches) == 1:
+        return matches[0][0]
+
+    # Multiple agents matched — pick the one with more keyword hits.
+    # If tied, let the LLM decide.
+    matches.sort(key=lambda x: x[1], reverse=True)
+    if matches[0][1] > matches[1][1]:
+        return matches[0][0]
+
+    return None  # Ambiguous — let LLM decide
+
+
+# ──────────────────────────────────────────────────────────────────────────
 
 
 def _enabled_specs() -> list[AgentSpec]:
@@ -183,6 +276,31 @@ class SupervisorGraph:
             raw_messages, existing_summary
         )
 
+        # ── Deterministic pre-routing (keyword match) ──
+        user_input = state.get("user_input") or ""
+        if not user_input and raw_messages:
+            # Fall back to last human message content
+            for msg in reversed(raw_messages):
+                if hasattr(msg, "type") and msg.type == "human":
+                    user_input = msg.content or ""
+                    break
+                elif isinstance(msg, dict) and msg.get("role") == "human":
+                    user_input = msg.get("content", "")
+                    break
+
+        deterministic_target = _deterministic_route(user_input, self._members)
+        if deterministic_target:
+            logger.info(
+                "supervisor: deterministic pre-route → %s (query: %s)",
+                deterministic_target, user_input[:80],
+            )
+            return {
+                "messages": [AIMessage(content="")],
+                "next": deterministic_target,
+                "suggestive_actions": None,
+                "summary": updated_summary,
+            }
+
         # ── Inject citation context for multi-turn resolution ──
         citation_map = state.get("citation_map")
         if citation_map:
@@ -203,6 +321,8 @@ class SupervisorGraph:
         next_target = getattr(result, "next", AGENT_RESPOND)
         response_text = getattr(result, "response", None)
         suggestive = getattr(result, "suggestive_actions", None)
+
+        logger.info("supervisor: LLM routed → %s (query: %s)", next_target, user_input[:80])
 
         if next_target == AGENT_RESPOND and response_text:
             return {

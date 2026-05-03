@@ -75,7 +75,7 @@ async def get_role(user_id: str, *, default: Role = "user") -> RoleResolution:
     try:
         db = DataDB()
         row = await db.fetchone(
-            "SELECT TOP 1 Role FROM AgentUserRoles WHERE UserId = ?",
+            "SELECT TOP 1 Role FROM AgentUserRoles WHERE LOWER(UserId) = LOWER(?)",
             [user_id],
         )
         if row:

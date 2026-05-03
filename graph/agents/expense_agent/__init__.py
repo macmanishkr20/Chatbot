@@ -17,12 +17,17 @@ from graph.agents.expense_agent.graph import build_expense_subgraph
 
 
 _DESCRIPTION = (
-    "Answers structured questions about user / team expenses — totals, "
-    "filters, comparisons, rankings ('show me expenses in FY26', 'highest "
-    "expense this quarter', 'how many expenses under 100', 'travel "
-    "spending by month'). Route here ONLY for numeric / aggregate / filter "
-    "questions over expense data — narrative how-to questions about "
-    "expense policy go to rag_graph instead."
+    "Answers structured questions about expense transactions — totals, "
+    "filters, comparisons, rankings over the UserExpenses table. Covers: "
+    "expense amounts, reimbursement status, expense types (Air Travel, "
+    "Hotel, Meals, etc.), vendors, approval status, countries/cities of "
+    "purchase, report details, engagement codes. "
+    "Route here for: 'show me expenses in FY26', 'highest expense this "
+    "quarter', 'how many expenses under 100', 'travel spending by month', "
+    "'expenses in Bahrain'. "
+    "Do NOT route here for performance KPIs (ANSR, GTER, Utilization, "
+    "Margin, NUI, Billing, Collection, pipeline) — those go to "
+    "scoreboard_agent. Narrative policy questions go to rag_graph."
 )
 
 

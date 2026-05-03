@@ -87,85 +87,34 @@ _cancel_signals: dict[str, bool] = {}
 # with_structured_output(RouteResponse) which streams JSON fragments,
 # not user-facing prose. Supervisor's RESPOND content is delivered via
 # the "updates" mode instead (see stream_generator).
-#
-# `synthesize` is shared by:
-#   * rag_graph multi-function flow — internal; emits no LLM tokens.
-#   * expense / scoreboard agents   — narrates analytical results, does stream.
-# Adding it here is safe because the rag synthesize doesn't emit content
-# tokens; only the analytical synthesize does.
-#
-# `react_loop` is the LMS agent's tool-using turn — its final natural-
-# language reply streams back to the user.
-_STREAMABLE_NODES: frozenset[str] = frozenset({
-    "generate", "search", "synthesize", "react_loop",
-})
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
+# Each entry: node_name → (display_name, message, group, icon)
+# Groups: preparation, understanding, retrieval, quality, response
 
-_NODE_THOUGHT: dict[str, dict[str, str]] = {
-    "Supervisor": {
-        "Intent": "Aligning intent…"
-    },
-    "load_memory": {
-        "Recall": "Reconnecting context…"
-    },
-    "function_gate": {
-        "Routing": "Confirming MENA function…"
-    },
-    "rewrite": {
-        "Focus": "Clarifying focus…"
-    },
-    "embed": {
-        "Meaning": "Interpreting meaning…"
-    },
-    "search": {
-        "Relevance": "Finding relevance…"
-    },
-    "multi_function_search": {
-        "Deep Search": "Searching across multiple functions…"
-    },
-    "planner": {
-        "Planning": "Analyzing query complexity…"
-    },
-    "parallel_search": {
-        "Searching": "Searching multiple functions in parallel…"
-    },
-    "synthesize": {
-        "Combining": "Merging results…"
-    },
-    "grader": {
-        "Quality": "Checking relevance…"
-    },
-    "generate": {
-        "Response": "Forming response…"
-    },
-    "persist": {
-        "Flow": "Maintaining continuity…"
-    },
-    "save_memory": {
-        "Memory": "Storing insight…"
-    },
-    # ── Expense / Scoreboard analytical agents ──
-    "resolve_role": {
-        "Access": "Checking access permissions…"
-    },
-    "understand_query": {
-        "Reading": "Reading the question…"
-    },
-    "execute_query": {
-        "Querying": "Querying the data…"
-    },
-    "privacy_gate": {
-        "Privacy": "Verifying permissions…"
-    },
-    # ── LMS agent ──
-    "enrich_context": {
-        "Context": "Loading your profile…"
-    },
-    "react_loop": {
-        "Working": "Working through it…"
-    }
+_NODE_THOUGHT: dict[str, tuple[str, str, str, str]] = {
+    "Supervisor":           ("Intent",     "Aligning intent…",                    "preparation",   "track_changes"),
+    "load_memory":          ("Recall",     "Reconnecting context…",               "preparation",   "history"),
+    "function_gate":        ("Routing",    "Confirming MENA function…",           "preparation",   "alt_route"),
+    "rewrite":              ("Focus",      "Clarifying focus…",                   "understanding", "filter_alt"),
+    "embed":                ("Meaning",    "Interpreting meaning…",               "understanding", "psychology"),
+    "search":               ("Relevance",  "Finding relevance…",                  "retrieval",     "search"),
+    "multi_function_search":("Deep Search","Searching across multiple functions…","retrieval",     "travel_explore"),
+    "planner":              ("Planning",   "Analyzing query complexity…",         "understanding", "account_tree"),
+    "parallel_search":      ("Searching",  "Searching multiple functions in parallel…", "retrieval", "manage_search"),
+    "synthesize":           ("Combining",  "Merging results…",                    "response",      "merge"),
+    "grader":               ("Quality",    "Checking relevance…",                 "quality",       "verified"),
+    "generate":             ("Response",   "Forming response…",                   "response",      "smart_toy"),
+    "persist":              ("Flow",       "Maintaining continuity…",             "response",      "save"),
+    "save_memory":          ("Memory",     "Storing insight…",                    "response",      "memory"),
+    # ── Expense / Scoreboard / LMS agent nodes ──
+    "resolve_role":         ("Auth",       "Verifying permissions…",              "preparation",   "shield"),
+    "privacy_gate":         ("Privacy",    "Checking access scope…",              "preparation",   "lock"),
+    "understand_query":     ("Planning",   "Analyzing query intent…",             "understanding", "lightbulb"),
+    "execute_query":        ("Executing",  "Running data query…",                 "retrieval",     "database"),
+    "synthesize_node":      ("Narrating",  "Forming response…",                  "response",      "smart_toy"),
 }
 
 
@@ -270,20 +219,12 @@ def _ensure_base_messages(messages: list) -> list[BaseMessage]:
 
 async def _build_initial_state(query: UserChatQuery) -> dict:
     """Convert a UserChatQuery into the initial RAGState dict."""
-    # Resolve the analytical-agent identity. When the frontend sends an
-    # explicit ``employee_id`` (e.g. resolved GPN / Workday id) we honour
-    # it; otherwise the agents fall back to ``user_id`` (typically the
-    # auth email) for the EmployeeId lookup in UserExpenses /
-    # UserScoreboard / AgentUserRoles.
-    employee_id = (query.employee_id or "").strip() or query.user_id
-
     return {
         "messages": [HumanMessage(content=query.user_input)],
         "input_type": query.input_type.value,
         "user_input": query.user_input,
         "is_free_form": query.is_free_form,
         "user_id": query.user_id,
-        "employee_id": employee_id,
         "chat_id": query.chat_id,
         "chat_session_id": query.chat_session_id,
         "message_id": query.message_id,
@@ -408,11 +349,11 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     seen_nodes.add(node)
                     thought_entry = _NODE_THOUGHT.get(node)
                     if thought_entry:
-                        display_name, message = next(iter(thought_entry.items()))
+                        display_name, message, group, icon = thought_entry
                     else:
-                        display_name, message = node, f"Processing {node}..."
-                    logger.debug("thought (updates) node=%s", node)
-                    yield sse_format({"type": "thought", "node": display_name, "message": message})
+                        display_name, message, group, icon = node, f"Processing {node}...", "response", "settings"
+                    logger.debug("thought (updates) node=%s group=%s", node, group)
+                    yield sse_format({"type": "thought", "node": display_name, "message": message, "group": group, "icon": icon})
 
                     # ── Supervisor RESPOND prose delivery ──
                     # Supervisor uses with_structured_output so its LLM tokens
@@ -442,10 +383,10 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 seen_nodes.add(node)
                 thought_entry = _NODE_THOUGHT.get(node)
                 if thought_entry:
-                    display_name, message = next(iter(thought_entry.items()))
+                    display_name, message, group, icon = thought_entry
                 else:
-                    display_name, message = node, f"Processing {node}..."
-                yield sse_format({"type": "thought", "node": display_name, "message": message})
+                    display_name, message, group, icon = node, f"Processing {node}...", "response", "settings"
+                yield sse_format({"type": "thought", "node": display_name, "message": message, "group": group, "icon": icon})
 
             if chunk_msg.content and node in _STREAMABLE_NODES:
                 yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
