@@ -65,111 +65,18 @@ class DataDB:
         return pyodbc.connect(self._connection_string)
 
     async def ensure(self) -> None:
-        """Create / migrate analytical tables idempotently."""
+        """Create the loader audit tables idempotently.
+
+        The user-facing fact tables (``UserExpenses``, ``UserScoreboard``,
+        ``AgentUserRoles``) are created via ``sql/create_agent_tables.sql``
+        — owned by DBAs, not by this code. We only own the ETL audit
+        trails so loaders can run end-to-end without manual setup.
+        """
 
         def _run() -> None:
             conn = self._get_connection()
             try:
                 cur = conn.cursor()
-
-                # ── ExpenseCategories ──
-                cur.execute("""
-                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ExpenseCategories' AND xtype='U')
-                    CREATE TABLE ExpenseCategories (
-                        CategoryId      INT IDENTITY(1,1) PRIMARY KEY,
-                        Name            NVARCHAR(255) NOT NULL UNIQUE,
-                        ParentGroup     NVARCHAR(128) NULL,
-                        TaxonomyPath    NVARCHAR(512) NULL,
-                        IsActive        BIT NOT NULL DEFAULT 1,
-                        CreatedAt       DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
-                        ModifiedAt      DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
-                    )
-                """)
-
-                # ── Expenses (the analytical fact table) ──
-                cur.execute("""
-                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Expenses' AND xtype='U')
-                    CREATE TABLE Expenses (
-                        ExpenseId         BIGINT IDENTITY(1,1) PRIMARY KEY,
-                        EmployeeId        NVARCHAR(64)  NOT NULL,
-                        EmployeeName      NVARCHAR(255) NULL,
-                        ManagerId         NVARCHAR(64)  NULL,
-                        Department        NVARCHAR(128) NULL,
-                        Location          NVARCHAR(128) NULL,
-                        ExpenseDate       DATE          NOT NULL,
-                        FiscalYear        NVARCHAR(8)   NOT NULL,
-                        FiscalQuarter     NVARCHAR(8)   NOT NULL,
-                        CategoryId        INT           NULL REFERENCES ExpenseCategories(CategoryId),
-                        CategoryName      NVARCHAR(255) NULL,
-                        Vendor            NVARCHAR(255) NULL,
-                        Description       NVARCHAR(1024) NULL,
-                        Amount            DECIMAL(18,2) NOT NULL,
-                        Currency          CHAR(3)       NOT NULL DEFAULT 'USD',
-                        AmountUsd         DECIMAL(18,2) NOT NULL,
-                        Status            NVARCHAR(32)  NOT NULL DEFAULT 'submitted',
-                        ReceiptUrl        NVARCHAR(512) NULL,
-                        SourceFile        NVARCHAR(255) NULL,
-                        SourceRow         INT           NULL,
-                        DedupeKey         NVARCHAR(256) NOT NULL,
-                        ImportedAt        DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
-                        IsDeleted         BIT           NOT NULL DEFAULT 0
-                    )
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Expenses_DedupeKey' AND object_id=OBJECT_ID('Expenses'))
-                    CREATE UNIQUE INDEX UX_Expenses_DedupeKey ON Expenses(DedupeKey)
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Expenses_Employee_FY' AND object_id=OBJECT_ID('Expenses'))
-                    CREATE INDEX IX_Expenses_Employee_FY ON Expenses(EmployeeId, FiscalYear)
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Expenses_Date' AND object_id=OBJECT_ID('Expenses'))
-                    CREATE INDEX IX_Expenses_Date ON Expenses(ExpenseDate)
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Expenses_Category' AND object_id=OBJECT_ID('Expenses'))
-                    CREATE INDEX IX_Expenses_Category ON Expenses(CategoryId)
-                """)
-
-                # ── Scoreboards (Phase 3) ──
-                cur.execute("""
-                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Scoreboards' AND xtype='U')
-                    CREATE TABLE Scoreboards (
-                        ScoreboardId      BIGINT IDENTITY(1,1) PRIMARY KEY,
-                        EmployeeId        NVARCHAR(64)  NOT NULL,
-                        EmployeeName      NVARCHAR(255) NULL,
-                        ManagerId         NVARCHAR(64)  NULL,
-                        Department        NVARCHAR(128) NULL,
-                        Location          NVARCHAR(128) NULL,
-                        FiscalYear        NVARCHAR(8)   NOT NULL,
-                        FiscalQuarter     NVARCHAR(8)   NULL,
-                        MetricName        NVARCHAR(128) NOT NULL,
-                        Score             DECIMAL(8,2)  NOT NULL,
-                        MaxScore          DECIMAL(8,2)  NULL,
-                        RankInGroup       INT           NULL,
-                        Notes             NVARCHAR(512) NULL,
-                        SourceFile        NVARCHAR(255) NULL,
-                        SourceRow         INT           NULL,
-                        DedupeKey         NVARCHAR(256) NOT NULL,
-                        ImportedAt        DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
-                        IsDeleted         BIT           NOT NULL DEFAULT 0
-                    )
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='UX_Scoreboards_DedupeKey' AND object_id=OBJECT_ID('Scoreboards'))
-                    CREATE UNIQUE INDEX UX_Scoreboards_DedupeKey ON Scoreboards(DedupeKey)
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Scoreboards_Employee_FY' AND object_id=OBJECT_ID('Scoreboards'))
-                    CREATE INDEX IX_Scoreboards_Employee_FY ON Scoreboards(EmployeeId, FiscalYear)
-                """)
-                cur.execute("""
-                    IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name='IX_Scoreboards_Metric' AND object_id=OBJECT_ID('Scoreboards'))
-                    CREATE INDEX IX_Scoreboards_Metric ON Scoreboards(MetricName)
-                """)
-
-                # ── Audit trails ──
                 cur.execute("""
                     IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ExpenseImportRuns' AND xtype='U')
                     CREATE TABLE ExpenseImportRuns (
@@ -200,12 +107,38 @@ class DataDB:
                         TriggeredBy  NVARCHAR(256) NULL
                     )
                 """)
-
                 conn.commit()
             finally:
                 conn.close()
 
         await asyncio.to_thread(_run)
+
+    async def verify_user_tables(self) -> None:
+        """Raise if the user-facing tables (created via the DDL script)
+        are missing. Called by the agents during cold-start to fail fast
+        with a clear error rather than letting a query crash later."""
+
+        def _run() -> list[str]:
+            conn = self._get_connection()
+            try:
+                cur = conn.cursor()
+                cur.execute("""
+                    SELECT name
+                    FROM sysobjects
+                    WHERE xtype='U' AND name IN ('UserExpenses','UserScoreboard','AgentUserRoles')
+                """)
+                return [r[0] for r in cur.fetchall()]
+            finally:
+                conn.close()
+
+        present = set(await asyncio.to_thread(_run))
+        expected = {"UserExpenses", "UserScoreboard", "AgentUserRoles"}
+        missing = expected - present
+        if missing:
+            raise DataDBError(
+                f"Required tables are missing: {sorted(missing)}. "
+                "Apply sql/create_agent_tables.sql against the database first.",
+            )
 
     # ── Read API ──
 

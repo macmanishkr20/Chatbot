@@ -1,6 +1,9 @@
 """
-Per-agent state extension for Scoreboard. Same shape as ExpenseAgentState
-because both share the predicate-tree pipeline.
+Per-agent state extension for the Scoreboard agent.
+
+Same shape as ExpenseAgentState because both share the predicate-tree
+pipeline. Authorisation comes from ``services.role_lookup`` reading
+``AgentUserRoles``.
 """
 from __future__ import annotations
 
@@ -11,10 +14,8 @@ from graph.state import RAGState
 
 class ScoreboardAgentState(RAGState, total=False):
     employee_id: str
-    manager_id: Optional[str]
-    viewer_scope: Literal["self", "team", "all"]
-    is_admin: bool
-    is_manager: bool
+    viewer_role: Literal["user", "manager", "admin"]
+    viewer_scope: Literal["self", "all"]
 
     query_plan: dict | None
     plan_explanation: str | None

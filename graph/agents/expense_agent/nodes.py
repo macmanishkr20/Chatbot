@@ -2,16 +2,17 @@
 Expense agent nodes — share the same shape as Scoreboard, both built on
 the predicate-tree compiler.
 
-  understand_query  → LLM turns the question into a typed QueryPlan
-  execute_query     → deterministic compile + DataDB.fetchall
-  synthesize        → LLM narrates the rows
-  persist           → reuses persist_node for chat-history recording
+  resolve_role     → AgentUserRoles → (role, scope), cached per session.
+  understand_query → LLM turns the question into a typed QueryPlan.
+  execute_query    → deterministic compile + DataDB.fetchall + RLS.
+  synthesize       → LLM narrates the rows.
+  persist          → reuses persist_node for chat-history recording.
 """
 from __future__ import annotations
 
 import json
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -32,6 +33,7 @@ from prompts.predicate_planner import (
 from services.data_db import DataDB
 from services.data_schemas import EXPENSE_SCHEMA
 from services.openai_client import get_llm_model
+from services.role_lookup import get_role
 from services.telemetry import get_tracer_span
 from services.text_to_predicate import (
     CompileError,
@@ -97,6 +99,19 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+# ── Node 0: resolve_role (RLS) ──────────────────────────────────────────
+
+async def resolve_role_node(state: ExpenseAgentState) -> dict:
+    """Look up the viewer's role from AgentUserRoles and stamp the
+    derived scope into state. Cached in-process per user_id."""
+    user_id = state.get("user_id") or state.get("employee_id") or ""
+    resolution = await get_role(user_id)
+    return {
+        "viewer_role": resolution.role,
+        "viewer_scope": resolution.scope,
+    }
+
+
 # ── Node 1: understand_query ────────────────────────────────────────────
 
 async def understand_query_node(state: ExpenseAgentState) -> dict:
@@ -144,7 +159,8 @@ async def understand_query_node(state: ExpenseAgentState) -> dict:
 # ── Node 2: execute_query ───────────────────────────────────────────────
 
 async def execute_query_node(state: ExpenseAgentState) -> dict:
-    """Compile the QueryPlan and run it, with row-level security applied."""
+    """Compile the QueryPlan and run it. RLS predicates are injected
+    based on ``viewer_scope``."""
     with get_tracer_span("expense.execute_query"):
         plan_dict = state.get("query_plan")
         if not plan_dict:
@@ -160,12 +176,15 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
             }
 
         # ── Row-level security ─────────────────────────────────────────
-        # Default: caller sees only their own rows. Managers see their
-        # team. The supervisor agent stamps `viewer_scope` into state
-        # ("self" | "team" | "all") based on the auth user's role.
+        # `viewer_scope` is set by `resolve_role_node` from AgentUserRoles.
+        # 'self' (default for role='user') → restrict to EmployeeId.
+        # 'all'  (manager / admin)         → no row filter — they may
+        #                                     see anyone, since the
+        #                                     schema does not carry a
+        #                                     ManagerId column we could
+        #                                     filter on.
         scope = state.get("viewer_scope") or "self"
         viewer_employee_id = state.get("employee_id") or state.get("user_id") or ""
-        viewer_manager_id = state.get("manager_id") or viewer_employee_id
 
         security_predicates: list[tuple[str, list]] = []
         if scope == "self":
@@ -178,13 +197,8 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
                     },
                 }
             security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-        elif scope == "team":
-            if not viewer_manager_id:
-                security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-            else:
-                security_predicates.append(("ManagerId = ?", [viewer_manager_id]))
         elif scope == "all":
-            pass  # admin / HR — no row filter
+            pass  # manager / admin
         else:
             return {
                 "query_rows": [],
@@ -223,8 +237,6 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
 
         aggregate_value: Any | None = None
         if plan.intent == "aggregate" and rows and "Value" in rows[0]:
-            # When grouped, "Value" appears per-row; only set the scalar
-            # when the result is a single un-grouped number.
             if not plan.group_by and len(rows) == 1:
                 aggregate_value = rows[0]["Value"]
 

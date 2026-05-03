@@ -1,9 +1,13 @@
 """
-Per-agent state extension. Composes with the shared ``RAGState`` so
-existing nodes (persist_node, save_memory_node) keep working.
+Per-agent state extension for the Expense agent.
 
-Keeping a per-agent state TypedDict — instead of one fat global state —
-limits the blast radius of new fields and makes the agent's I/O explicit.
+Composes with the shared ``RAGState`` so existing nodes
+(persist_node, save_memory_node) keep working.
+
+Authorisation is sourced from ``services.role_lookup`` which reads
+``AgentUserRoles``. The agent stamps the resolved role + scope into
+state once (in ``understand_query_node``) so all downstream nodes see
+the same value.
 """
 from __future__ import annotations
 
@@ -15,8 +19,8 @@ from graph.state import RAGState
 class ExpenseAgentState(RAGState, total=False):
     # ── Auth / row-level-security context ──
     employee_id: str
-    manager_id: Optional[str]
-    viewer_scope: Literal["self", "team", "all"]
+    viewer_role: Literal["user", "manager", "admin"]
+    viewer_scope: Literal["self", "all"]
 
     # ── Planner output ──
     query_plan: dict | None

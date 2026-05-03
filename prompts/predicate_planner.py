@@ -2,8 +2,9 @@
 Predicate-planner prompt — converts a user's natural-language analytical
 question into a typed ``QueryPlan`` (see services.text_to_predicate).
 
-Used by both Expense and Scoreboard agents. The schema description and
-a handful of canonical examples are spliced in by the caller.
+Used by both Expense and Scoreboard agents. The schema description (and
+KPI semantics for scoreboards) plus a handful of canonical examples
+are spliced in by the caller.
 """
 
 PREDICATE_PLANNER_SYSTEM_PROMPT = """\
@@ -35,20 +36,26 @@ Resolve all relative dates ("this month", "last quarter", "this year",
     * "list"      — return matching rows.
     * "aggregate" — return a single SUM/AVG/MIN/MAX/COUNT value (optionally grouped).
     * "rank"      — return top-N rows ordered by a measure column.
-- For fiscal-year filters, use a single ``filters`` entry with op="between",
-  set ``column`` to the date column (e.g. ``ExpenseDate``), and set
-  ``fy_label="FY26"`` (and optionally ``fq_label="Q3"``). Do NOT compute
-  date ranges yourself — the compiler resolves the range.
-- For "less than X", use op="lt"; for "more than X", op="gt"; for "between",
+- For fiscal-year filters on a DATE column (e.g. ``TransactionDate``),
+  emit a single filter with op="between", set ``column`` to the date
+  column, and set ``fy_label="FY26"`` (and optionally ``fq_label="Q3"``).
+  Do NOT compute date ranges yourself — the compiler resolves the range.
+- For fiscal-period filters on a STRING column called ``Period`` (used
+  by the scoreboard table), use op="like" with value="FY26%" to match
+  any period within FY26, or op="eq" with value="FY26 P9" for an
+  exact period match. NEVER use ``fy_label`` on a string column.
+- "less than X" → op="lt"; "more than X" → op="gt"; "between" →
   op="between" with values=[lo, hi].
 - "highest/largest" → intent="rank", aggregate_column=<measure>, limit=1
   (or limit=N if the user asked for top-N).
 - "how many" → intent="aggregate", aggregate="count".
 - "total/sum" → intent="aggregate", aggregate="sum", aggregate_column=<measure>.
 - "average" → intent="aggregate", aggregate="avg".
-- Always pick the most user-meaningful measure — for expenses, prefer
-  ``AmountUsd`` so totals are comparable across currencies. For scoreboards,
-  use ``Score``.
+- For currency-aware aggregates on UserExpenses, prefer
+  ``ReimbursementAmount`` (the company-currency reimbursement) and
+  acknowledge the currency mix in the answer, since rows can be in
+  different currencies. Use ``TransactionAmount`` only when the user
+  explicitly asks about original transaction amounts.
 - ``limit`` defaults to 50 for ``list``; use 1 for "the highest/largest"
   and N for "top N".
 - Filter values must be JSON-safe primitives (string / number / null / array).
@@ -78,50 +85,78 @@ def planner_user_template(user_query: str) -> str:
     )
 
 
-# Canonical few-shots for the expense agent. The text is short on purpose —
-# the structured-output schema does most of the heavy lifting.
+# Canonical few-shots for the expense agent over UserExpenses.
 EXPENSE_EXAMPLES = """\
 Q: "Show me my expenses in FY26"
 Plan: intent=list,
-      filters=[{column=ExpenseDate, op=between, fy_label=FY26}],
-      order_by=[{column=ExpenseDate, direction=desc}], limit=50
+      filters=[{column=TransactionDate, op=between, fy_label=FY26}],
+      order_by=[{column=TransactionDate, direction=desc}], limit=50
 
 Q: "Highest expense in FY26"
-Plan: intent=rank, aggregate_column=AmountUsd, limit=1,
-      filters=[{column=ExpenseDate, op=between, fy_label=FY26}]
+Plan: intent=rank, aggregate_column=ReimbursementAmount, limit=1,
+      filters=[{column=TransactionDate, op=between, fy_label=FY26}]
 
 Q: "How many expenses are less than 100?"
 Plan: intent=aggregate, aggregate=count,
-      filters=[{column=AmountUsd, op=lt, value=100}]
+      filters=[{column=ReimbursementAmount, op=lt, value=100}]
 
-Q: "Total travel spend last quarter"
-Plan: intent=aggregate, aggregate=sum, aggregate_column=AmountUsd,
-      filters=[{column=CategoryName, op=eq, value=Travel},
-               {column=ExpenseDate, op=between, fy_label=<resolved FY>, fq_label=<resolved FQ>}]
+Q: "Total air-travel spend last quarter"
+Plan: intent=aggregate, aggregate=sum, aggregate_column=ReimbursementAmount,
+      filters=[{column=ExpenseType, op=eq, value=Air Travel},
+               {column=TransactionDate, op=between, fy_label=<resolved FY>, fq_label=<resolved FQ>}]
 
 Q: "Top 5 vendors by spend in FY26"
-Plan: intent=aggregate, aggregate=sum, aggregate_column=AmountUsd,
+Plan: intent=aggregate, aggregate=sum, aggregate_column=ReimbursementAmount,
       group_by=[Vendor], order_by=[{column=Value, direction=desc}], limit=5,
-      filters=[{column=ExpenseDate, op=between, fy_label=FY26}]
+      filters=[{column=TransactionDate, op=between, fy_label=FY26}]
+
+Q: "Pending approval reports for me"
+Plan: intent=list,
+      filters=[{column=ApprovalStatus, op=eq, value=Pending}],
+      order_by=[{column=TransactionDate, direction=desc}], limit=50
+
+Q: "Spend by city of purchase in Saudi Arabia FY26"
+Plan: intent=aggregate, aggregate=sum, aggregate_column=ReimbursementAmount,
+      group_by=[CityOfPurchase],
+      filters=[{column=CountryOfPurchase, op=eq, value=Saudi Arabia},
+               {column=TransactionDate, op=between, fy_label=FY26}],
+      order_by=[{column=Value, direction=desc}], limit=50
 """
 
 
+# Canonical few-shots for the scoreboard agent over UserScoreboard.
+# Note: Period is a STRING column ("FY26 P9"). FY filters use op=like.
 SCOREBOARD_EXAMPLES = """\
 Q: "Show me the scoreboard in FY26"
 Plan: intent=list,
-      filters=[{column=FiscalYear, op=eq, fy_label=FY26}],
-      order_by=[{column=Score, direction=desc}], limit=50
+      filters=[{column=Period, op=like, value=FY26%}],
+      order_by=[{column=ReportDate, direction=desc}], limit=50
 
-Q: "Highest scoreboard in FY26"
-Plan: intent=rank, aggregate_column=Score, limit=1,
-      filters=[{column=FiscalYear, op=eq, fy_label=FY26}]
+Q: "Highest GTER in FY26"
+Plan: intent=rank, aggregate_column=GTER, limit=1,
+      filters=[{column=Period, op=like, value=FY26%}]
 
-Q: "Which employee has the highest scoreboard?"
-Plan: intent=rank, aggregate_column=Score, limit=1,
-      select_columns=[EmployeeName, EmployeeId, Score, FiscalYear, MetricName]
+Q: "Which employee has the highest GTER plan attainment in FY26 P9?"
+Plan: intent=rank, aggregate_column=GTERPlanAchievedPct, limit=1,
+      select_columns=[EmployeeName, EmployeeId, GTERPlanAchievedPct, Period],
+      filters=[{column=Period, op=eq, value=FY26 P9}]
 
-Q: "Average CSAT for my team in Q3"
-Plan: intent=aggregate, aggregate=avg, aggregate_column=Score,
-      filters=[{column=MetricName, op=eq, value=CSAT},
-               {column=FiscalQuarter, op=eq, fq_label=Q3}]
+Q: "Top 5 employees by ANSR in FY26"
+Plan: intent=aggregate, aggregate=sum, aggregate_column=ANSR,
+      group_by=[EmployeeName, EmployeeId],
+      order_by=[{column=Value, direction=desc}], limit=5,
+      filters=[{column=Period, op=like, value=FY26%}]
+
+Q: "Average utilization for my service line in FY26 P9"
+Plan: intent=aggregate, aggregate=avg, aggregate_column=UtilizationPct,
+      filters=[{column=Period, op=eq, value=FY26 P9}]
+
+Q: "Who has the most NUI over 365 days?"
+Plan: intent=rank, aggregate_column=AgedNUIAbove365Days, limit=1,
+      select_columns=[EmployeeName, EmployeeId, AgedNUIAbove365Days, Period]
+
+Q: "Compare my GlobalMargin% across the last 3 periods"
+Plan: intent=list,
+      select_columns=[Period, GlobalMargin, GlobalMarginPct, ANSR],
+      order_by=[{column=ReportDate, direction=desc}], limit=3
 """

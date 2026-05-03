@@ -1,13 +1,15 @@
 """
 Scoreboard agent nodes — predicate-tree pipeline shared with Expense
-agent, plus a privacy gate.
+agent.
 
-  privacy_gate     → reject queries that ask for OTHER employees' scores
-                     when the viewer doesn't have manager / admin scope.
-  understand_query → LLM emits typed QueryPlan
-  execute_query    → compile + RLS + DataDB.fetchall
-  synthesize       → narrate the result
-  persist          → chat-history record
+  resolve_role     → AgentUserRoles → (role, scope), cached per session.
+  privacy_gate     → reject "which employee" / "everyone" queries when
+                     the viewer is self-scoped — cheaper than letting the
+                     LLM plan something the executor will block.
+  understand_query → LLM emits typed QueryPlan.
+  execute_query    → compile + RLS + DataDB.fetchall.
+  synthesize       → narrate the result.
+  persist          → chat-history record.
 """
 from __future__ import annotations
 
@@ -34,6 +36,7 @@ from prompts.predicate_planner import (
 from services.data_db import DataDB
 from services.data_schemas import SCOREBOARD_SCHEMA
 from services.openai_client import get_llm_model
+from services.role_lookup import get_role
 from services.telemetry import get_tracer_span
 from services.text_to_predicate import (
     CompileError,
@@ -95,6 +98,17 @@ def _jsonable(value: Any) -> Any:
     return value
 
 
+# ── resolve_role ────────────────────────────────────────────────────────
+
+async def resolve_role_node(state: ScoreboardAgentState) -> dict:
+    user_id = state.get("user_id") or state.get("employee_id") or ""
+    resolution = await get_role(user_id)
+    return {
+        "viewer_role": resolution.role,
+        "viewer_scope": resolution.scope,
+    }
+
+
 # ── Privacy gate ────────────────────────────────────────────────────────
 
 _BLOCK_TEMPLATE = (
@@ -105,36 +119,16 @@ _BLOCK_TEMPLATE = (
 )
 
 
-def _resolve_scope(state: ScoreboardAgentState) -> str:
-    """Decide row-level visibility based on the auth user's role.
-
-    Priority:
-      * is_admin / HR → all
-      * is_manager     → team
-      * default        → self
-    """
-    if state.get("is_admin"):
-        return "all"
-    if state.get("is_manager"):
-        return "team"
-    return "self"
-
-
 async def privacy_gate_node(state: ScoreboardAgentState) -> dict:
-    """Pre-flight: detect queries that exceed the viewer's scope.
-
-    Heuristic: if the user mentions another employee by name / id and
-    the resolved scope is "self", reject before we even plan.
+    """Pre-flight: short-circuit queries that exceed the viewer's scope.
 
     The execute step also enforces RLS at SQL level — this node just
-    short-circuits early so the LLM doesn't spend tokens on an
-    impossible query.
+    saves the LLM call when the query is obviously cross-employee and
+    the viewer is self-scoped.
     """
     user_input = (state.get("user_input") or "").lower()
-    scope = _resolve_scope(state)
+    scope = state.get("viewer_scope") or "self"
 
-    # Cheap signal: ranking questions that ask "which employee" at "self"
-    # scope can never return a non-self answer for the viewer.
     suspicious_phrases = [
         "which employee", "who has the highest", "who has the lowest",
         "top employee", "best employee", "everyone", "all employees",
@@ -143,18 +137,14 @@ async def privacy_gate_node(state: ScoreboardAgentState) -> dict:
     triggered = any(p in user_input for p in suspicious_phrases)
 
     if scope == "self" and triggered:
-        return {
-            "viewer_scope": scope,
-            "privacy_blocked_reason": _BLOCK_TEMPLATE,
-        }
-
-    return {"viewer_scope": scope}
+        return {"privacy_blocked_reason": _BLOCK_TEMPLATE}
+    return {}
 
 
 # ── understand_query ────────────────────────────────────────────────────
 
 async def understand_query_node(state: ScoreboardAgentState) -> dict:
-    """LLM → QueryPlan. Skipped if privacy gate already blocked."""
+    """LLM → QueryPlan. Skipped if the privacy gate already blocked."""
     if state.get("privacy_blocked_reason"):
         return {}
 
@@ -219,7 +209,6 @@ async def execute_query_node(state: ScoreboardAgentState) -> dict:
 
         scope = state.get("viewer_scope") or "self"
         viewer_employee_id = state.get("employee_id") or state.get("user_id") or ""
-        viewer_manager_id = state.get("manager_id") or viewer_employee_id
 
         security_predicates: list[tuple[str, list]] = []
         if scope == "self":
@@ -232,13 +221,8 @@ async def execute_query_node(state: ScoreboardAgentState) -> dict:
                     },
                 }
             security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-        elif scope == "team":
-            if not viewer_manager_id:
-                security_predicates.append(("EmployeeId = ?", [viewer_employee_id]))
-            else:
-                security_predicates.append(("ManagerId = ?", [viewer_manager_id]))
         elif scope == "all":
-            pass
+            pass  # manager / admin
         else:
             return {
                 "query_rows": [],

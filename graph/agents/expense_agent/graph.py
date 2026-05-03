@@ -1,11 +1,12 @@
 """
-Expense agent sub-graph — analytical Q&A over the Expenses fact table.
+Expense agent sub-graph — analytical Q&A over the UserExpenses fact table.
 
 Pipeline:
-  understand_query (LLM → typed QueryPlan)
-    → execute_query (deterministic compile + DB.fetchall + RLS)
-    → synthesize    (LLM narrates rows; emits AIMessage)
-    → persist       (chat-history record via existing persist_node)
+  resolve_role     (AgentUserRoles → role + scope)
+    → understand_query (LLM → typed QueryPlan)
+    → execute_query    (deterministic compile + DB.fetchall + RLS)
+    → synthesize       (LLM narrates rows; emits AIMessage)
+    → persist          (chat-history record via existing persist_node)
     → save_memory
     → END
 
@@ -18,6 +19,7 @@ from langgraph.graph import END, START, StateGraph
 
 from graph.agents.expense_agent.nodes import (
     execute_query_node,
+    resolve_role_node,
     synthesize_node,
     understand_query_node,
 )
@@ -30,13 +32,15 @@ def build_expense_subgraph():
     """Compile the expense agent sub-graph."""
     g = StateGraph(ExpenseAgentState)
 
+    g.add_node("resolve_role", resolve_role_node)
     g.add_node("understand_query", understand_query_node)
     g.add_node("execute_query", execute_query_node)
     g.add_node("synthesize", synthesize_node)
     g.add_node("persist", persist_node)
     g.add_node("save_memory", save_memory_node)
 
-    g.add_edge(START, "understand_query")
+    g.add_edge(START, "resolve_role")
+    g.add_edge("resolve_role", "understand_query")
     g.add_edge("understand_query", "execute_query")
     g.add_edge("execute_query", "synthesize")
     g.add_edge("synthesize", "persist")
