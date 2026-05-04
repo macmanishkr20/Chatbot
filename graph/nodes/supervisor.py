@@ -99,6 +99,19 @@ _EXPENSE_KEYWORDS = re.compile(
     re.IGNORECASE,
 )
 
+# Data-intent — query phrasing that indicates the user actually wants
+# numeric/aggregate/listing data rather than a casual mention. Combined
+# with a domain-keyword match for expense + scoreboard pre-routing so a
+# bare "I had a meal yesterday" doesn't latch onto the expense agent.
+_DATA_INTENT_RE = re.compile(
+    r"\b(how much|how many|total|sum|average|avg|max|min|top \d+|"
+    r"highest|lowest|largest|smallest|show me|list|count|spend|spent|"
+    r"FY\d{2}|Q[1-4]|last (month|quarter|year)|this (month|quarter|year)|"
+    r"YTD|year to date|\d+(\.\d+)?)\b",
+    re.IGNORECASE,
+)
+
+
 # LMS / Leave terms
 _LMS_KEYWORDS = re.compile(
     r"\b("
@@ -125,12 +138,24 @@ def _deterministic_route(user_input: str, available_agents: list[str]) -> str | 
 
     matches: list[tuple[str, int]] = []
 
-    if "scoreboard_agent" in available_agents and _SCOREBOARD_KEYWORDS.search(user_input):
+    has_data_intent = bool(_DATA_INTENT_RE.search(user_input))
+
+    if (
+        "scoreboard_agent" in available_agents
+        and _SCOREBOARD_KEYWORDS.search(user_input)
+        and has_data_intent
+    ):
         matches.append(("scoreboard_agent", len(_SCOREBOARD_KEYWORDS.findall(user_input))))
 
-    if "expense_agent" in available_agents and _EXPENSE_KEYWORDS.search(user_input):
+    if (
+        "expense_agent" in available_agents
+        and _EXPENSE_KEYWORDS.search(user_input)
+        and has_data_intent
+    ):
         matches.append(("expense_agent", len(_EXPENSE_KEYWORDS.findall(user_input))))
 
+    # LMS routing is intent-agnostic — leave/PTO/vacation phrasing is
+    # already action-oriented enough on its own.
     if "lms_agent" in available_agents and _LMS_KEYWORDS.search(user_input):
         matches.append(("lms_agent", len(_LMS_KEYWORDS.findall(user_input))))
 

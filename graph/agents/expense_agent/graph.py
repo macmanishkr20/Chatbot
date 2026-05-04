@@ -28,8 +28,13 @@ from graph.nodes.memory_node import save_memory_node
 from graph.nodes.persist_node import persist_node
 
 
-def build_expense_subgraph():
-    """Compile the expense agent sub-graph."""
+def build_expense_subgraph(store=None, checkpointer=None):
+    """Compile the expense agent sub-graph.
+
+    ``store`` and ``checkpointer`` are forwarded to ``g.compile`` when
+    provided (parity with other agent builders). Either may be omitted —
+    LangGraph compiles fine without them.
+    """
     g = StateGraph(ExpenseAgentState)
 
     g.add_node("resolve_role", resolve_role_node)
@@ -47,4 +52,9 @@ def build_expense_subgraph():
     g.add_edge("persist", "save_memory")
     g.add_edge("save_memory", END)
 
-    return g.compile()
+    compile_kwargs: dict = {}
+    if checkpointer is not None:
+        compile_kwargs["checkpointer"] = checkpointer
+    if store is not None:
+        compile_kwargs["store"] = store
+    return g.compile(**compile_kwargs)

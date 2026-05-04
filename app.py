@@ -87,7 +87,7 @@ _cancel_signals: dict[str, bool] = {}
 # with_structured_output(RouteResponse) which streams JSON fragments,
 # not user-facing prose. Supervisor's RESPOND content is delivered via
 # the "updates" mode instead (see stream_generator).
-_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search", "synthesize"})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
@@ -114,7 +114,6 @@ _NODE_THOUGHT: dict[str, tuple[str, str, str, str]] = {
     "privacy_gate":         ("Privacy",    "Checking access scope…",              "preparation",   "lock"),
     "understand_query":     ("Planning",   "Analyzing query intent…",             "understanding", "lightbulb"),
     "execute_query":        ("Executing",  "Running data query…",                 "retrieval",     "database"),
-    "synthesize_node":      ("Narrating",  "Forming response…",                  "response",      "smart_toy"),
 }
 
 

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
@@ -72,6 +73,71 @@ async def enrich_context_node(state: LMSAgentState) -> dict:
     }
 
 
+# ── HITL confirmation gate ──────────────────────────────────────────────
+
+_CONFIRM_RE = re.compile(
+    r"^(yes|y|confirm|proceed|go ahead|do it|أجل|نعم)\b",
+    re.IGNORECASE,
+)
+_CANCEL_RE = re.compile(
+    r"^(no|n|cancel|stop|abort|لا)\b",
+    re.IGNORECASE,
+)
+
+
+def _latest_user_text(state: LMSAgentState) -> str:
+    text = (state.get("user_input") or "").strip()
+    if text:
+        return text
+    for msg in reversed(state.get("messages") or []):
+        if isinstance(msg, HumanMessage):
+            return (msg.content or "").strip()
+    return ""
+
+
+async def confirmation_gate_node(state: LMSAgentState) -> dict:
+    """Process the user's reply when a write action is awaiting confirmation.
+
+    Routes to ``react_loop`` (continue) or ``persist`` (cancelled / re-ask)
+    via ``_after_confirmation_gate``.
+    """
+    pending = state.get("pending_write_action")
+    if not pending:
+        return {"_confirm_route": "react_loop"}
+
+    reply = _latest_user_text(state)
+
+    if reply and _CONFIRM_RE.match(reply):
+        return {
+            "user_confirmed_write": True,
+            "_confirm_route": "react_loop",
+        }
+
+    if reply and _CANCEL_RE.match(reply):
+        msg = "Cancelled. The action has not been performed."
+        return {
+            "messages": [AIMessage(content=msg)],
+            "ai_content": msg,
+            "is_free_form": True,
+            "pending_write_action": None,
+            "user_confirmed_write": False,
+            "_confirm_route": "persist",
+        }
+
+    # Ambiguous — re-ask.
+    msg = "Please reply 'yes' to confirm or 'no' to cancel."
+    return {
+        "messages": [AIMessage(content=msg)],
+        "ai_content": msg,
+        "is_free_form": True,
+        "_confirm_route": "persist",
+    }
+
+
+def _after_confirmation_gate(state: LMSAgentState) -> str:
+    return state.get("_confirm_route") or "react_loop"
+
+
 # ── ReAct loop ──────────────────────────────────────────────────────────
 
 _llm_with_tools = None
@@ -79,6 +145,10 @@ _llm_with_tools = None
 
 def _get_llm_with_tools(allow_writes: bool):
     global _llm_with_tools
+    if _llm_with_tools is not None:
+        cached_allow, cached_llm = _llm_with_tools
+        if cached_allow == allow_writes:
+            return cached_llm
     base = AzureChatOpenAI(
         azure_deployment=get_llm_model("events"),
         api_key=AZURE_OPENAI_KEY,
@@ -87,7 +157,9 @@ def _get_llm_with_tools(allow_writes: bool):
         max_retries=2,
         streaming=False,
     )
-    return base.bind_tools(ALL_TOOLS if allow_writes else READ_TOOLS)
+    bound = base.bind_tools(ALL_TOOLS if allow_writes else READ_TOOLS)
+    _llm_with_tools = (allow_writes, bound)
+    return bound
 
 
 def _build_system_message(state: LMSAgentState) -> SystemMessage:

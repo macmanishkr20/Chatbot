@@ -9,7 +9,12 @@ employee → self only; manager → team; HR/admin → all.
 from __future__ import annotations
 
 from graph.agents.base import AgentSpec, register_agent
-from graph.agents.scoreboard_agent.graph import build_scoreboard_subgraph
+
+
+def _build(store=None, checkpointer=None):
+    # Lazy import — keeps DB/role_lookup imports out of registration time.
+    from graph.agents.scoreboard_agent.graph import build_scoreboard_subgraph
+    return build_scoreboard_subgraph(store=store, checkpointer=checkpointer)
 
 
 _DESCRIPTION = (
@@ -30,7 +35,7 @@ _DESCRIPTION = (
 register_agent(AgentSpec(
     name="scoreboard_agent",
     description=_DESCRIPTION,
-    build_subgraph=lambda store=None, checkpointer=None: build_scoreboard_subgraph(),
+    build_subgraph=_build,
     sample_prompts=(
         "Show me the scoreboard in FY26.",
         "Which employee has the highest ANSR?",

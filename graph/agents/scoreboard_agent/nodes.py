@@ -36,7 +36,7 @@ from prompts.predicate_planner import (
 from services.data_db import DataDB
 from services.data_schemas import SCOREBOARD_SCHEMA
 from services.openai_client import get_llm_model
-from services.role_lookup import get_role
+from services.role_lookup import get_role, resolve_employee_id
 from services.telemetry import get_tracer_span
 from services.text_to_predicate import (
     CompileError,
@@ -131,9 +131,14 @@ async def privacy_gate_node(state: ScoreboardAgentState) -> dict:
     scope = state.get("viewer_scope") or "self"
 
     suspicious_phrases = [
+        # English
         "which employee", "who has the highest", "who has the lowest",
         "top employee", "best employee", "everyone", "all employees",
         "team scoreboard", "compare employees",
+        # Arabic
+        "أي موظف", "كل الموظفين", "جميع الموظفين", "موظف آخر",
+        # French
+        "quel employé", "tous les employés",
     ]
     triggered = any(p in user_input for p in suspicious_phrases)
 
@@ -213,8 +218,19 @@ async def execute_query_node(state: ScoreboardAgentState) -> dict:
 
         scope = state.get("viewer_scope") or "self"
         security_predicates: list[tuple[str, list]] = []
-        # NOTE: EmployeeId is numeric but user_id is email — no RLS
-        # predicate injected until a proper mapping exists.
+        if scope == "self":
+            user_id = state.get("user_id") or state.get("employee_id") or ""
+            employee_id = await resolve_employee_id(user_id)
+            if not employee_id:
+                msg = (
+                    "Your employee profile is not yet linked. Contact "
+                    "support to enable scoreboard access."
+                )
+                return {
+                    "query_rows": [],
+                    "error_info": {"error_code": "RLS_NOT_LINKED", "text": msg},
+                }
+            security_predicates.append(("EmployeeId = ?", [employee_id]))
 
         try:
             sql, params = compile_query_plan(

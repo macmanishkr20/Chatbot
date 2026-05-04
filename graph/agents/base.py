@@ -74,10 +74,18 @@ class AgentSpec:
 def _flag_enabled(agent_name: str, default: bool) -> bool:
     """Resolve ``ENABLE_<AGENT_NAME>_AGENT`` env flag.
 
+    The trailing ``_agent`` on the registered name (e.g. ``expense_agent``)
+    is stripped before composing the env var so the resolved flag is
+    ``ENABLE_EXPENSE_AGENT`` rather than the awkward
+    ``ENABLE_EXPENSE_AGENT_AGENT``.
+
     Truthy values: 1 / true / yes / on (case-insensitive).
     Missing var → ``default``.
     """
-    raw = os.getenv(f"ENABLE_{agent_name.upper()}_AGENT")
+    base = agent_name
+    if base.endswith("_agent"):
+        base = base[: -len("_agent")]
+    raw = os.getenv(f"ENABLE_{base.upper()}_AGENT")
     if raw is None:
         return default
     return raw.strip().lower() in {"1", "true", "yes", "on"}

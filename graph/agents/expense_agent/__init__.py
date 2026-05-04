@@ -13,7 +13,13 @@ Sub-graph (filled in during Phase 2):
 from __future__ import annotations
 
 from graph.agents.base import AgentSpec, register_agent
-from graph.agents.expense_agent.graph import build_expense_subgraph
+
+
+def _build(store=None, checkpointer=None):
+    # Lazy import — keeps services.data_db / services.text_to_predicate
+    # out of the import-time graph (no DB/KV hit until first use).
+    from graph.agents.expense_agent.graph import build_expense_subgraph
+    return build_expense_subgraph(store=store, checkpointer=checkpointer)
 
 
 _DESCRIPTION = (
@@ -34,14 +40,14 @@ _DESCRIPTION = (
 register_agent(AgentSpec(
     name="expense_agent",
     description=_DESCRIPTION,
-    build_subgraph=lambda store=None, checkpointer=None: build_expense_subgraph(),
+    build_subgraph=_build,
     sample_prompts=(
         "Show me my expenses in FY26.",
         "Which is the highest expense in FY26?",
         "How many expenses are less than 100?",
         "Total travel spending last quarter.",
     ),
-    # OFF by default — flip ENABLE_EXPENSE_AGENT_AGENT=true after data load.
+    # OFF by default — flip ENABLE_EXPENSE=true after data load.
     enabled_by_default=False,
     requires_employee_context=True,
 ))

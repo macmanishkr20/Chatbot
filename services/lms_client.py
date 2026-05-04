@@ -57,6 +57,12 @@ class LMSCircuitOpen(LMSError):
     """Circuit breaker is open — we refused to call upstream."""
 
 
+class LMSNotImplementedError(LMSError):
+    """The requested operation is not available in the current LMS
+    configuration (e.g. only the LeaveSnapshot URL is configured but
+    the caller wants to apply / cancel leave or fetch holidays)."""
+
+
 # ── Circuit breaker ────────────────────────────────────────────────────
 
 @dataclass
@@ -201,12 +207,26 @@ class LMSClient:
             fail_threshold=int(os.getenv("LMS_CIRCUIT_FAILS", "5")),
             cooldown_sec=float(os.getenv("LMS_CIRCUIT_COOLDOWN_SEC", "30")),
         )
+        # Three modes:
+        #   stub_mode          : both URLs unset — return deterministic samples.
+        #   snapshot_only_mode : only LMS_LEAVE_SNAPSHOT_URL set — read paths
+        #                        served by the snapshot API; write/holiday
+        #                        paths raise LMSNotImplementedError.
+        #   full_mode          : LMS_BASE_URL set — _call(...) hits the
+        #                        generic LMS endpoint.
         self._stub_mode = not self._base_url and not self._leave_snapshot_url
+        self._snapshot_only_mode = bool(self._leave_snapshot_url) and not self._base_url
         if self._stub_mode:
             logger.info(
                 "LMSClient: LMS_BASE_URL and LMS_LEAVE_SNAPSHOT_URL are empty — "
                 "running in stub mode (returns deterministic sample data). "
                 "Set LMS_LEAVE_SNAPSHOT_URL to wire the real LeaveSnapshot API.",
+            )
+        elif self._snapshot_only_mode:
+            logger.info(
+                "LMSClient: snapshot-only mode — reads are served by "
+                "LeaveSnapshot; write/holiday operations will raise "
+                "LMSNotImplementedError until LMS_BASE_URL is configured.",
             )
         self._initialised = True
 
@@ -255,6 +275,31 @@ class LMSClient:
         cached = await self._cache.get(cache_key)
         if cached is not None:
             return cached
+
+        # When the LeaveSnapshot is configured, project pending requests
+        # from the snapshot's "pending_days" rather than calling the
+        # generic LMS endpoint (which isn't deployed in snapshot-only mode).
+        if self._leave_snapshot_url:
+            items = await self._call_leave_snapshot(employee_id)
+            result: list[LeaveRequest] = []
+            for item in items:
+                pending = float(item.get("pendingLeaves") or item.get("pending") or 0) or 0.0
+                if pending > 0:
+                    today = date.today()
+                    result.append(LeaveRequest(
+                        request_id=str(item.get("requestId") or ""),
+                        employee_id=str(employee_id),
+                        leave_type=str(item.get("leaveType") or "Unknown"),
+                        start_date=today,
+                        end_date=today,
+                        days=pending,
+                        status="pending",
+                        reason=None,
+                        submitted_at=None,
+                    ))
+            await self._cache.set(cache_key, result, ttl=self._cache_ttl)
+            return result
+
         body = await self._call(
             "GET",
             f"/employees/{employee_id}/leave-requests",
@@ -366,8 +411,7 @@ class LMSClient:
         for attempt in range(max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=timeout) as client:
-                    # employee_email_Test
-                    resp = await client.get(url, params={"email": "testNazih.Borghol@lb.ey.com"})
+                    resp = await client.get(url, params={"email": employee_email})
                 if resp.status_code == 401 or resp.status_code == 403:
                     raise LMSAuthError(
                         f"Auth failed ({resp.status_code}) for LeaveSnapshot."
@@ -388,7 +432,9 @@ class LMSClient:
                         f"Non-JSON response from LeaveSnapshot"
                     ) from exc
                 await self._breaker.on_success()
-                return body if isinstance(body, list) else []
+                if not isinstance(body, list):
+                    raise LMSUpstreamError("LeaveSnapshot returned malformed body")
+                return body
             except (LMSValidationError, LMSAuthError):
                 raise
             except Exception as exc:
@@ -531,6 +577,13 @@ class LMSClient:
                     f"No upstream configured and no stub for {method} {path}",
                 )
             return stub(method=method, path=path, json_body=json_body)
+
+        if not self._base_url:
+            # snapshot-only mode: the generic LMS endpoint is not configured
+            # so write/holiday-calendar/etc. operations are not available.
+            raise LMSNotImplementedError(
+                "This action is not available with the current LMS configuration",
+            )
 
         await self._breaker.before_call()
 

@@ -30,6 +30,8 @@ class LMSAgentState(RAGState, total=False):
     # ── HITL confirmation flow ──
     pending_write_action: Optional[dict]
     user_confirmed_write: bool
+    # Internal: which node confirmation_gate routes to next ("react_loop"|"persist").
+    _confirm_route: Optional[str]
 
     # ── Tool trace (for the synthesize step + UI thinking panel) ──
     tool_trace: list[dict[str, Any]]

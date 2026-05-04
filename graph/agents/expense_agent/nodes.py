@@ -33,7 +33,7 @@ from prompts.predicate_planner import (
 from services.data_db import DataDB
 from services.data_schemas import EXPENSE_SCHEMA
 from services.openai_client import get_llm_model
-from services.role_lookup import get_role
+from services.role_lookup import get_role, resolve_employee_id
 from services.telemetry import get_tracer_span
 from services.text_to_predicate import (
     CompileError,
@@ -111,7 +111,7 @@ async def resolve_role_node(state: ExpenseAgentState) -> dict:
     """Look up the viewer's role from AgentUserRoles and stamp the
     derived scope into state. Cached in-process per user_id."""
     user_id = state.get("user_id") or state.get("employee_id") or ""
-    print(f"[ROLE LOOKUP] user_id={user_id}")
+    logger.debug("expense.resolve_role: user_id=%s", user_id)
     resolution = await get_role(user_id)
     return {
         "viewer_role": resolution.role,
@@ -189,15 +189,25 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
             }
 
         # ── Row-level security ─────────────────────────────────────────
-        # NOTE: The EmployeeId column is numeric (e.g. 3001107) but user_id
-        # is an email. Until a proper email→EmployeeId mapping exists, we
-        # cannot enforce RLS for scope="self". For now, run the query
-        # without an EmployeeId restriction regardless of scope.
-        # Managers/admins (scope="all") never had restrictions anyway.
+        # scope == "self"  → MUST inject EmployeeId predicate; if we can't
+        #                    resolve a numeric EmployeeId for this user, fail
+        #                    closed (refuse the query) rather than leak rows.
+        # scope == "all"   → manager/admin/HR — no predicate, full visibility.
         scope = state.get("viewer_scope") or "self"
         security_predicates: list[tuple[str, list]] = []
-        # No EmployeeId predicate injected — let the query filters
-        # (country, date, category, etc.) do the narrowing.
+        if scope == "self":
+            user_id = state.get("user_id") or state.get("employee_id") or ""
+            employee_id = await resolve_employee_id(user_id)
+            if not employee_id:
+                msg = (
+                    "Your employee profile is not yet linked. Contact "
+                    "support to enable expense access."
+                )
+                return {
+                    "query_rows": [],
+                    "error_info": {"error_code": "RLS_NOT_LINKED", "text": msg},
+                }
+            security_predicates.append(("EmployeeId = ?", [employee_id]))
 
         try:
             sql, params = compile_query_plan(
@@ -217,8 +227,7 @@ async def execute_query_node(state: ExpenseAgentState) -> dict:
             }
 
         logger.info("expense.execute_query: SQL=%s | params=%s", sql, params)
-        print(f"[EXPENSE SQL] {sql}")
-        print(f"[EXPENSE PARAMS] {params}")
+        logger.debug("expense.execute_query: sql=%s params=%s", sql, params)
 
         try:
             db = DataDB()

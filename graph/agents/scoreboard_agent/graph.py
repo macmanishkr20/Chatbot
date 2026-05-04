@@ -21,7 +21,7 @@ from graph.nodes.memory_node import save_memory_node
 from graph.nodes.persist_node import persist_node
 
 
-def build_scoreboard_subgraph():
+def build_scoreboard_subgraph(store=None, checkpointer=None):
     g = StateGraph(ScoreboardAgentState)
 
     g.add_node("resolve_role", resolve_role_node)
@@ -41,4 +41,9 @@ def build_scoreboard_subgraph():
     g.add_edge("persist", "save_memory")
     g.add_edge("save_memory", END)
 
-    return g.compile()
+    compile_kwargs: dict = {}
+    if checkpointer is not None:
+        compile_kwargs["checkpointer"] = checkpointer
+    if store is not None:
+        compile_kwargs["store"] = store
+    return g.compile(**compile_kwargs)

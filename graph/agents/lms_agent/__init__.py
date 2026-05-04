@@ -13,7 +13,13 @@ Sub-graph (Phase 4):
 from __future__ import annotations
 
 from graph.agents.base import AgentSpec, register_agent
-from graph.agents.lms_agent.graph import build_lms_subgraph
+
+
+def _build(store=None, checkpointer=None):
+    # Lazy import: keeps service modules (lms_client, etc.) out of the
+    # import-time graph so registration doesn't trigger network/KV access.
+    from graph.agents.lms_agent.graph import build_lms_subgraph
+    return build_lms_subgraph(store=store, checkpointer=checkpointer)
 
 
 _DESCRIPTION = (
@@ -29,7 +35,7 @@ _DESCRIPTION = (
 register_agent(AgentSpec(
     name="lms_agent",
     description=_DESCRIPTION,
-    build_subgraph=lambda store=None, checkpointer=None: build_lms_subgraph(store),
+    build_subgraph=_build,
     sample_prompts=(
         "What is my leave balance?",
         "Apply for leave from Mar 5 to Mar 8.",
