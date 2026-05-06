@@ -1,0 +1,43 @@
+.clarification-card {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(180, 0, 255, 0.35);
+  background: rgba(180, 0, 255, 0.06);
+}
+
+.cc-question {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+
+  .mat-icon {
+    color: #b400ff;
+    margin-top: 2px;
+    font-size: 16px;
+  }
+}
+
+.cc-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.cc-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(180, 0, 255, 0.5);
+  background: rgba(180, 0, 255, 0.1);
+  color: #fff;
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(180, 0, 255, 0.25);
+  }
+}

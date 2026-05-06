@@ -1,0 +1,35 @@
+import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, OnInit, inject } from '@angular/core';
+import { AgentsMetadataService } from '../../services/agents-metadata.service';
+import { ChatService } from '../../services/chat.service';
+import { AgentMetadata } from '../../models/agent-metadata.model';
+
+/**
+ * Sidebar "Quick start" launcher list. Renders one row per enabled agent
+ * (icon + display name). Clicking a row opens a fresh chat seeded with that
+ * agent's module context.
+ *
+ * Failure to load metadata is silent — the launcher simply hides itself.
+ */
+@Component({
+  selector: 'app-module-launcher',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './module-launcher.component.html',
+  styleUrl: './module-launcher.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
+})
+export class ModuleLauncherComponent implements OnInit {
+  private readonly agentsMeta = inject(AgentsMetadataService);
+  private readonly chat = inject(ChatService);
+
+  readonly agents = this.agentsMeta.agents;
+
+  ngOnInit(): void {
+    void this.agentsMeta.load();
+  }
+
+  onPick(agent: AgentMetadata): void {
+    this.chat.startChatForAgent(agent.name);
+  }
+}

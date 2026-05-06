@@ -28,6 +28,18 @@
   <div class="messages-scroll" #scrollContainer>
     <div class="messages-container">
       @if (showEmpty()) {
+        <!-- Module onboarding card (analytical / transactional agents) -->
+        @if (currentAgent() || agentsMeta.agents().length > 0) {
+          <app-onboarding-card
+            [agent]="currentAgent()"
+            [agents]="agentsMeta.agents()"
+            (promptPicked)="onPromptPicked($event)"
+            (agentPicked)="onAgentTilePicked($event)"
+            (buildReport)="onBuildReportClicked()"
+            (formAction)="onFormAction($event)"
+          />
+        }
+
         <div class="empty-state">
           <div class="welcome-logo">
             <span class="mat-icon welcome-icon">auto_awesome</span>
@@ -92,6 +104,16 @@
       }
     </div>
   </div>
+
+  <!-- Report builder slide-in panel -->
+  @if (currentAgent(); as agent) {
+    <app-report-builder-panel
+      [agent]="agent"
+      [open]="chat.reportPanelOpen()"
+      (closed)="onReportPanelClosed()"
+      (built)="onReportBuilt($event)"
+    />
+  }
 
   <!-- Input + MENA function chips -->
   <div class="input-stack">

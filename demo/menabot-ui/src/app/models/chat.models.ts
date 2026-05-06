@@ -1,3 +1,14 @@
+import {
+  AssumptionEvent,
+  AssumptionNote,
+  ClarificationCard,
+  ClarificationEvent,
+  DrillSuggestionsEvent,
+  FormSchema,
+  LmsFormEvent,
+  PromptOption,
+} from './agent-metadata.model';
+
 /** SSE event types received from the /chat endpoint. */
 export interface ThoughtEvent {
   type: 'thought';
@@ -67,7 +78,15 @@ export interface DeepSearchEvent {
   icon?: string;
 }
 
-export type SSEEvent = ThoughtEvent | ContentEvent | DeepSearchEvent | FinalEvent;
+export type SSEEvent =
+  | ThoughtEvent
+  | ContentEvent
+  | DeepSearchEvent
+  | FinalEvent
+  | AssumptionEvent
+  | DrillSuggestionsEvent
+  | ClarificationEvent
+  | LmsFormEvent;
 
 /** Suggestive action button from the Supervisor. */
 export interface SuggestiveAction {
@@ -130,7 +149,34 @@ export interface ChatMessage {
   isEditing?: boolean;
   editText?: string;
   citations?: Citation[];
+  // ── New analytical/transactional agent UI extensions (P2/P4/P6) ──
+  /** Drill-down chip suggestions emitted via SSE `drill_suggestions`. */
+  drillSuggestions?: PromptOption[];
+  /** Clarification card emitted via SSE `clarification`. */
+  clarification?: ClarificationCard;
+  /** Inline assumption note emitted via SSE `assumption`. */
+  assumption?: AssumptionNote;
+  /** LMS dynamic form payload emitted via SSE `lms_form` (or fetched on demand). */
+  lmsForm?: FormSchema;
+  /** Submission state for the LMS form attached to this message. */
+  lmsFormResult?: { ok: boolean; message: string; request_id?: string };
+  /** Optional structured report rows rendered as a table card in chat. */
+  reportRows?: Record<string, unknown>[];
+  reportColumns?: string[];
+  reportSummary?: string;
 }
+
+// Re-export agent-metadata types so imports from chat.models stay convenient.
+export type {
+  AssumptionEvent,
+  AssumptionNote,
+  ClarificationCard,
+  ClarificationEvent,
+  DrillSuggestionsEvent,
+  FormSchema,
+  LmsFormEvent,
+  PromptOption,
+} from './agent-metadata.model';
 
 /** Conversation session from /conversations endpoint. */
 export interface Conversation {

@@ -1,0 +1,82 @@
+<div class="lms-form-card">
+  <div class="lf-header">
+    <span class="mat-icon">assignment_turned_in</span>
+    <span class="lf-title">{{ schema().title }}</span>
+  </div>
+
+  @if (result(); as r) {
+    <div class="lf-result" [class.lf-ok]="r.ok" [class.lf-err]="!r.ok">
+      <span class="mat-icon">{{ r.ok ? 'check_circle' : 'error' }}</span>
+      <span>{{ r.message }}</span>
+      @if (r.request_id) { <small>#{{ r.request_id }}</small> }
+    </div>
+  } @else {
+    <form class="lf-body" (ngSubmit)="onSubmit()">
+      @for (field of schema().fields; track field.name) {
+        <div class="lf-row" [class.lf-missing]="isMissing(field.name)">
+          <label class="lf-label">
+            {{ field.label }}
+            @if (field.required) { <span class="lf-required">*</span> }
+          </label>
+
+          @switch (field.type) {
+            @case ('select') {
+              <select class="lf-input"
+                      [disabled]="disabled()"
+                      (change)="onInput(field, $event)">
+                <option value="">{{ field.placeholder || 'Select…' }}</option>
+                @for (opt of field.options || []; track opt) {
+                  <option [value]="opt">{{ opt }}</option>
+                }
+              </select>
+            }
+            @case ('date') {
+              <input type="date" class="lf-input"
+                     [disabled]="disabled()"
+                     (input)="onInput(field, $event)" />
+            }
+            @case ('textarea') {
+              <textarea class="lf-input" rows="3"
+                        [attr.maxlength]="field.max_length || null"
+                        [placeholder]="field.placeholder || ''"
+                        [disabled]="disabled()"
+                        (input)="onInput(field, $event)"></textarea>
+            }
+            @case ('number') {
+              <input type="number" class="lf-input"
+                     [min]="field.min ?? null" [max]="field.max ?? null"
+                     [placeholder]="field.placeholder || ''"
+                     [disabled]="disabled()"
+                     (input)="onInput(field, $event)" />
+            }
+            @case ('boolean') {
+              <label class="lf-toggle">
+                <input type="checkbox"
+                       [disabled]="disabled()"
+                       (change)="onInput(field, $event)" />
+                <span>Yes</span>
+              </label>
+            }
+            @default {
+              <input type="text" class="lf-input"
+                     [attr.maxlength]="field.max_length || null"
+                     [placeholder]="field.placeholder || ''"
+                     [disabled]="disabled()"
+                     (input)="onInput(field, $event)" />
+            }
+          }
+        </div>
+      }
+
+      @if (errorMsg()) {
+        <div class="lf-error">{{ errorMsg() }}</div>
+      }
+
+      <div class="lf-actions">
+        <button type="submit" class="lf-submit" [disabled]="disabled()">
+          {{ schema().submit_label || 'Submit' }}
+        </button>
+      </div>
+    </form>
+  }
+</div>

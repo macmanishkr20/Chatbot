@@ -2,6 +2,10 @@ import { Component, ChangeDetectionStrategy, inject, input, output, signal } fro
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatMessage, Citation, SuggestiveAction } from '../../models/chat.models';
+import { FormSubmitResult, PromptOption } from '../../models/agent-metadata.model';
+import { DrillChipsComponent } from '../drill-chips/drill-chips.component';
+import { ClarificationCardComponent } from '../clarification-card/clarification-card.component';
+import { LmsFormCardComponent } from '../lms-form-card/lms-form-card.component';
 import { MarkdownPipe } from '../../pipes/markdown.pipe';
 import { ThinkingPanelComponent } from '../thinking-panel/thinking-panel.component';
 import { DeepSearchPanelComponent } from '../deep-search-panel/deep-search-panel.component';
@@ -22,6 +26,9 @@ import { FeedbackModalComponent } from '../feedback-modal/feedback-modal.compone
     DeepSearchPanelComponent,
     SuggestiveActionsComponent,
     FeedbackModalComponent,
+    DrillChipsComponent,
+    ClarificationCardComponent,
+    LmsFormCardComponent,
   ],
   templateUrl: './message-bubble.component.html',
   styleUrl: './message-bubble.component.scss',
@@ -158,5 +165,31 @@ export class MessageBubbleComponent {
 
   toggleCitations(): void {
     this.citationsExpanded.update(v => !v);
+  }
+
+  // ── New: drill chips / clarification / assumption / LMS form ──
+
+  onDrillPicked(opt: PromptOption): void {
+    void this.chat.sendMessage(opt.prompt);
+  }
+
+  onClarificationPicked(opt: PromptOption): void {
+    void this.chat.sendMessage(opt.prompt);
+  }
+
+  onAssumptionAlt(opt: PromptOption): void {
+    void this.chat.sendMessage(opt.prompt);
+  }
+
+  onLmsSubmitted(result: FormSubmitResult): void {
+    this.chat.setLmsFormResult(this.message().id, result);
+  }
+
+  /** Compute the column list for an inline report rows table. */
+  get reportColumns(): string[] {
+    const m = this.message();
+    if (m.reportColumns && m.reportColumns.length) return m.reportColumns;
+    const rows = m.reportRows ?? [];
+    return rows.length ? Object.keys(rows[0]) : [];
   }
 }

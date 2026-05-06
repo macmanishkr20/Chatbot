@@ -1,0 +1,11 @@
+@if (suggestions().length > 0) {
+  <div class="drill-chips">
+    <span class="dc-label">Drill into</span>
+    @for (opt of suggestions(); track opt.prompt) {
+      <button type="button" class="dc-chip" (click)="onClick(opt)" [attr.title]="opt.prompt">
+        <span>{{ opt.label }}</span>
+        <span class="mat-icon">arrow_forward</span>
+      </button>
+    }
+  </div>
+}

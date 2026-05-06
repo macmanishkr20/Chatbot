@@ -18,6 +18,15 @@
     </div>
   }
 
+  @if (canBuildReport()) {
+    <button type="button"
+            class="report-btn"
+            title="Build a report"
+            (click)="openReportPanel()">
+      <span class="mat-icon">tune</span>
+    </button>
+  }
+
   <div class="input-wrapper">
     <textarea
       #textareaEl

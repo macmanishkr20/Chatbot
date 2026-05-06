@@ -1,0 +1,16 @@
+@if (agents().length > 0) {
+  <div class="module-launcher">
+    <div class="ml-header">
+      <span class="mat-icon">auto_awesome</span>
+      <span>Quick start</span>
+    </div>
+    <ul class="ml-list">
+      @for (agent of agents(); track agent.name) {
+        <li class="ml-item" (click)="onPick(agent)" [attr.title]="agent.description">
+          <span class="ml-icon"><span class="mat-icon">{{ agent.icon || 'apps' }}</span></span>
+          <span class="ml-name">{{ agent.display_name }}</span>
+        </li>
+      }
+    </ul>
+  </div>
+}

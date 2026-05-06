@@ -65,6 +65,68 @@
         </div>
       }
 
+      <!-- Inline assumption note -->
+      @if (message().assumption; as a) {
+        <div class="assumption-note">
+          <em>{{ a.text }}</em>
+          @if (a.alternatives && a.alternatives.length > 0) {
+            <span class="assumption-alts">
+              @for (alt of a.alternatives; track alt.prompt) {
+                <button type="button" class="assumption-chip" (click)="onAssumptionAlt(alt)">{{ alt.label }}</button>
+              }
+            </span>
+          }
+        </div>
+      }
+
+      <!-- Clarification card -->
+      @if (message().clarification; as c) {
+        <app-clarification-card [card]="c" (picked)="onClarificationPicked($event)" />
+      }
+
+      <!-- Drill suggestions -->
+      @if (message().drillSuggestions && message().drillSuggestions!.length > 0) {
+        <app-drill-chips [suggestions]="message().drillSuggestions!" (picked)="onDrillPicked($event)" />
+      }
+
+      <!-- LMS form -->
+      @if (message().lmsForm; as form) {
+        <app-lms-form-card
+          [schema]="form"
+          [result]="message().lmsFormResult"
+          (submitted)="onLmsSubmitted($event)"
+        />
+      }
+
+      <!-- Inline report rows table -->
+      @if (message().reportRows && message().reportRows!.length > 0) {
+        <div class="report-rows-card">
+          @if (message().reportSummary) {
+            <div class="rr-summary">{{ message().reportSummary }}</div>
+          }
+          <div class="rr-table-wrap">
+            <table class="rr-table">
+              <thead>
+                <tr>
+                  @for (col of reportColumns; track col) {
+                    <th>{{ col }}</th>
+                  }
+                </tr>
+              </thead>
+              <tbody>
+                @for (row of message().reportRows!; track $index) {
+                  <tr>
+                    @for (col of reportColumns; track col) {
+                      <td>{{ row[col] }}</td>
+                    }
+                  </tr>
+                }
+              </tbody>
+            </table>
+          </div>
+        </div>
+      }
+
       <!-- Citations Collapsible -->
       @if (isBot && hasCitations && !message().isStreaming) {
         <div class="citations-section">

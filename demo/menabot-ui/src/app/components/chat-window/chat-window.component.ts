@@ -18,11 +18,25 @@ import { ExportMenuComponent } from '../export-menu/export-menu.component';
 import { FunctionChipsComponent } from '../function-chips/function-chips.component';
 import { MapBackdropComponent } from '../map-backdrop/map-backdrop.component';
 import { SuggestiveAction } from '../../models/chat.models';
+import { OnboardingCardComponent } from '../onboarding-card/onboarding-card.component';
+import { ReportBuilderPanelComponent } from '../report-builder-panel/report-builder-panel.component';
+import { AgentsMetadataService } from '../../services/agents-metadata.service';
+import { LmsFormsService } from '../../services/lms-forms.service';
+import { AgentMetadata, FormActionRef, ReportRowsResponse } from '../../models/agent-metadata.model';
 
 @Component({
   selector: 'app-chat-window',
   standalone: true,
-  imports: [CommonModule, MessageBubbleComponent, ChatInputComponent, ExportMenuComponent, FunctionChipsComponent, MapBackdropComponent],
+  imports: [
+    CommonModule,
+    MessageBubbleComponent,
+    ChatInputComponent,
+    ExportMenuComponent,
+    FunctionChipsComponent,
+    MapBackdropComponent,
+    OnboardingCardComponent,
+    ReportBuilderPanelComponent,
+  ],
   templateUrl: './chat-window.component.html',
   styleUrl: './chat-window.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -31,6 +45,14 @@ export class ChatWindowComponent implements AfterViewInit {
   readonly chat = inject(ChatService);
   readonly auth = inject(AuthService);
   readonly theme = inject(ThemeService);
+  readonly agentsMeta = inject(AgentsMetadataService);
+  private readonly lmsForms = inject(LmsFormsService);
+
+  /** The currently selected agent's full metadata (or null). */
+  readonly currentAgent = computed<AgentMetadata | null>(() => {
+    const name = this.chat.selectedAgent();
+    return this.agentsMeta.byName(name) ?? null;
+  });
 
   @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
 
@@ -57,10 +79,51 @@ export class ChatWindowComponent implements AfterViewInit {
       this.chat.messages(); // track dependency
       this.scrollToBottom();
     });
+    // Ensure the agent metadata is available for the onboarding card / launchers.
+    void this.agentsMeta.load();
   }
 
   ngAfterViewInit(): void {
     this.scrollToBottom();
+  }
+
+  // ── Onboarding card handlers ──
+
+  onPromptPicked(prompt: string): void {
+    void this.chat.sendMessage(prompt);
+  }
+
+  onAgentTilePicked(agent: AgentMetadata): void {
+    this.chat.startChatForAgent(agent.name);
+  }
+
+  onBuildReportClicked(): void {
+    this.chat.reportPanelOpen.set(true);
+  }
+
+  onReportPanelClosed(): void {
+    this.chat.reportPanelOpen.set(false);
+  }
+
+  onReportBuilt(payload: { response: ReportRowsResponse; summary: string }): void {
+    const rows = payload.response.rows ?? [];
+    const cols = payload.response.columns
+      ?? (rows.length > 0 ? Object.keys(rows[0]) : []);
+    // Synthetic user message describing the query.
+    this.chat.appendSyntheticUserMessage(payload.summary);
+    this.chat.appendSyntheticAssistantMessage({
+      content: payload.response.summary || `Returned ${rows.length} rows.`,
+      reportRows: rows,
+      reportColumns: cols,
+      reportSummary: payload.response.summary,
+    });
+  }
+
+  onFormAction(fa: FormActionRef): void {
+    this.lmsForms.getSchema(fa.name).subscribe({
+      next: (schema) => this.chat.appendLmsFormMessage(schema),
+      error: (err) => console.error('Failed to fetch LMS form schema', err),
+    });
   }
 
   toggleSidebar(): void {

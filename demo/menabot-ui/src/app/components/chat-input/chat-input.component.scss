@@ -206,3 +206,21 @@
 
   .mat-icon { font-size: 20px; }
 }
+
+.report-btn {
+  align-self: flex-end;
+  margin-right: 6px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 230, 0, 0.4);
+  background: rgba(255, 230, 0, 0.08);
+  color: #ffe600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover { background: rgba(255, 230, 0, 0.18); }
+  .mat-icon { font-size: 18px; }
+}

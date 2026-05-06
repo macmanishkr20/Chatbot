@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ChatService } from '../../services/chat.service';
 import { MENA_FUNCTIONS } from '../function-chips/function-chips.component';
+import { AgentsMetadataService } from '../../services/agents-metadata.service';
 
 @Component({
   selector: 'app-chat-input',
@@ -14,8 +15,20 @@ import { MENA_FUNCTIONS } from '../function-chips/function-chips.component';
 })
 export class ChatInputComponent {
   readonly chat = inject(ChatService);
+  private readonly agentsMeta = inject(AgentsMetadataService);
 
   inputText = signal('');
+
+  /** Whether to surface the "Build a report" icon — only when an analytical
+   *  agent with a report builder schema is the current module. */
+  readonly canBuildReport = computed(() => {
+    const a = this.agentsMeta.byName(this.chat.selectedAgent());
+    return !!a && a.category === 'analytical' && !!a.report_builder;
+  });
+
+  openReportPanel(): void {
+    this.chat.reportPanelOpen.set(true);
+  }
 
   /** Currently selected MENA function metadata (for the pill + placeholder). */
   readonly selectedChip = computed(() => {

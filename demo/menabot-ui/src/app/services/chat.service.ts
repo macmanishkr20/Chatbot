@@ -2,16 +2,21 @@ import { Injectable, inject, signal, computed } from '@angular/core';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 import {
+  AssumptionEvent,
   ChatMessage,
   Citation,
+  ClarificationEvent,
   Conversation,
   DeepSearchEvent,
   DeepSearchStep,
+  DrillSuggestionsEvent,
   FinalEvent,
+  LmsFormEvent,
   SSEEvent,
   SuggestiveAction,
   ThinkingStep,
 } from '../models/chat.models';
+import { FormField, FormSchema } from '../models/agent-metadata.model';
 
 /**
  * Central chat state manager using Angular 19 signals.
@@ -59,6 +64,13 @@ export class ChatService {
   /** Currently selected MENA function code (e.g. 'AWS', 'Talent'). */
   readonly selectedFunction = signal<string | null>(null);
 
+  /** Currently selected analytical / transactional agent module
+   *  (e.g. 'lms_agent', 'expense_agent'). Drives the onboarding card. */
+  readonly selectedAgent = signal<string | null>(null);
+
+  /** Whether the right-side report-builder panel is open. */
+  readonly reportPanelOpen = signal(false);
+
   /** Glow / shimmer the function chips below the input. */
   readonly chipsHighlighted = signal(false);
 
@@ -99,6 +111,64 @@ export class ChatService {
     this.chipsHighlighted.set(true);
     this.functionPromptReason.set(null);
     this.pendingResendQuery = null;
+    this.selectedAgent.set(null);
+  }
+
+  /** Seed a fresh chat with a module/agent context (e.g. clicking a launcher). */
+  startChatForAgent(agentName: string | null): void {
+    this.newChat();
+    this.selectedAgent.set(agentName);
+  }
+
+  /** Append a synthetic assistant message — used by the report builder so
+   *  the rows table appears inline as if it had streamed back. */
+  appendSyntheticAssistantMessage(payload: {
+    content: string;
+    reportRows?: Record<string, unknown>[];
+    reportColumns?: string[];
+    reportSummary?: string;
+  }): void {
+    const msg: ChatMessage = {
+      id: this.generateId(),
+      role: 'assistant',
+      content: payload.content,
+      timestamp: new Date(),
+      reportRows: payload.reportRows,
+      reportColumns: payload.reportColumns,
+      reportSummary: payload.reportSummary,
+    };
+    this.messages.update((msgs) => [...msgs, msg]);
+  }
+
+  /** Append a synthetic user message (e.g. an NL describe-query line). */
+  appendSyntheticUserMessage(text: string): void {
+    const msg: ChatMessage = {
+      id: this.generateId(),
+      role: 'user',
+      content: text,
+      userMessageIndex: this.userMsgCounter++,
+      timestamp: new Date(),
+    };
+    this.messages.update((msgs) => [...msgs, msg]);
+  }
+
+  /** Append a synthetic assistant message that owns an LMS form. */
+  appendLmsFormMessage(form: FormSchema): void {
+    const msg: ChatMessage = {
+      id: this.generateId(),
+      role: 'assistant',
+      content: form.title || `Please complete: ${form.action}`,
+      timestamp: new Date(),
+      lmsForm: form,
+    };
+    this.messages.update((msgs) => [...msgs, msg]);
+  }
+
+  /** Record submission outcome for an LMS form attached to a message. */
+  setLmsFormResult(messageId: string, result: { ok: boolean; message: string; request_id?: string }): void {
+    this.messages.update((msgs) =>
+      msgs.map((m) => (m.id === messageId ? { ...m, lmsFormResult: result } : m)),
+    );
   }
 
   /** Called by the function-chips component when the user picks a chip. */
@@ -498,6 +568,56 @@ export class ChatService {
             const steps = [...(m.deepSearchSteps ?? []), step];
             return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
           })
+        );
+        break;
+      }
+
+      case 'assumption': {
+        const ev = event as AssumptionEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.id === assistantId
+              ? { ...m, assumption: { text: ev.text, alternatives: ev.alternatives } }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'drill_suggestions': {
+        const ev = event as DrillSuggestionsEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.id === assistantId
+              ? { ...m, drillSuggestions: ev.suggestions ?? [] }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'clarification': {
+        const ev = event as ClarificationEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.id === assistantId
+              ? { ...m, clarification: { question: ev.question, options: ev.options } }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'lms_form': {
+        const ev = event as LmsFormEvent;
+        const schema: FormSchema = {
+          action: ev.form_id,
+          title: ev.title ?? ev.form_id,
+          fields: (ev.fields ?? []) as FormField[],
+          submit_label: ev.submit_label ?? 'Submit',
+        };
+        this.messages.update(msgs =>
+          msgs.map(m => (m.id === assistantId ? { ...m, lmsForm: schema } : m)),
         );
         break;
       }
