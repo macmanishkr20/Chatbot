@@ -2,6 +2,7 @@ import { Signal, WritableSignal } from "@angular/core";
 import { ActorType } from "../../../../_shared/constants/actor-type";
 import { MessageFeedbackVM } from "./message-feedabck";
 import { FeedbackRating } from "../../../../_shared/constants/feedback-rating";
+import { FormSchema } from "./agent-metadata.model";
 
 export type Role = 'User' | 'Assistant';
 export type SideBarItemType = 'action' | 'group' | 'link';
@@ -131,6 +132,21 @@ export interface ChatMessageVM {
   conversationTitle?: string | null;
   isEditing?: boolean;
   editText?: string;
+  // ── New analytical/transactional agent UI extensions (P2/P4/P6) ──
+  /** Drill-down chip suggestions emitted via SSE `drill_suggestions`. */
+  drillSuggestions?: PromptOption[];
+  /** Clarification card emitted via SSE `clarification`. */
+  clarification?: ClarificationCard;
+  /** Inline assumption note emitted via SSE `assumption`. */
+  assumption?: AssumptionNote;
+  /** LMS dynamic form payload emitted via SSE `lms_form` (or fetched on demand). */
+  lmsForm?: FormSchema;
+  /** Submission state for the LMS form attached to this message. */
+  lmsFormResult?: { ok: boolean; message: string; request_id?: string };
+  /** Optional structured report rows rendered as a table in chat. */
+  reportRows?: Record<string, unknown>[];
+  reportColumns?: string[];
+  reportSummary?: string;
 }
 
 export type ChatResponse = ChatMessageVM;
@@ -182,7 +198,56 @@ export interface FinalEvent {
   selected_function?: string | null;
 }
 
-export type SSEEvent = ThoughtEvent | ContentEvent | DeepSearchEvent | FinalEvent;
+// ── Additive SSE events for the analytical / transactional agent overhaul ──
+export interface PromptOption {
+  label: string;
+  prompt: string;
+}
+
+export interface AssumptionEvent {
+  type: 'assumption';
+  text: string;
+  alternatives?: PromptOption[];
+}
+
+export interface DrillSuggestionsEvent {
+  type: 'drill_suggestions';
+  suggestions: PromptOption[];
+}
+
+export interface ClarificationEvent {
+  type: 'clarification';
+  question: string;
+  options?: PromptOption[];
+}
+
+export interface LmsFormEvent {
+  type: 'lms_form';
+  form_id: string;
+  title?: string;
+  fields: unknown[];
+  submit_label?: string;
+}
+
+export interface AssumptionNote {
+  text: string;
+  alternatives?: PromptOption[];
+}
+
+export interface ClarificationCard {
+  question: string;
+  options?: PromptOption[];
+}
+
+export type SSEEvent =
+  | ThoughtEvent
+  | ContentEvent
+  | DeepSearchEvent
+  | FinalEvent
+  | AssumptionEvent
+  | DrillSuggestionsEvent
+  | ClarificationEvent
+  | LmsFormEvent;
 
 export interface SuggestiveAction {
   short_title: string;

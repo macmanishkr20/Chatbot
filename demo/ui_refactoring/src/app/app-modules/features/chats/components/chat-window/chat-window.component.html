@@ -28,6 +28,8 @@
             (cancelEdit)="onCancelEdit($event)"
             (submitEdit)="onEdit($event)"
             (suggestiveAction)="onSuggestiveAction($event)"
+            (promptPicked)="onPromptPicked($event)"
+            (lmsFormSubmitted)="onLmsFormSubmitted($event)"
             (more)="onMore($event)"
             [user]="chatStore.authUser()">
         </app-chat-message>

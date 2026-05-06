@@ -32,16 +32,24 @@ _DESCRIPTION = (
 )
 
 
+_EXAMPLE_PROMPTS = (
+    "What is my leave balance?",
+    "Apply for leave from Mar 5 to Mar 8.",
+    "Recommend 3 days off near a long weekend.",
+    "What are the public holidays in Dubai this month?",
+)
+
+
 register_agent(AgentSpec(
     name="lms_agent",
     description=_DESCRIPTION,
     build_subgraph=_build,
-    sample_prompts=(
-        "What is my leave balance?",
-        "Apply for leave from Mar 5 to Mar 8.",
-        "Recommend 3 days off near a long weekend.",
-        "What are the public holidays in Dubai this month?",
-    ),
+    sample_prompts=_EXAMPLE_PROMPTS,
     enabled_by_default=False,
     requires_employee_context=True,
+    display_name="Leave",
+    icon="calendar",
+    category="transactional",
+    example_prompts=_EXAMPLE_PROMPTS,
+    form_actions=("apply_leave", "cancel_leave"),
 ))

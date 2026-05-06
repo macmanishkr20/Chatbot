@@ -90,3 +90,14 @@ class RAGState(TypedDict, total=False):
     plan_type: str | None          # "simple" | "complex"
     sub_queries: list | None       # [{"function": str, "query": str}] from planner
     parallel_results: list | None  # [{"function": str, "events": list}] from parallel search
+
+    # ── Analytical-agent UX overlays (Expense / Scoreboard / LMS) ──
+    # Streamed as additive SSE events from app.py after the final event.
+    # Sub-graphs populate these; the parent supervisor preserves them as
+    # plain dict channels (TypedDict total=False).
+    applied_defaults: list | None
+    drill_suggestions: list | None
+    clarification_needed: dict | None
+    assumption: dict | None
+    lms_form: dict | None
+    telemetry_status: str | None

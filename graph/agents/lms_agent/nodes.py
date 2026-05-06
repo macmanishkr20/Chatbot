@@ -54,15 +54,59 @@ _WRITE_TOOL_NAMES = {t.name for t in WRITE_TOOLS}
 
 # ── enrich_context ──────────────────────────────────────────────────────
 
+_APPLY_LEAVE_RE = re.compile(
+    r"\b(apply|request|book|file|submit)\b.*\b(leave|time off|vacation|holiday)\b",
+    re.IGNORECASE,
+)
+_CANCEL_LEAVE_RE = re.compile(
+    r"\b(cancel|withdraw|delete)\b.*\b(leave|request|application)\b",
+    re.IGNORECASE,
+)
+
+_APPLY_LEAVE_FORM = {
+    "form_id": "apply_leave",
+    "title": "Apply for leave",
+    "fields": [
+        {"name": "leave_type", "label": "Leave type", "type": "select",
+         "options": ["Annual", "Sick", "Personal", "Compassionate"], "required": True},
+        {"name": "start_date", "label": "Start date", "type": "date", "required": True},
+        {"name": "end_date", "label": "End date", "type": "date", "required": True},
+        {"name": "reason", "label": "Reason (optional)", "type": "textarea",
+         "required": False, "max_length": 500},
+    ],
+    "submit_label": "Submit request",
+}
+
+_CANCEL_LEAVE_FORM = {
+    "form_id": "cancel_leave",
+    "title": "Cancel a leave request",
+    "fields": [
+        {"name": "request_id", "label": "Request ID", "type": "text", "required": True},
+    ],
+    "submit_label": "Cancel request",
+}
+
+
 async def enrich_context_node(state: LMSAgentState) -> dict:
     """Stamp identity / locale / today's date so tools have a stable context.
 
     The supervisor passes ``employee_id``, ``office_location``,
     ``manager_id`` etc. through the request envelope. We just normalise
     them and add temporal helpers.
+
+    Also detects "apply leave" / "cancel leave" intents and pre-emits a
+    structured form (P6) so the UI can render it inline.
     """
     now = datetime.now()
     today = now.date()
+
+    user_text = (state.get("user_input") or "").strip()
+    lms_form: dict | None = None
+    if user_text:
+        if _APPLY_LEAVE_RE.search(user_text):
+            lms_form = _APPLY_LEAVE_FORM
+        elif _CANCEL_LEAVE_RE.search(user_text):
+            lms_form = _CANCEL_LEAVE_FORM
 
     return {
         "current_date_iso": today.isoformat(),
@@ -70,6 +114,7 @@ async def enrich_context_node(state: LMSAgentState) -> dict:
         "fiscal_year": derive_fiscal_year(today),
         "tool_trace": state.get("tool_trace") or [],
         "user_confirmed_write": bool(state.get("user_confirmed_write")),
+        "lms_form": lms_form,
     }
 
 

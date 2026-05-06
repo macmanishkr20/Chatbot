@@ -20,6 +20,7 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any, Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,12 +36,23 @@ from graph.state import RAGState
 from langchain_core.messages import RemoveMessage
 from prompts._functions import SEARCH_TO_CHIP
 from models.chat_models import (
+    AgentMetadata,
+    AgentMetadataResponse,
+    ApplyLeavePayload,
+    CancelLeavePayload,
     CancelRequest,
     EditMessageRequest,
     ExportRequest,
     FeedbackRequest,
+    FormField,
+    FormSchema,
+    FormSubmissionResponse,
     RegenerateRequest,
     RenameConversationRequest,
+    ReportBuilderColumn,
+    ReportBuilderSpec,
+    ReportBuildRequest,
+    ReportBuildResponse,
     UserChatQuery,
 )
 from services.export_service import ExportError, run_export
@@ -407,6 +419,30 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
         state_snapshot = await graph.aget_state(config)
         if state_snapshot:
             final_state = state_snapshot.values
+
+            # ── Additive analytical-agent events (P1/P2/P4/P6) ──
+            assumption = final_state.get("assumption")
+            if assumption:
+                yield sse_format({"type": "assumption", **assumption})
+
+            clarification = final_state.get("clarification_needed")
+            if clarification:
+                yield sse_format({
+                    "type": "clarification",
+                    "question": clarification.get("question", ""),
+                    "options": clarification.get("options") or [],
+                })
+
+            drill = final_state.get("drill_suggestions") or []
+            if drill:
+                yield sse_format({
+                    "type": "drill_suggestions",
+                    "suggestions": drill,
+                })
+
+            lms_form = final_state.get("lms_form")
+            if lms_form:
+                yield sse_format({"type": "lms_form", **lms_form})
             logger.info(
                 "Final state: function=%s, functions_found=%s, requires_function_selection=%s",
                 final_state.get("function"),
@@ -1049,6 +1085,244 @@ async def rename_conversation(user_id: str, chat_id: int, body: RenameConversati
     except Exception as e:
         logger.error("rename_conversation failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to rename conversation")
+
+
+# ── Agent metadata (P3 / P5 sidebar + report builder) ──
+
+@app.get("/api/agents/metadata", response_model=AgentMetadataResponse)
+async def get_agent_metadata():
+    """Return UX metadata for every registered agent.
+
+    The frontend uses this to render the agent sidebar, example-prompt
+    chips, the report-builder column picker, and the LMS form actions.
+    """
+    from graph.agents import AgentRegistry
+
+    items: list[AgentMetadata] = []
+    # only_enabled=False — we surface disabled agents too so the UI can
+    # render them as "coming soon" cards and gate them by ``enabled``.
+    for spec in AgentRegistry.list(only_enabled=False):
+        # Resolve enabled flag as the registry does.
+        from graph.agents.base import _flag_enabled
+        enabled = _flag_enabled(spec.name, default=spec.enabled_by_default)
+
+        report_builder: Optional[ReportBuilderSpec] = None
+        if spec.report_builder:
+            try:
+                report_builder = ReportBuilderSpec(
+                    columns=[
+                        ReportBuilderColumn(**c) for c in spec.report_builder.get("columns", [])
+                    ],
+                    aggregations=list(spec.report_builder.get("aggregations") or []),
+                    default_filters=dict(spec.report_builder.get("default_filters") or {}),
+                )
+            except Exception as exc:
+                logger.warning("agent metadata: report_builder build failed for %s: %s", spec.name, exc)
+                report_builder = None
+
+        items.append(AgentMetadata(
+            name=spec.name,
+            display_name=spec.display_name or spec.name,
+            icon=spec.icon or "",
+            description=spec.description,
+            category=spec.category or "knowledge",
+            enabled=enabled,
+            example_prompts=list(spec.example_prompts or spec.sample_prompts or []),
+            report_builder=report_builder,
+            form_actions=list(spec.form_actions or []),
+        ))
+
+    return AgentMetadataResponse(agents=items)
+
+
+# ── LMS form schemas (P6) ──
+
+_LMS_FORM_SCHEMAS: dict[str, FormSchema] = {
+    "apply_leave": FormSchema(
+        action="apply_leave",
+        title="Apply for leave",
+        fields=[
+            FormField(
+                name="leave_type", label="Leave type", type="select",
+                options=["Annual", "Sick", "Personal", "Compassionate"],
+                required=True,
+            ),
+            FormField(name="start_date", label="Start date", type="date", required=True),
+            FormField(name="end_date", label="End date", type="date", required=True),
+            FormField(
+                name="reason", label="Reason (optional)", type="textarea",
+                required=False, max_length=500,
+            ),
+        ],
+        submit_label="Submit request",
+    ),
+    "cancel_leave": FormSchema(
+        action="cancel_leave",
+        title="Cancel a leave request",
+        fields=[
+            FormField(
+                name="request_id", label="Request ID", type="text",
+                required=True, placeholder="e.g. LR-12345",
+            ),
+        ],
+        submit_label="Cancel request",
+    ),
+}
+
+
+@app.get("/api/lms/forms/{action}", response_model=FormSchema)
+async def get_lms_form(action: str):
+    schema = _LMS_FORM_SCHEMAS.get(action)
+    if schema is None:
+        raise HTTPException(status_code=404, detail=f"Unknown LMS form action: {action}")
+    return schema
+
+
+from fastapi import Body
+
+
+@app.post("/api/lms/forms/apply_leave", response_model=FormSubmissionResponse)
+async def submit_apply_leave(payload: ApplyLeavePayload):
+    _validate_user(payload.user_id)
+    from datetime import date as _date
+    from services.lms_client import (
+        LMSError,
+        LMSValidationError,
+        get_lms_client,
+    )
+
+    try:
+        start = _date.fromisoformat(payload.start_date)
+        end = _date.fromisoformat(payload.end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format (use YYYY-MM-DD)")
+    if end < start:
+        raise HTTPException(status_code=400, detail="end_date must be on or after start_date")
+
+    client = get_lms_client()
+    try:
+        result = await client.apply_leave(
+            session_id=payload.chat_session_id or payload.user_id,
+            employee_id=payload.user_id,
+            start_date=start,
+            end_date=end,
+            leave_type=payload.leave_type,
+            reason=payload.reason,
+        )
+    except LMSValidationError as exc:
+        return FormSubmissionResponse(ok=False, message=str(exc))
+    except LMSError as exc:
+        logger.warning("apply_leave failed: %s", exc)
+        return FormSubmissionResponse(
+            ok=False,
+            message="The leave system is temporarily unavailable. Please try again later.",
+        )
+
+    request_id = getattr(result, "request_id", None) or getattr(result, "id", None)
+    return FormSubmissionResponse(
+        ok=True,
+        message=f"Leave request submitted from {start.isoformat()} to {end.isoformat()}.",
+        request_id=str(request_id) if request_id else None,
+    )
+
+
+@app.post("/api/lms/forms/cancel_leave", response_model=FormSubmissionResponse)
+async def submit_cancel_leave(payload: CancelLeavePayload):
+    _validate_user(payload.user_id)
+    from services.lms_client import LMSError, get_lms_client
+    client = get_lms_client()
+    try:
+        await client.cancel_leave(
+            session_id=payload.chat_session_id or payload.user_id,
+            employee_id=payload.user_id,
+            request_id=payload.request_id,
+        )
+    except LMSError as exc:
+        logger.warning("cancel_leave failed: %s", exc)
+        return FormSubmissionResponse(ok=False, message=str(exc))
+    return FormSubmissionResponse(
+        ok=True,
+        message=f"Leave request {payload.request_id} cancelled.",
+        request_id=payload.request_id,
+    )
+
+
+# ── Report builder execution (powers P3 / P5) ──
+
+@app.post("/api/reports/build", response_model=ReportBuildResponse)
+async def build_report(body: ReportBuildRequest):
+    """Run a structured QueryPlan against an analytical agent's table.
+
+    The frontend report builder constructs a ``QueryPlan``-shaped dict
+    interactively and posts it here. We recompile it (with the same RLS
+    predicates the chat path enforces) and return the rows.
+    """
+    _validate_user(body.user_id)
+
+    from services.text_to_predicate import (
+        CompileError,
+        QueryPlan,
+        compile_query_plan,
+    )
+    from services.role_lookup import resolve_employee_id, get_role
+    from services.data_db import DataDB
+
+    if body.agent == "expense_agent":
+        from services.data_schemas import EXPENSE_SCHEMA as _SCHEMA
+    elif body.agent == "scoreboard_agent":
+        from services.data_schemas import SCOREBOARD_SCHEMA as _SCHEMA
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown agent: {body.agent}")
+
+    try:
+        plan = QueryPlan.model_validate(body.plan)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid plan: {exc}")
+
+    resolution = await get_role(body.user_id)
+    security_predicates: list[tuple[str, list]] = []
+    if resolution.scope == "self":
+        emp_id = await resolve_employee_id(body.user_id)
+        if not emp_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Your employee profile is not yet linked. Contact support.",
+            )
+        security_predicates.append(("EmployeeId = ?", [emp_id]))
+
+    try:
+        sql, params = compile_query_plan(
+            plan, _SCHEMA,
+            security_predicates=security_predicates,
+            hard_row_cap=1000,
+        )
+    except CompileError as exc:
+        raise HTTPException(status_code=400, detail=f"Plan failed to compile: {exc}")
+
+    try:
+        db = DataDB()
+        rows = await db.fetchall(sql, params)
+    except Exception as exc:
+        logger.error("build_report: db error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail="Database error")
+
+    # JSON-serialise rows.
+    def _norm(v: Any) -> Any:
+        from decimal import Decimal as _D
+        from datetime import date as _d, datetime as _dt
+        if isinstance(v, _D):
+            return float(v)
+        if isinstance(v, (_d, _dt)):
+            return v.isoformat()
+        return v
+
+    norm_rows = [{k: _norm(v) for k, v in r.items()} for r in rows]
+    return ReportBuildResponse(
+        rows=norm_rows,
+        summary=f"{len(norm_rows)} row(s) returned.",
+        sql=sql,
+        row_count=len(norm_rows),
+    )
 
 
 if __name__ == "__main__":

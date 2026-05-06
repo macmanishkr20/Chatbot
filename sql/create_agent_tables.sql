@@ -111,3 +111,23 @@ CREATE TABLE AgentUserRoles (
     Role    NVARCHAR(20) NOT NULL DEFAULT 'user',
     CONSTRAINT UQ_AgentUserRoles_UserId UNIQUE(UserId)
 );
+
+-- ── QueryTelemetry ──
+-- Per-query audit log for analytical agents (Expense, Scoreboard).
+-- Used for offline analysis: planner failure rates, confidence
+-- distribution, common error categories, latency outliers.
+IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='QueryTelemetry' AND xtype='U')
+CREATE TABLE QueryTelemetry (
+    Id                BIGINT IDENTITY(1,1) PRIMARY KEY,
+    UserId            NVARCHAR(200) NULL,
+    AgentName         NVARCHAR(50)  NULL,
+    UserPrompt        NVARCHAR(MAX) NULL,
+    QueryPlanJson     NVARCHAR(MAX) NULL,
+    ConfidenceScore   FLOAT         NULL,
+    ExecutedSql       NVARCHAR(MAX) NULL,
+    RowCountReturned  INT           NULL,
+    LatencyMs         INT           NULL,
+    Status            NVARCHAR(30)  NULL,  -- 'success' | 'no_results' | 'planner_error' | 'sql_error' | 'clarified'
+    CreatedAt         DATETIME2     NOT NULL DEFAULT SYSUTCDATETIME(),
+    ErrorMessage      NVARCHAR(MAX) NULL
+);

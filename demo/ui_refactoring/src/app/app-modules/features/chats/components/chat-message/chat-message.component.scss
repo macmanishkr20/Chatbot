@@ -367,3 +367,75 @@
 	font-size: 0.7rem;
 	margin: 0 1px;
 }
+// ── Assumption inline note ──
+.assumption-note {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-top: 6px;
+	font-size: 0.75rem;
+	color: rgba(255, 255, 255, 0.65);
+
+	i { color: #4696ff; }
+}
+
+.assumption-alts { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+
+.assumption-chip {
+	background: transparent;
+	border: 1px solid rgba(70, 150, 255, 0.4);
+	border-radius: 999px;
+	color: #fff;
+	padding: 2px 8px;
+	font-size: 0.7rem;
+	cursor: pointer;
+
+	&:hover { background: rgba(70, 150, 255, 0.15); }
+}
+
+// ── Report rows table ──
+.report-table-wrap {
+	margin-top: 10px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	background: rgba(255, 255, 255, 0.02);
+	padding: 10px 12px;
+	max-width: 100%;
+}
+
+.report-summary {
+	font-size: 0.8rem;
+	color: rgba(255, 255, 255, 0.75);
+	margin-bottom: 6px;
+}
+
+.report-table-scroll {
+	overflow-x: auto;
+}
+
+.report-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.75rem;
+	color: #fff;
+
+	th, td {
+		padding: 6px 10px;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		text-align: left;
+		white-space: nowrap;
+	}
+
+	th {
+		color: rgba(255, 255, 255, 0.6);
+		font-weight: 600;
+		text-transform: uppercase;
+		letter-spacing: 0.04em;
+		font-size: 0.7rem;
+	}
+
+	tbody tr:hover {
+		background: rgba(255, 230, 0, 0.05);
+	}
+}

@@ -13,6 +13,7 @@ agent.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import date, datetime
@@ -24,6 +25,7 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from config import AZURE_OPENAI_KEY
 from graph.agents.scoreboard_agent.state import ScoreboardAgentState
+from helpers.fiscal import derive_fiscal_year
 from prompts.data_synthesize import (
     DATA_SYNTHESIZE_SYSTEM_PROMPT,
     synthesize_user_template,
@@ -34,16 +36,45 @@ from prompts.predicate_planner import (
     planner_user_template,
 )
 from services.data_db import DataDB
-from services.data_schemas import SCOREBOARD_SCHEMA
+from services.data_schemas import SCOREBOARD_SCHEMA, render_column_enums
+from services.drill_suggestions import build_suggestions
 from services.openai_client import get_llm_model
+from services.query_telemetry import QueryTelemetryRecord, log_query
 from services.role_lookup import get_role, resolve_employee_id
 from services.telemetry import get_tracer_span
 from services.text_to_predicate import (
     CompileError,
+    FilterClause,
     QueryPlan,
     compile_query_plan,
     explain_query_plan,
 )
+
+
+_CONFIDENCE_THRESHOLD = 0.6
+
+
+def _has_period_or_date_filter(plan: QueryPlan) -> bool:
+    for f in plan.filters:
+        col = (f.column or "").lower()
+        if col == "period" or col == "reportdate":
+            return True
+        if f.fy_label or f.fq_label:
+            return True
+    return False
+
+
+def _inject_current_fy_default(plan: QueryPlan) -> tuple[QueryPlan, list[str]]:
+    """Inject Period LIKE 'FY26%' filter when no period/date filter present."""
+    if _has_period_or_date_filter(plan):
+        return plan, []
+    fy_label = derive_fiscal_year(date.today())
+    plan.filters.append(FilterClause(
+        column="Period",
+        op="like",
+        value=f"{fy_label}%",
+    ))
+    return plan, [f"current_fy={fy_label}"]
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +198,7 @@ async def understand_query_node(state: ScoreboardAgentState) -> dict:
             current_date=now.strftime("%Y-%m-%d"),
             current_date_readable=now.strftime("%A, %B %d, %Y"),
             schema_description=SCOREBOARD_SCHEMA.render_for_prompt(),
+            column_enums=render_column_enums(SCOREBOARD_SCHEMA.enums or {}),
             examples=SCOREBOARD_EXAMPLES,
         )
         # Escape literal braces from examples/schema so ChatPromptTemplate
@@ -183,17 +215,56 @@ async def understand_query_node(state: ScoreboardAgentState) -> dict:
             )
         except Exception as exc:
             logger.warning("scoreboard.understand_query: planner failed: %s", exc, exc_info=True)
+            try:
+                asyncio.create_task(log_query(QueryTelemetryRecord(
+                    user_id=state.get("user_id"),
+                    agent_name="scoreboard_agent",
+                    user_prompt=user_input,
+                    status="planner_error",
+                    error_message=f"{type(exc).__name__}: {exc}",
+                )))
+            except Exception:
+                pass
             return {
                 "query_plan": None,
                 "error_info": {
                     "error_code": "PLANNER_FAILED",
                     "text": "I couldn't understand that as a scoreboard query — try rephrasing.",
                 },
+                "telemetry_status": "planner_error",
+            }
+
+        applied_defaults: list[str] = []
+        clarification_needed: dict | None = None
+        if (plan.confidence or 1.0) < _CONFIDENCE_THRESHOLD:
+            clarification_needed = {
+                "question": plan.clarification_question
+                or "I'm not sure I understood — could you rephrase or pick one?",
+                "options": list(plan.clarification_options or []),
+            }
+        else:
+            plan, applied_defaults = _inject_current_fy_default(plan)
+
+        assumption: dict | None = None
+        if applied_defaults:
+            assumption = {
+                "text": (
+                    f"Assumed {applied_defaults[0].split('=', 1)[-1]} — change?"
+                    if "=" in applied_defaults[0]
+                    else f"Applied default: {applied_defaults[0]}"
+                ),
+                "alternatives": [
+                    {"label": "FY25", "prompt": "Show this for FY25 instead."},
+                    {"label": "Latest period", "prompt": "Show the latest period only."},
+                ],
             }
 
         return {
             "query_plan": plan.model_dump(),
             "plan_explanation": explain_query_plan(plan, SCOREBOARD_SCHEMA),
+            "applied_defaults": applied_defaults,
+            "clarification_needed": clarification_needed,
+            "assumption": assumption,
         }
 
 
@@ -293,6 +364,63 @@ async def synthesize_node(state: ScoreboardAgentState) -> dict:
         plan_explanation = state.get("plan_explanation") or ""
         aggregate_value = state.get("aggregate_value")
         error_info = state.get("error_info") or None
+        clarification = state.get("clarification_needed")
+
+        if clarification:
+            question = clarification.get("question") or "Could you clarify?"
+            text = f"I'd like to make sure I answer the right thing. {question}"
+            try:
+                asyncio.create_task(log_query(QueryTelemetryRecord(
+                    user_id=state.get("user_id"),
+                    agent_name="scoreboard_agent",
+                    user_prompt=user_input,
+                    query_plan=state.get("query_plan"),
+                    confidence_score=(state.get("query_plan") or {}).get("confidence"),
+                    status="clarified",
+                )))
+            except Exception:
+                pass
+            return {
+                "messages": [AIMessage(content=text)],
+                "ai_content": text,
+                "is_free_form": True,
+                "telemetry_status": "clarified",
+            }
+
+        drill_suggestions: list[dict] = []
+        plan_dict = state.get("query_plan")
+        if plan_dict and not error_info:
+            try:
+                plan_obj = QueryPlan.model_validate(plan_dict)
+                drill_suggestions = build_suggestions(
+                    plan_obj, SCOREBOARD_SCHEMA, user_input=user_input,
+                )
+            except Exception:  # pragma: no cover
+                drill_suggestions = []
+
+        if error_info and not rows:
+            terminal_status = "sql_error" if error_info.get("error_code") in {
+                "DB_ERROR", "COMPILE_FAILED", "INVALID_PLAN", "RLS_NOT_LINKED",
+            } else "planner_error"
+        elif not rows:
+            terminal_status = "no_results"
+        else:
+            terminal_status = "success"
+
+        try:
+            asyncio.create_task(log_query(QueryTelemetryRecord(
+                user_id=state.get("user_id"),
+                agent_name="scoreboard_agent",
+                user_prompt=user_input,
+                query_plan=state.get("query_plan"),
+                confidence_score=(state.get("query_plan") or {}).get("confidence"),
+                executed_sql=state.get("query_sql"),
+                row_count=state.get("row_count"),
+                status=terminal_status,
+                error_message=(error_info or {}).get("text"),
+            )))
+        except Exception:
+            pass
 
         if error_info and not rows:
             text = error_info.get("text", "Sorry, I couldn't run that query.")
@@ -300,6 +428,8 @@ async def synthesize_node(state: ScoreboardAgentState) -> dict:
                 "messages": [AIMessage(content=text)],
                 "ai_content": text,
                 "is_free_form": True,
+                "drill_suggestions": drill_suggestions,
+                "telemetry_status": terminal_status,
             }
 
         rows_json = json.dumps(rows[:50], default=str, indent=2)
@@ -330,4 +460,6 @@ async def synthesize_node(state: ScoreboardAgentState) -> dict:
             "messages": [AIMessage(content=content)],
             "ai_content": content,
             "is_free_form": True,
+            "drill_suggestions": drill_suggestions,
+            "telemetry_status": terminal_status,
         }

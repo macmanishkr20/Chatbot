@@ -44,9 +44,19 @@ def build_expense_subgraph(store=None, checkpointer=None):
     g.add_node("persist", persist_node)
     g.add_node("save_memory", save_memory_node)
 
+    def _route_after_understand(state: ExpenseAgentState) -> str:
+        # Skip SQL execution when planner asked for clarification.
+        if state.get("clarification_needed"):
+            return "synthesize"
+        return "execute_query"
+
     g.add_edge(START, "resolve_role")
     g.add_edge("resolve_role", "understand_query")
-    g.add_edge("understand_query", "execute_query")
+    g.add_conditional_edges(
+        "understand_query",
+        _route_after_understand,
+        {"execute_query": "execute_query", "synthesize": "synthesize"},
+    )
     g.add_edge("execute_query", "synthesize")
     g.add_edge("synthesize", "persist")
     g.add_edge("persist", "save_memory")

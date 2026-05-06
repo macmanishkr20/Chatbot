@@ -58,6 +58,14 @@ class AgentSpec:
     enabled_by_default: bool = True
     requires_employee_context: bool = False
 
+    # ── UX metadata (consumed by GET /api/agents/metadata) ──
+    display_name: str = ""
+    icon: str = ""
+    category: str = "knowledge"  # 'analytical' | 'transactional' | 'knowledge'
+    example_prompts: tuple[str, ...] = field(default_factory=tuple)
+    report_builder: dict = field(default_factory=dict)
+    form_actions: tuple[str, ...] = field(default_factory=tuple)
+
     def __post_init__(self) -> None:
         if not self.name or not self.name.replace("_", "").isalnum() or not self.name[0].isalpha():
             raise ValueError(
@@ -69,6 +77,26 @@ class AgentSpec:
             raise ValueError("AgentSpec.description must not be empty")
         if not callable(self.build_subgraph):
             raise ValueError("AgentSpec.build_subgraph must be callable")
+
+
+def schema_columns_to_report_builder(table_schema: Any) -> list[dict]:
+    """Convert a TableSchema's columns into the AgentMetadata report-builder
+    column shape consumed by the frontend report wizard.
+
+    Imported lazily by callers so importing ``base`` stays cheap.
+    """
+    out: list[dict] = []
+    for c in getattr(table_schema, "columns", ()) or ():
+        out.append({
+            "name": c.name,
+            "label": c.name,
+            "type": c.py_type,
+            "groupable": bool(c.groupable),
+            "filterable": bool(c.filterable),
+            "aggregatable": bool(c.aggregatable),
+            "values": list(c.sample_values) if c.sample_values else None,
+        })
+    return out
 
 
 def _flag_enabled(agent_name: str, default: bool) -> bool:

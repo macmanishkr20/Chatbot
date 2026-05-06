@@ -9,6 +9,7 @@ import { SidebarCodes, SidebarNames } from '../../../../../_shared/constants/sid
 import { NavItem } from '../../models/chat.model';
 import { SvgIconComponent } from '../../../../../_shared/components/svg-icon/svg-icon.component';
 import { ConversationsVM } from '../../models/conversation';
+import { ModuleLauncherComponent } from '../module-launcher/module-launcher.component';
 
 
 @Component({
@@ -19,7 +20,8 @@ import { ConversationsVM } from '../../models/conversation';
     NgbDropdownModule,
     RouterLink,
     RouterOutlet,
-    SvgIconComponent
+    SvgIconComponent,
+    ModuleLauncherComponent,
   ],
   templateUrl: './chat-sidebar.component.html',
   styleUrls: ['./chat-sidebar.component.scss'],

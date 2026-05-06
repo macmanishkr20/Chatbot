@@ -35,3 +35,8 @@ class LMSAgentState(RAGState, total=False):
 
     # ── Tool trace (for the synthesize step + UI thinking panel) ──
     tool_trace: list[dict[str, Any]]
+
+    # ── Form emission (P6) — when set, app.py emits an `lms_form` SSE
+    # event so the frontend renders an inline form instead of waiting on
+    # multi-turn natural-language collection.
+    lms_form: Optional[dict]

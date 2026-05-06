@@ -10,34 +10,49 @@
 
                 <span class="welcome-subtitle d-block mt-3">Have a specific topic in mind, Let me know so that I can support you better</span>
 
-                <div class="prompt-cards mt-3">
-                    @for(prompt of (homePrompts || []); track prompt.id) {
-                    <div class="card prompt-card" (click)="onSelectHomePrompt(prompt)">
-                        <div class="card-header">
-                            <span class="prompt-icon-wrap">
-                                <span class="prompt-icon prompt-icon--outline">
-                                    <app-svg-icon name="home-prompt-outline" cssClass="d-inline-block align-top"
-                                        ariaLabel="Home Prompt Outline"></app-svg-icon>
-                                </span>
-                                <span class="prompt-icon prompt-icon--filled">
-                                    <app-svg-icon name="home-prompt-filled" cssClass="d-inline-block align-top"
-                                        ariaLabel="Home Prompt Filled"></app-svg-icon>
-                                </span>
-                            </span>
-                        </div>
-                        <div class="card-body">
-                            <p class="card-text">{{prompt.prompt}}</p>
-                            <span>{{prompt.serviceName}}</span>
-                        </div>
+                <!-- Module-aware onboarding card / generic empty-state -->
+                @if (selectedAgent() || availableAgents().length > 0) {
+                    <div class="mt-3">
+                        <app-onboarding-card
+                            [agent]="selectedAgent()"
+                            [agents]="availableAgents()"
+                            (promptPicked)="onOnboardingPrompt($event)"
+                            (formAction)="onFormAction($event)"
+                            (buildReport)="onOpenReportBuilder()"
+                            (agentPicked)="onAgentTile($event)" />
                     </div>
-                    }
-                </div>
+                }
+
+                @if (!selectedAgent()) {
+                    <div class="prompt-cards mt-3">
+                        @for(prompt of (homePrompts || []); track prompt.id) {
+                        <div class="card prompt-card" (click)="onSelectHomePrompt(prompt)">
+                            <div class="card-header">
+                                <span class="prompt-icon-wrap">
+                                    <span class="prompt-icon prompt-icon--outline">
+                                        <app-svg-icon name="home-prompt-outline" cssClass="d-inline-block align-top"
+                                            ariaLabel="Home Prompt Outline"></app-svg-icon>
+                                    </span>
+                                    <span class="prompt-icon prompt-icon--filled">
+                                        <app-svg-icon name="home-prompt-filled" cssClass="d-inline-block align-top"
+                                            ariaLabel="Home Prompt Filled"></app-svg-icon>
+                                    </span>
+                                </span>
+                            </div>
+                            <div class="card-body">
+                                <p class="card-text">{{prompt.prompt}}</p>
+                                <span>{{prompt.serviceName}}</span>
+                            </div>
+                        </div>
+                        }
+                    </div>
+                }
             </div>
         </div>
         } @else {
         <app-chat-header></app-chat-header>
         }
-       
+
         <div class="chat-window" [class.d-none]="!chatStore.selectedConversationId() && !chatStore.messages()?.length">
             <router-outlet></router-outlet>
         </div>
@@ -47,4 +62,15 @@
                 [disabled]="chatStore.loading()"></app-chat-input>
         </div>
     </div>
+
+    <!-- Right-side "Build a report" slide-in panel -->
+    @if (selectedAgent(); as agent) {
+        @if (agent.report_builder) {
+            <app-report-builder-panel
+                [agent]="agent"
+                [open]="reportPanelOpen()"
+                (closed)="closeReportPanel()"
+                (built)="onReportBuilt($event)" />
+        }
+    }
 </div>

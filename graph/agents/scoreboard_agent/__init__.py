@@ -8,7 +8,11 @@ employee → self only; manager → team; HR/admin → all.
 """
 from __future__ import annotations
 
-from graph.agents.base import AgentSpec, register_agent
+from graph.agents.base import (
+    AgentSpec,
+    register_agent,
+    schema_columns_to_report_builder,
+)
 
 
 def _build(store=None, checkpointer=None):
@@ -32,18 +36,35 @@ _DESCRIPTION = (
 )
 
 
+def _scoreboard_report_builder() -> dict:
+    from services.data_schemas import SCOREBOARD_SCHEMA
+    return {
+        "columns": schema_columns_to_report_builder(SCOREBOARD_SCHEMA),
+        "aggregations": ["sum", "avg", "count", "min", "max"],
+        "default_filters": {"period": "current_fy"},
+    }
+
+
+_EXAMPLE_PROMPTS = (
+    "Show me the scoreboard in FY26.",
+    "Which employee has the highest ANSR?",
+    "What is my GTER plan attainment in FY26 P9?",
+    "Top 5 employees by utilization this quarter.",
+    "Compare my GlobalMargin across the last 3 periods.",
+    "Who has the most aged NUI above 365 days?",
+)
+
+
 register_agent(AgentSpec(
     name="scoreboard_agent",
     description=_DESCRIPTION,
     build_subgraph=_build,
-    sample_prompts=(
-        "Show me the scoreboard in FY26.",
-        "Which employee has the highest ANSR?",
-        "What is my GTER plan attainment in FY26 P9?",
-        "Top 5 employees by utilization this quarter.",
-        "Compare my GlobalMargin across the last 3 periods.",
-        "Who has the most aged NUI above 365 days?",
-    ),
+    sample_prompts=_EXAMPLE_PROMPTS,
     enabled_by_default=False,
     requires_employee_context=True,
+    display_name="Scoreboard",
+    icon="chart-bar",
+    category="analytical",
+    example_prompts=_EXAMPLE_PROMPTS,
+    report_builder=_scoreboard_report_builder(),
 ))

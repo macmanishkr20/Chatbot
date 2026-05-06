@@ -154,6 +154,74 @@
                     [actions]="message.suggestiveActions"
                     (actionClicked)="onSuggestiveAction($event)" />
             }
+
+            <!-- Inline assumption note (italic, with alternatives) -->
+            @if (!isUser() && message.assumption) {
+                <div class="assumption-note">
+                    <i class="bi bi-info-circle"></i>
+                    <em>{{ message.assumption.text }}</em>
+                    @if (message.assumption.alternatives && message.assumption.alternatives.length > 0) {
+                        <span class="assumption-alts">
+                            @for (alt of message.assumption.alternatives; track alt.prompt) {
+                                <button type="button" class="assumption-chip" (click)="onPromptPicked(alt)">
+                                    {{ alt.label }}
+                                </button>
+                            }
+                        </span>
+                    }
+                </div>
+            }
+
+            <!-- Drill suggestions chip strip -->
+            @if (!isUser() && message.drillSuggestions && message.drillSuggestions.length > 0) {
+                <app-drill-chips
+                    [suggestions]="message.drillSuggestions"
+                    (picked)="onPromptPicked($event)" />
+            }
+
+            <!-- Clarification card -->
+            @if (!isUser() && message.clarification) {
+                <app-clarification-card
+                    [card]="message.clarification"
+                    (picked)="onPromptPicked($event)" />
+            }
+
+            <!-- LMS dynamic form -->
+            @if (!isUser() && message.lmsForm) {
+                <app-lms-form-card
+                    [schema]="message.lmsForm"
+                    [result]="message.lmsFormResult"
+                    (submitted)="onLmsFormSubmitted($event)" />
+            }
+
+            <!-- Structured report rows table -->
+            @if (!isUser() && message.reportRows && message.reportRows.length > 0) {
+                <div class="report-table-wrap">
+                    @if (message.reportSummary) {
+                        <div class="report-summary">{{ message.reportSummary }}</div>
+                    }
+                    <div class="report-table-scroll">
+                        <table class="report-table">
+                            <thead>
+                                <tr>
+                                    @for (col of reportColumns; track col) {
+                                        <th>{{ col }}</th>
+                                    }
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @for (row of message.reportRows; track $index) {
+                                    <tr>
+                                        @for (col of reportColumns; track col) {
+                                            <td>{{ row[col] }}</td>
+                                        }
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            }
             }
 
             <!-- Feedback popup template (opened via NgbModal) -->

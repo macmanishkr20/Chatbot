@@ -1,0 +1,53 @@
+@if (agent(); as a) {
+  <div class="onboarding-card">
+    <div class="ob-header">
+      <span class="ob-icon"><i class="bi" [ngClass]="'bi-' + (a.icon || 'app')"></i></span>
+      <div class="ob-title-block">
+        <h5 class="ob-title">{{ a.display_name }}</h5>
+        <p class="ob-desc">{{ a.description }}</p>
+      </div>
+    </div>
+
+    @if (previewPrompts().length > 0) {
+      <div class="ob-section">
+        <div class="ob-section-label">Try asking</div>
+        <div class="ob-chips">
+          @for (p of previewPrompts(); track p) {
+            <button type="button" class="ob-chip" (click)="onChip(p)">
+              <i class="bi bi-chat-dots"></i>
+              <span>{{ p }}</span>
+            </button>
+          }
+        </div>
+      </div>
+    }
+
+    <div class="ob-actions">
+      @if (a.category === 'analytical' && a.report_builder) {
+        <button type="button" class="ob-btn ob-btn-primary" (click)="onBuildReport()">
+          <i class="bi bi-sliders"></i> Build a report
+        </button>
+      }
+      @if (a.category === 'transactional' && a.form_actions && a.form_actions.length > 0) {
+        @for (fa of a.form_actions; track fa.name) {
+          <button type="button" class="ob-btn" (click)="onFormAction(fa)">
+            <i class="bi bi-clipboard-plus"></i> {{ fa.label }}
+          </button>
+        }
+      }
+    </div>
+  </div>
+} @else if (agents().length > 0) {
+  <div class="onboarding-empty">
+    <div class="oe-title">Pick a workspace to get started</div>
+    <div class="oe-tiles">
+      @for (a of (agents() | slice:0:4); track a.name) {
+        <button type="button" class="oe-tile" (click)="onAgentTile(a)" [attr.title]="a.description">
+          <span class="oe-tile-icon"><i class="bi" [ngClass]="'bi-' + (a.icon || 'app')"></i></span>
+          <span class="oe-tile-name">{{ a.display_name }}</span>
+          <span class="oe-tile-desc">{{ a.description }}</span>
+        </button>
+      }
+    </div>
+  </div>
+}

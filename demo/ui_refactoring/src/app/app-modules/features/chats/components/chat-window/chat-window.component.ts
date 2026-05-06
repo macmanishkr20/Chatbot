@@ -1,6 +1,7 @@
 import { Component, computed, effect, inject, OnInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { ChatMessageComponent } from '../chat-message/chat-message.component';
-import { ChatResponse, SuggestiveAction } from '../../models/chat.model';
+import { ChatResponse, PromptOption, SuggestiveAction } from '../../models/chat.model';
+import { FormSubmitResult } from '../../models/agent-metadata.model';
 import { ChatStore } from '../../services/chat.store';
 import { CommonModule } from '@angular/common';
 import { FeedbackRating } from '../../../../../_shared/constants/feedback-rating';
@@ -206,6 +207,16 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
   /** Wire suggestive-action click → resend the question text. */
   onSuggestiveAction(action: SuggestiveAction): void {
     void this.chatStore.sendMessage(action.short_title);
+  }
+
+  /** Drill / clarification / assumption chip → submit the prompt. */
+  onPromptPicked(opt: PromptOption): void {
+    void this.chatStore.sendMessage(opt.prompt);
+  }
+
+  /** LMS form submission outcome from a chat message. */
+  onLmsFormSubmitted(payload: { message: ChatResponse, result: FormSubmitResult }): void {
+    this.chatStore.setLmsFormResult(payload.message.messageId, payload.result);
   }
 
   /** Wire regenerate button → ChatStore.regenerate(). */

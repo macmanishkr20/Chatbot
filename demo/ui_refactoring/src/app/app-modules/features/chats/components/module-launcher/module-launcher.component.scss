@@ -1,0 +1,50 @@
+.module-launcher {
+  padding: 4px 6px 8px;
+}
+
+.ml-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+  padding: 6px 8px 4px;
+}
+
+.ml-list {
+  margin-top: 4px;
+}
+
+.ml-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+
+  &:hover {
+    background: rgba(255, 230, 0, 0.08);
+    color: #fff;
+  }
+
+  .ml-icon {
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #ffe600;
+    flex-shrink: 0;
+  }
+
+  .ml-name {
+    flex: 1;
+    min-width: 0;
+  }
+}

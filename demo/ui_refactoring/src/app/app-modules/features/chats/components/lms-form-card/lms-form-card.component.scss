@@ -1,0 +1,115 @@
+.lms-form-card {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 230, 0, 0.35);
+  background: rgba(255, 255, 255, 0.04);
+  max-width: 520px;
+}
+
+.lf-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #fff;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+
+  i {
+    color: #ffe600;
+  }
+}
+
+.lf-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+
+  &.lf-missing .lf-input,
+  &.lf-missing .lf-toggle {
+    border-color: #ff6b6b !important;
+  }
+}
+
+.lf-label {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.lf-required {
+  color: #ff6b6b;
+  margin-left: 2px;
+}
+
+.lf-input {
+  background: rgba(0, 0, 0, 0.25);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 0.85rem;
+  width: 100%;
+
+  &:focus {
+    outline: none;
+    border-color: rgba(255, 230, 0, 0.7);
+  }
+}
+
+.lf-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 0.85rem;
+}
+
+.lf-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+.lf-submit {
+  background: #ffe600;
+  color: #000;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.lf-error {
+  color: #ff6b6b;
+  font-size: 0.75rem;
+  margin: 6px 0;
+}
+
+.lf-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+
+  &.lf-ok {
+    background: rgba(40, 200, 110, 0.12);
+    color: #c7ffd9;
+    i { color: #28c86e; }
+  }
+
+  &.lf-err {
+    background: rgba(255, 107, 107, 0.15);
+    color: #ffd3d3;
+    i { color: #ff6b6b; }
+  }
+}

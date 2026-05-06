@@ -2,8 +2,9 @@ import { CommonModule } from '@angular/common';
 import { Component, EventEmitter, inject, Input, OnInit, Output, signal, TemplateRef, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgbModal, NgbModalOptions } from '@ng-bootstrap/ng-bootstrap';
-import { ChatResponse, Citation, SuggestiveAction } from '../../models/chat.model';
+import { ChatResponse, Citation, PromptOption, SuggestiveAction } from '../../models/chat.model';
 import { Role } from '../../models/chat.model';
+import { FormSubmitResult } from '../../models/agent-metadata.model';
 import { AuthUser } from '../../../../../_shared/messaging-service/auth-user';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import { MessageFeedbackFormComponent } from '../message-feedback-form/message-feedback-form.component';
@@ -14,6 +15,9 @@ import { SvgIconComponent } from '../../../../../_shared/components/svg-icon/svg
 import { ThinkingPanelComponent } from '../thinking-panel/thinking-panel.component';
 import { DeepSearchPanelComponent } from '../deep-search-panel/deep-search-panel.component';
 import { SuggestiveActionsComponent } from '../suggestive-actions/suggestive-actions.component';
+import { DrillChipsComponent } from '../drill-chips/drill-chips.component';
+import { ClarificationCardComponent } from '../clarification-card/clarification-card.component';
+import { LmsFormCardComponent } from '../lms-form-card/lms-form-card.component';
 
 @Component({
   selector: 'app-chat-message',
@@ -26,6 +30,9 @@ import { SuggestiveActionsComponent } from '../suggestive-actions/suggestive-act
     ThinkingPanelComponent,
     DeepSearchPanelComponent,
     SuggestiveActionsComponent,
+    DrillChipsComponent,
+    ClarificationCardComponent,
+    LmsFormCardComponent,
   ],
   templateUrl: './chat-message.component.html',
   styleUrl: './chat-message.component.scss',
@@ -59,6 +66,10 @@ export class ChatMessageComponent implements OnInit {
   @Output() submitEdit = new EventEmitter<{ message: ChatResponse, newText: string }>();
   /** Suggestive action click. */
   @Output() suggestiveAction = new EventEmitter<SuggestiveAction>();
+  /** Drill / clarification / assumption chip pick — emit the chosen prompt. */
+  @Output() promptPicked = new EventEmitter<PromptOption>();
+  /** LMS form submission result. */
+  @Output() lmsFormSubmitted = new EventEmitter<{ message: ChatResponse, result: FormSubmitResult }>();
 
   userImage: SafeUrl | string = '';
   private readonly sanitizer = inject(DomSanitizer);
@@ -230,6 +241,22 @@ export class ChatMessageComponent implements OnInit {
 
   onSuggestiveAction(action: SuggestiveAction) {
     this.suggestiveAction.emit(action);
+  }
+
+  onPromptPicked(opt: PromptOption) {
+    this.promptPicked.emit(opt);
+  }
+
+  onLmsFormSubmitted(result: FormSubmitResult) {
+    this.lmsFormSubmitted.emit({ message: this.message, result });
+  }
+
+  /** Columns to render for the report rows table. */
+  get reportColumns(): string[] {
+    if (this.message.reportColumns?.length) return this.message.reportColumns;
+    const rows = this.message.reportRows ?? [];
+    if (rows.length === 0) return [];
+    return Object.keys(rows[0] ?? {});
   }
 
   onMore(m: ChatResponse) {

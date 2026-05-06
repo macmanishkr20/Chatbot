@@ -6,15 +6,20 @@ import { AuthUser } from '../../../../_shared/messaging-service/auth-user';
 import { FeedbackRating } from '../../../../_shared/constants/feedback-rating';
 import { ChatService } from './chat.service';
 import {
+  AssumptionEvent,
   ChatResponse,
   Citation,
+  ClarificationEvent,
   DeepSearchEvent,
+  DrillSuggestionsEvent,
   FinalEvent,
+  LmsFormEvent,
   SSEEvent,
   SuggestiveAction,
   StoredConversation,
   ThinkingStep,
 } from '../models/chat.model';
+import { FormField, FormSchema } from '../models/agent-metadata.model';
 import { ConversationsVM } from './../models/conversation';
 import { ChannelType } from '../../../../_shared/constants/channel-type';
 import { FeedbackDTO, FeedbackResultVM } from '../models/message-feedabck';
@@ -75,6 +80,10 @@ export class ChatStore {
   /** Currently selected MENA function chip (e.g. 'AWS', 'Talent'). */
   readonly selectedFunction = signal<string | null>(null);
 
+  /** Currently selected analytical / transactional agent module
+   *  (e.g. 'lms_agent', 'expense_agent'). Drives the onboarding card. */
+  readonly selectedAgent = signal<string | null>(null);
+
   /** Glow / shimmer the function chips below the input. */
   readonly chipsHighlighted = signal(false);
 
@@ -133,6 +142,63 @@ export class ChatStore {
     this.chipsHighlighted.set(true);
     this.functionPromptReason.set(null);
     this.pendingResendQuery = null;
+    this.selectedAgent.set(null);
+  }
+
+  /** Seed a fresh chat with a module/agent context (e.g. clicking a launcher). */
+  startChatForAgent(agentName: string | null): void {
+    this.newChat();
+    this.selectedAgent.set(agentName);
+    this.router.navigate(['/features/page/chats']);
+  }
+
+  /** Append a synthetic assistant message — used by the report builder so
+   *  the rows table appears inline as if it had streamed back. */
+  appendSyntheticAssistantMessage(payload: {
+    content: string;
+    reportRows?: Record<string, unknown>[];
+    reportColumns?: string[];
+    reportSummary?: string;
+  }): void {
+    const msg: ChatResponse = {
+      id: 0,
+      messageId: this.generateId(),
+      trackId: `assistant_synth_t${++this.trackCounter}`,
+      role: 'Assistant',
+      conversationId: this.selectedConversationId() ?? 0,
+      chatSessionId: this.selectedSessionId() ?? '',
+      answer: payload.content,
+      content: payload.content,
+      timestamp: new Date(),
+      reportRows: payload.reportRows,
+      reportColumns: payload.reportColumns,
+      reportSummary: payload.reportSummary,
+    };
+    this.messages.update((msgs) => [...msgs, msg]);
+  }
+
+  /** Append a synthetic assistant message that owns an LMS form. */
+  appendLmsFormMessage(form: FormSchema): void {
+    const msg: ChatResponse = {
+      id: 0,
+      messageId: this.generateId(),
+      trackId: `assistant_lms_t${++this.trackCounter}`,
+      role: 'Assistant',
+      conversationId: this.selectedConversationId() ?? 0,
+      chatSessionId: this.selectedSessionId() ?? '',
+      answer: form.title || `Please complete: ${form.action}`,
+      content: form.title || `Please complete: ${form.action}`,
+      timestamp: new Date(),
+      lmsForm: form,
+    };
+    this.messages.update((msgs) => [...msgs, msg]);
+  }
+
+  /** Record submission outcome for an LMS form attached to a message. */
+  setLmsFormResult(messageId: string, result: { ok: boolean; message: string; request_id?: string }): void {
+    this.messages.update((msgs) =>
+      msgs.map((m) => (m.messageId === messageId ? { ...m, lmsFormResult: result } : m)),
+    );
   }
 
   /** Reset state when entering a fresh chat URL (matches legacy method name used by chat-window). */
@@ -639,6 +705,56 @@ export class ChatStore {
             const steps = [...(m.deepSearchSteps ?? []), dsEvent.content];
             return { ...m, deepSearchSteps: steps, deepSearchCollapsed: false };
           }),
+        );
+        break;
+      }
+
+      case 'assumption': {
+        const ev = event as AssumptionEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.trackId === assistantTrackId
+              ? { ...m, assumption: { text: ev.text, alternatives: ev.alternatives } }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'drill_suggestions': {
+        const ev = event as DrillSuggestionsEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.trackId === assistantTrackId
+              ? { ...m, drillSuggestions: ev.suggestions ?? [] }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'clarification': {
+        const ev = event as ClarificationEvent;
+        this.messages.update(msgs =>
+          msgs.map(m =>
+            m.trackId === assistantTrackId
+              ? { ...m, clarification: { question: ev.question, options: ev.options } }
+              : m,
+          ),
+        );
+        break;
+      }
+
+      case 'lms_form': {
+        const ev = event as LmsFormEvent;
+        const schema: FormSchema = {
+          action: ev.form_id,
+          title: ev.title ?? ev.form_id,
+          fields: (ev.fields ?? []) as FormField[],
+          submit_label: ev.submit_label ?? 'Submit',
+        };
+        this.messages.update(msgs =>
+          msgs.map(m => (m.trackId === assistantTrackId ? { ...m, lmsForm: schema } : m)),
         );
         break;
       }

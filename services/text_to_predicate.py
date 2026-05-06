@@ -63,6 +63,13 @@ class TableSchema:
     columns: tuple[ColumnSpec, ...]
     description: str             # one paragraph describing the table for the LLM
     default_order_by: Optional[str] = None  # column name for default sort
+    # Per-column synonym dictionaries: {column_name: {alias_lc: [canonical1, ...]}}.
+    # Looked up by the compiler to expand "flight" → ["Air Travel", "Airfare"].
+    # Empty dict (default) → no expansion, original behaviour preserved.
+    synonyms: dict = field(default_factory=dict)
+    # Per-column enum/top-value lists: {column_name: [val, ...]}. Spliced
+    # into the planner prompt so the LLM knows the canonical vocabulary.
+    enums: dict = field(default_factory=dict)
 
     def render_for_prompt(self) -> str:
         lines = [f"Table: **{self.table}**", self.description, "", "Columns:"]
@@ -139,6 +146,25 @@ class QueryPlan(BaseModel):
     order_by: list[OrderClause] = Field(default_factory=list)
     limit: int = Field(default=50, ge=1, le=1000)
 
+    # ── Confidence / clarification metadata ──
+    confidence: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Planner self-assessed confidence in [0, 1]. < 0.6 should "
+            "trigger a clarification card instead of executing."
+        ),
+    )
+    clarification_question: Optional[str] = Field(
+        default=None,
+        description="When confidence is low, the question to ask the user.",
+    )
+    clarification_options: list[dict] = Field(
+        default_factory=list,
+        description="When confidence is low, suggested {label, prompt} buttons.",
+    )
+
     @field_validator("limit")
     @classmethod
     def _cap_limit(cls, v: int) -> int:
@@ -193,7 +219,61 @@ def _coerce_value(spec: ColumnSpec, value: Any) -> Any:
     return value
 
 
+def _expand_synonyms(filter_: FilterClause, schema: TableSchema) -> FilterClause:
+    """If schema.synonyms has an entry for this column and the filter
+    value matches a key, rewrite eq → in over the canonical list.
+
+    Identifier whitelisting / parameter binding is unchanged — only the
+    Python-level FilterClause is rewritten before compilation.
+    """
+    syn = (schema.synonyms or {}).get(filter_.column)
+    if not syn:
+        # case-insensitive column key fallback
+        for k, v in (schema.synonyms or {}).items():
+            if k.lower() == filter_.column.lower():
+                syn = v
+                break
+    if not syn:
+        return filter_
+
+    if filter_.op == "eq" and isinstance(filter_.value, str):
+        canonical = syn.get(filter_.value.strip().lower())
+        if canonical:
+            return FilterClause(
+                column=filter_.column,
+                op="in",
+                values=list(canonical),
+            )
+    if filter_.op == "in" and filter_.values:
+        expanded: list[Any] = []
+        changed = False
+        for v in filter_.values:
+            if isinstance(v, str):
+                canonical = syn.get(v.strip().lower())
+                if canonical:
+                    expanded.extend(canonical)
+                    changed = True
+                    continue
+            expanded.append(v)
+        if changed:
+            # de-dupe while preserving order
+            seen: set = set()
+            uniq: list = []
+            for v in expanded:
+                if v in seen:
+                    continue
+                seen.add(v)
+                uniq.append(v)
+            return FilterClause(
+                column=filter_.column,
+                op="in",
+                values=uniq,
+            )
+    return filter_
+
+
 def _compile_filter(filter_: FilterClause, schema: TableSchema) -> tuple[str, list[Any]]:
+    filter_ = _expand_synonyms(filter_, schema)
     spec = _check_column(filter_.column, schema, must_be={"filterable"})
     col_sql = _check_ident(spec.name)
     op = filter_.op

@@ -2,7 +2,7 @@
 Domain models for MenaBot chat system."Cleaned-up Pydantic models with all required fields.
 """
 import enum
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 class ChatRoleEnum(enum.Enum):
@@ -130,6 +130,97 @@ class ExportRequest(BaseModel):
     template_file_id: Optional[str] = None
     title: Optional[str] = None
     preferred_language: Optional[str] = "English"
+
+
+# ── LMS form schemas (P6) ──
+
+class FormField(BaseModel):
+    name: str
+    label: str
+    type: str = Field(..., description="text | textarea | date | select | number")
+    options: Optional[List[str]] = None
+    required: bool = False
+    max_length: Optional[int] = None
+    placeholder: Optional[str] = None
+
+
+class FormSchema(BaseModel):
+    action: str
+    title: str
+    fields: List[FormField]
+    submit_label: str = "Submit"
+
+
+class ApplyLeavePayload(BaseModel):
+    """POST body for /api/lms/forms/apply_leave."""
+    user_id: str
+    leave_type: str
+    start_date: str = Field(..., description="ISO YYYY-MM-DD")
+    end_date: str = Field(..., description="ISO YYYY-MM-DD")
+    reason: Optional[str] = Field(default=None, max_length=500)
+    chat_session_id: Optional[str] = None
+
+
+class CancelLeavePayload(BaseModel):
+    """POST body for /api/lms/forms/cancel_leave."""
+    user_id: str
+    request_id: str
+    chat_session_id: Optional[str] = None
+
+
+class FormSubmissionResponse(BaseModel):
+    ok: bool
+    message: str
+    request_id: Optional[str] = None
+
+
+# ── Agent metadata (GET /api/agents/metadata) ──
+
+class ReportBuilderColumn(BaseModel):
+    name: str
+    label: str
+    type: str
+    groupable: bool = False
+    filterable: bool = True
+    aggregatable: bool = False
+    values: Optional[List[Any]] = None
+
+
+class ReportBuilderSpec(BaseModel):
+    columns: List[ReportBuilderColumn] = Field(default_factory=list)
+    aggregations: List[str] = Field(default_factory=list)
+    default_filters: Dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentMetadata(BaseModel):
+    name: str
+    display_name: str
+    icon: str = ""
+    description: str
+    category: str = "knowledge"
+    enabled: bool = True
+    example_prompts: List[str] = Field(default_factory=list)
+    report_builder: Optional[ReportBuilderSpec] = None
+    form_actions: List[str] = Field(default_factory=list)
+
+
+class AgentMetadataResponse(BaseModel):
+    agents: List[AgentMetadata]
+
+
+# ── Report builder execution (POST /api/reports/build) ──
+
+class ReportBuildRequest(BaseModel):
+    user_id: str
+    agent: str = Field(..., description="expense_agent | scoreboard_agent")
+    plan: Dict[str, Any] = Field(..., description="QueryPlan-shaped dict")
+
+
+class ReportBuildResponse(BaseModel):
+    rows: List[Dict[str, Any]] = Field(default_factory=list)
+    summary: str = ""
+    sql: Optional[str] = None
+    row_count: int = 0
 
 
 class EditMessageRequest(BaseModel):

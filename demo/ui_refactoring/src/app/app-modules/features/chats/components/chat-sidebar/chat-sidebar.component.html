@@ -31,6 +31,9 @@
         <!-- MIDDLE: scrollable sections -->
         <nav class="sidebar-scroll flex-grow-1 overflow-auto px-2 py-1">
 
+            <!-- QUICK START — analytical / transactional agent launchers -->
+            <app-module-launcher></app-module-launcher>
+
             <!-- PINNED section -->
             @if (pinnedConversations().length) {
                 <div class="section-header" (click)="expandIfCollapsed()">

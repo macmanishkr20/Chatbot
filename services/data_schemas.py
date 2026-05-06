@@ -17,6 +17,134 @@ from __future__ import annotations
 from services.text_to_predicate import ColumnSpec, TableSchema
 
 
+# ── Synonym dictionaries ──────────────────────────────────────────────
+# Map: {column_name: {alias_lower: [canonical_value_1, canonical_value_2, ...]}}.
+# The compiler rewrites op="eq" value="<alias>" → op="in" values=[canonical, ...]
+# so the executed SQL matches the table's actual vocabulary.
+# These are seed values — extend over time. Aliases must be lowercase.
+
+EXPENSE_SYNONYMS: dict[str, dict[str, list[str]]] = {
+    "ExpenseType": {
+        "flight":         ["Air Travel", "Airfare"],
+        "flights":        ["Air Travel", "Airfare"],
+        "airfare":        ["Air Travel", "Airfare"],
+        "air":            ["Air Travel", "Airfare"],
+        "airline":        ["Air Travel", "Airfare"],
+        "hotel":          ["Lodging"],
+        "hotels":         ["Lodging"],
+        "lodging":        ["Lodging"],
+        "accommodation":  ["Lodging"],
+        "food":           ["Meals", "Entertainment"],
+        "meal":           ["Meals"],
+        "meals":          ["Meals"],
+        "dining":         ["Meals", "Entertainment"],
+        "entertainment":  ["Entertainment"],
+        "taxi":           ["Ground Transport", "Ground Transportation", "Car Rental"],
+        "cab":            ["Ground Transport", "Ground Transportation"],
+        "uber":           ["Ground Transport", "Ground Transportation"],
+        "transport":      ["Ground Transport", "Ground Transportation", "Air Travel"],
+        "transportation": ["Ground Transport", "Ground Transportation"],
+        "car":            ["Ground Transport", "Car Rental"],
+        "rental":         ["Car Rental"],
+        "office":         ["Office Supplies"],
+        "supplies":       ["Office Supplies"],
+    },
+    "ApprovalStatus": {
+        "pending":    ["Pending Approval", "Pending"],
+        "rejected":   ["Denied", "Rejected"],
+        "denied":     ["Denied", "Rejected"],
+        "approved":   ["Approved"],
+        "submitted":  ["Submitted"],
+    },
+    "PaymentStatus": {
+        "paid":       ["Paid"],
+        "unpaid":     ["Pending Payment", "Not Paid"],
+        "pending":    ["Pending Payment"],
+    },
+}
+
+SCOREBOARD_SYNONYMS: dict[str, dict[str, list[str]]] = {
+    "SL": {
+        "assurance":            ["Assurance"],
+        "audit":                ["Assurance"],
+        "consulting":           ["Consulting"],
+        "advisory":             ["Consulting"],
+        "tax":                  ["Tax"],
+        "strategy":             ["Strategy & Transactions", "Strategy and Transactions"],
+        "transactions":        ["Strategy & Transactions", "Strategy and Transactions"],
+        "sat":                 ["Strategy & Transactions", "Strategy and Transactions"],
+    },
+    "Country": {
+        "uae":     ["United Arab Emirates"],
+        "emirates":["United Arab Emirates"],
+        "ksa":     ["Saudi Arabia"],
+        "saudi":   ["Saudi Arabia"],
+        "egypt":   ["Egypt"],
+        "qatar":   ["Qatar"],
+    },
+}
+
+
+# ── Enum value lists ──────────────────────────────────────────────────
+# Hard-coded canonical values for low-cardinality columns. Spliced into
+# the planner prompt via the {column_enums} placeholder so the LLM knows
+# the exact strings to emit. A future task can refresh these from SQL.
+
+EXPENSE_ENUMS: dict[str, list[str]] = {
+    "ExpenseType": [
+        "Air Travel", "Airfare", "Lodging", "Meals", "Entertainment",
+        "Ground Transport", "Ground Transportation", "Car Rental",
+        "Office Supplies", "Communication", "Training",
+    ],
+    "ApprovalStatus": [
+        "Submitted", "Pending Approval", "Pending", "Approved", "Denied", "Rejected",
+    ],
+    "PaymentStatus": [
+        "Paid", "Pending Payment", "Not Paid",
+    ],
+    "ReimbursementCurrency": [
+        "USD", "AED", "SAR", "EGP", "QAR", "BHD", "EUR", "GBP",
+    ],
+    "CountryName": [
+        "United Arab Emirates", "Saudi Arabia", "Egypt", "Qatar",
+        "Bahrain", "Oman", "Kuwait", "Jordan", "Lebanon",
+    ],
+}
+
+SCOREBOARD_ENUMS: dict[str, list[str]] = {
+    "SL": [
+        "Assurance", "Consulting", "Tax", "Strategy & Transactions",
+    ],
+    "Country": [
+        "United Arab Emirates", "Saudi Arabia", "Egypt", "Qatar",
+        "Bahrain", "Oman", "Kuwait", "Jordan", "Lebanon",
+    ],
+    "Period": [
+        "FY25 P10", "FY25 P11", "FY25 P12",
+        "FY26 P1", "FY26 P2", "FY26 P3", "FY26 P4", "FY26 P5",
+        "FY26 P6", "FY26 P7", "FY26 P8", "FY26 P9", "FY26 P10",
+        "FY26 P11", "FY26 P12",
+    ],
+    "CurrentRank": [
+        "Staff", "Senior", "Manager", "Senior Manager", "Partner",
+    ],
+}
+
+
+def render_column_enums(enums: dict[str, list[str]]) -> str:
+    """Format the enum dict into a markdown bullet list for prompt splicing."""
+    if not enums:
+        return "(no enum hints)"
+    out: list[str] = []
+    for col, values in enums.items():
+        if not values:
+            continue
+        # cap to top 20 to keep token cost bounded
+        head = values[:20]
+        out.append(f"- {col} (allowed values): {', '.join(head)}")
+    return "\n".join(out) if out else "(no enum hints)"
+
+
 # ── UserExpenses ──────────────────────────────────────────────────────
 
 EXPENSE_SCHEMA = TableSchema(
@@ -158,6 +286,8 @@ EXPENSE_SCHEMA = TableSchema(
         ColumnSpec("GLAccount", "string", "GL account assigned to the line.",
                    filterable=True, groupable=True),
     ),
+    synonyms=EXPENSE_SYNONYMS,
+    enums=EXPENSE_ENUMS,
 )
 
 
@@ -301,4 +431,6 @@ SCOREBOARD_SCHEMA = TableSchema(
         ColumnSpec("RevenueDays", "decimal", "Days from work performed → revenue/cash.",
                    filterable=True, aggregatable=True),
     ),
+    synonyms=SCOREBOARD_SYNONYMS,
+    enums=SCOREBOARD_ENUMS,
 )

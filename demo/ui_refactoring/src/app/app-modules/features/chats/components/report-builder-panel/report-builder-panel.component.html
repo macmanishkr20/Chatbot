@@ -1,0 +1,156 @@
+@if (open()) {
+  <div class="rbp-overlay" (click)="onClose()"></div>
+  <aside class="rbp-panel" role="dialog" aria-label="Build a report">
+    <header class="rbp-header">
+      <div>
+        <i class="bi bi-sliders"></i>
+        <span class="rbp-title">Build a report</span>
+        <small class="rbp-agent">· {{ agent().display_name }}</small>
+      </div>
+      <button type="button" class="rbp-close" (click)="onClose()" aria-label="Close">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </header>
+
+    <div class="rbp-body">
+      <!-- Columns -->
+      <section class="rbp-section">
+        <h6 class="rbp-section-title">Columns</h6>
+        <div class="rbp-chip-group">
+          @for (col of columns(); track col.name) {
+            <button type="button"
+                    class="rbp-chip"
+                    [class.active]="isColSelected(col.name)"
+                    (click)="toggleColumn(col.name)">
+              {{ col.label }}
+            </button>
+          }
+        </div>
+      </section>
+
+      <!-- Filters -->
+      @if (filterable().length > 0) {
+        <section class="rbp-section">
+          <h6 class="rbp-section-title">Filters</h6>
+          @for (col of filterable(); track col.name) {
+            <div class="rbp-filter">
+              <label class="rbp-label">{{ col.label }}</label>
+
+              @if (col.type === 'string' && col.values && col.values.length > 0) {
+                <div class="rbp-chip-group">
+                  @for (v of col.values; track v) {
+                    <button type="button"
+                            class="rbp-chip rbp-chip-sm"
+                            [class.active]="isStringSelected(col.name, v)"
+                            (click)="toggleStringValue(col.name, v)">{{ v }}</button>
+                  }
+                </div>
+              } @else if (col.type === 'date') {
+                <div class="rbp-date-group">
+                  <input type="date" class="rbp-input"
+                         (input)="setDate(col.name, 'start', $any($event.target).value)" />
+                  <span class="rbp-dash">—</span>
+                  <input type="date" class="rbp-input"
+                         (input)="setDate(col.name, 'end', $any($event.target).value)" />
+                  <div class="rbp-presets">
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'fy_current')">FY</button>
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'fy_previous')">FY-1</button>
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'q1')">Q1</button>
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'q2')">Q2</button>
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'q3')">Q3</button>
+                    <button type="button" class="rbp-preset" (click)="applyFyPreset(col.name, 'q4')">Q4</button>
+                  </div>
+                </div>
+              } @else if (col.type === 'number') {
+                <div class="rbp-num-group">
+                  <input type="number" class="rbp-input" placeholder="min"
+                         (input)="setNumber(col.name, 'lo', $any($event.target).value)" />
+                  <span class="rbp-dash">—</span>
+                  <input type="number" class="rbp-input" placeholder="max"
+                         (input)="setNumber(col.name, 'hi', $any($event.target).value)" />
+                </div>
+              } @else if (col.type === 'boolean') {
+                <div class="rbp-bool-group">
+                  <button type="button" class="rbp-chip rbp-chip-sm" (click)="setBool(col.name, true)">Yes</button>
+                  <button type="button" class="rbp-chip rbp-chip-sm" (click)="setBool(col.name, false)">No</button>
+                  <button type="button" class="rbp-chip rbp-chip-sm" (click)="clearBool(col.name)">Any</button>
+                </div>
+              } @else {
+                <input type="text" class="rbp-input"
+                       (input)="toggleStringValue(col.name, $any($event.target).value)" />
+              }
+            </div>
+          }
+        </section>
+      }
+
+      <!-- Group by + aggregate -->
+      <section class="rbp-section rbp-grid">
+        <div>
+          <h6 class="rbp-section-title">Group by</h6>
+          <select class="rbp-input" (change)="groupBy.set($any($event.target).value)">
+            <option value="">— none —</option>
+            @for (col of groupable(); track col.name) {
+              <option [value]="col.name">{{ col.label }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <h6 class="rbp-section-title">Aggregate</h6>
+          <select class="rbp-input" (change)="aggregate.set($any($event.target).value)">
+            <option value="">— none —</option>
+            @for (a of aggregations(); track a) {
+              <option [value]="a">{{ a }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <h6 class="rbp-section-title">Aggregate column</h6>
+          <select class="rbp-input" (change)="aggregateColumn.set($any($event.target).value)">
+            <option value="">— none —</option>
+            @for (col of aggregatable(); track col.name) {
+              <option [value]="col.name">{{ col.label }}</option>
+            }
+          </select>
+        </div>
+      </section>
+
+      <!-- Sort + limit -->
+      <section class="rbp-section rbp-grid">
+        <div>
+          <h6 class="rbp-section-title">Sort</h6>
+          <select class="rbp-input" (change)="sortColumn.set($any($event.target).value)">
+            <option value="">— none —</option>
+            @for (col of columns(); track col.name) {
+              <option [value]="col.name">{{ col.label }}</option>
+            }
+          </select>
+        </div>
+        <div>
+          <h6 class="rbp-section-title">Direction</h6>
+          <select class="rbp-input" (change)="sortDirection.set($any($event.target).value)">
+            <option value="desc">Desc</option>
+            <option value="asc">Asc</option>
+          </select>
+        </div>
+        <div>
+          <h6 class="rbp-section-title">Limit</h6>
+          <input type="number" class="rbp-input" min="1" [value]="limit()"
+                 (input)="limit.set(+$any($event.target).value)" />
+        </div>
+      </section>
+
+      @if (error()) {
+        <div class="rbp-error">{{ error() }}</div>
+      }
+    </div>
+
+    <footer class="rbp-footer">
+      <button type="button" class="rbp-cancel" (click)="onClose()">Cancel</button>
+      <button type="button" class="rbp-submit" [disabled]="submitting()" (click)="onSubmit()">
+        @if (submitting()) { <span class="spinner-border spinner-border-sm me-1"></span> }
+        Run report
+      </button>
+    </footer>
+  </aside>
+}

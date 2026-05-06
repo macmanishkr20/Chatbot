@@ -31,6 +31,13 @@ Resolve all relative dates ("this month", "last quarter", "this year",
 {schema_description}
 </table_schema>
 
+<column_enums>
+The following low-cardinality columns have known canonical values. Prefer
+these exact strings when emitting filter values.
+
+{column_enums}
+</column_enums>
+
 <output_rules>
 - ``intent``:
     * "list"      — return matching rows.
@@ -67,12 +74,30 @@ Resolve all relative dates ("this month", "last quarter", "this year",
 {examples}
 </examples>
 
+<confidence>
+- Set ``confidence`` between 0.0 and 1.0 based on how certain you are
+  the plan answers the user's question:
+    * 1.0  — fully unambiguous, every term mapped to a real column.
+    * 0.7-0.9 — minor ambiguity (e.g. relative dates, fuzzy synonym
+      that likely matches one canonical value).
+    * 0.4-0.6 — ambiguous question (e.g. "show me my numbers" without
+      a specific KPI; "best performer" without a measure).
+    * < 0.4 — cannot map to columns at all; required field missing.
+- When confidence < 0.6, ALSO populate:
+    * ``clarification_question`` — the single short question to ask
+      the user (e.g. "Which fiscal year — FY26 or FY25?").
+    * ``clarification_options`` — 2 to 4 dicts shaped
+      ``{{"label": "FY26", "prompt": "Show this for FY26"}}`` so the
+      UI can render quick-reply chips.
+- The downstream agent will SKIP SQL execution when confidence < 0.6
+  and ask the clarification question instead.
+</confidence>
+
 <important>
 - Output the QueryPlan ONLY via the provided structured schema.
 - Never include SQL fragments anywhere.
 - If the question cannot be answered from the table at all, return
-  ``intent="list"`` with an impossible filter so the executor returns 0
-  rows; the synthesizer will phrase the apology.
+  ``intent="list"`` with confidence=0.0 and a clarification_question.
 </important>
 """
 

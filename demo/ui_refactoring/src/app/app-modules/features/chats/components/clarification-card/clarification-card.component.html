@@ -1,0 +1,15 @@
+<div class="clarification-card">
+  <div class="cc-question">
+    <i class="bi bi-question-circle"></i>
+    <span>{{ card().question }}</span>
+  </div>
+  @if (card().options && (card().options || []).length > 0) {
+    <div class="cc-options">
+      @for (opt of card().options || []; track opt.prompt) {
+        <button type="button" class="cc-chip" (click)="onClick(opt)">
+          {{ opt.label }}
+        </button>
+      }
+    </div>
+  }
+</div>

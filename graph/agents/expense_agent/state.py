@@ -31,3 +31,10 @@ class ExpenseAgentState(RAGState, total=False):
     query_rows: list[dict[str, Any]] | None
     aggregate_value: Any | None
     row_count: int | None
+
+    # ── UX overlays (P1 / P2 / P4) ──
+    applied_defaults: list[str]
+    drill_suggestions: list[dict]
+    clarification_needed: Optional[dict]
+    assumption: Optional[dict]
+    telemetry_status: Optional[str]

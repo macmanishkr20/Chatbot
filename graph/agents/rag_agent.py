@@ -26,15 +26,22 @@ def _build(store=None, checkpointer=None):
     return build_rag_graph(checkpointer=checkpointer, memory_store=store)
 
 
+_EXAMPLE_PROMPTS = (
+    "What are the Finance function policies?",
+    "How do I submit a BRIDGE request?",
+    "Where can I access the GCO templates?",
+    "What is the internal transfer process?",
+)
+
+
 register_agent(AgentSpec(
     name="rag_graph",
     description=_RAG_DESCRIPTION,
     build_subgraph=_build,
-    sample_prompts=(
-        "What are the Finance function policies?",
-        "How do I submit a BRIDGE request?",
-        "Where can I access the GCO templates?",
-        "What is the internal transfer process?",
-    ),
+    sample_prompts=_EXAMPLE_PROMPTS,
     enabled_by_default=True,
+    display_name="MENA Functions",
+    icon="book",
+    category="knowledge",
+    example_prompts=_EXAMPLE_PROMPTS,
 ))
