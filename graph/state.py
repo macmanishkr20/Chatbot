@@ -50,6 +50,15 @@ class RAGState(TypedDict, total=False):
     needs_multi_search: bool  # True when search found multiple functions, triggers iterative search
     multi_search_status: list[str]  # Status messages from iterative multi-function search (streamed via updates mode)
 
+    # ── Diagnostic flags ──
+    # Set by generate_node when the LLM emits [NO_ANSWER] or events came back
+    # empty. There is no corrective-RAG loop today — these fields exist so
+    # downstream nodes / telemetry can distinguish a genuine answer from a
+    # fallback message, and so a future retry loop can be added without
+    # re-plumbing state.
+    no_answer: bool
+    search_retry_count: int
+
     # ── Search results ──
     events: list
 
