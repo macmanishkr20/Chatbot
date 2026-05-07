@@ -161,24 +161,6 @@ async def persist_node(state: RAGState) -> dict:
                 "response": {"error": error_info},
             }
 
-        # Ambiguity — save the disambiguation message to SQL
-        if state.get("is_ambiguous") and not state.get("ai_content"):
-            ambiguity_response = state.get("response") or {}
-            ambiguity_text = ambiguity_response.get("message", "")
-            if ambiguity_text:
-                app_query.ai_content_free_form = ambiguity_text
-                app_query.is_free_form = True
-                app_query.summurized_prompt = app_query.user_input[:2000]
-                await scc.save_ai_content_free_form(app_query)
-                await scc.save_ai_content(app_query)
-            return {
-                "chat_id": app_query.chat_id,
-                "message_id": app_query.message_id,
-                "ai_content": ambiguity_text,
-                "messages": [AIMessage(content=ambiguity_text)],
-                "response": ambiguity_response,
-            }
-
         # Save AI content to SQL
         ai_content = state.get("ai_content") or ""
         if ai_content:

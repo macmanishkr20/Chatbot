@@ -118,7 +118,21 @@ class AzureSQLCheckpointSaver(BaseCheckpointSaver):
             Column("metadata", Text, nullable=True),
             Column("created_at", DateTime, default=datetime.utcnow, nullable=False),
         )
-    
+        # Intermediate writes table — captures pending node writes between
+        # checkpoints so a mid-graph crash does not lose work.
+        self.writes_table_name = f"{self.table_name}_writes"
+        self.writes_table = Table(
+            self.writes_table_name,
+            self.metadata,
+            Column("thread_id", NVARCHAR(500), primary_key=True),
+            Column("checkpoint_id", NVARCHAR(500), primary_key=True),
+            Column("task_id", NVARCHAR(500), primary_key=True),
+            Column("idx", NVARCHAR(50), primary_key=True),
+            Column("channel", NVARCHAR(500), nullable=False),
+            Column("value", Text, nullable=False),
+            Column("created_at", DateTime, default=datetime.utcnow, nullable=False),
+        )
+
     def setup(self) -> None:
         """Create the checkpoints table if it doesn't exist."""
         self.metadata.create_all(self.engine)
@@ -364,10 +378,70 @@ class AzureSQLCheckpointSaver(BaseCheckpointSaver):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
-        """Put writes to the database (placeholder implementation)."""
-        # This could be implemented to store intermediate writes
-        # For now, we'll skip this as it's optional for basic functionality
-        pass
+        """Persist intermediate node writes (sync).
+
+        LangGraph calls this after each node completes but before the
+        checkpoint is finalised. Storing them lets a mid-graph crash
+        recover without losing the work the completed nodes produced.
+        Failures are logged-and-swallowed so they never break the graph.
+        """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_id = config["configurable"].get("checkpoint_id") or ""
+        if not writes:
+            return
+
+        try:
+            type_str_default, _ = self.serde.dumps_typed(None)
+        except Exception:
+            type_str_default = ""
+
+        rows: list[dict] = []
+        for idx, (channel, value) in enumerate(writes):
+            try:
+                type_str, data_bytes = self.serde.dumps_typed(value)
+                payload = {
+                    "_type": type_str,
+                    "_encoding": "base64",
+                    "_data": base64.b64encode(data_bytes).decode("ascii"),
+                }
+                serialised = json.dumps(payload, ensure_ascii=False)
+            except Exception:
+                # Best-effort fallback — never break the graph on a write
+                serialised = json.dumps({"_type": type_str_default, "_data": ""})
+            rows.append({
+                "thread_id": thread_id,
+                "checkpoint_id": checkpoint_id,
+                "task_id": task_id,
+                "idx": str(idx),
+                "channel": str(channel),
+                "value": serialised,
+            })
+
+        with self.SessionLocal() as session:
+            try:
+                for row in rows:
+                    session.execute(
+                        text(f"""
+                            MERGE {self.writes_table_name} AS target
+                            USING (SELECT :thread_id AS thread_id, :checkpoint_id AS checkpoint_id,
+                                          :task_id AS task_id, :idx AS idx) AS src
+                            ON target.thread_id = src.thread_id
+                               AND target.checkpoint_id = src.checkpoint_id
+                               AND target.task_id = src.task_id
+                               AND target.idx = src.idx
+                            WHEN MATCHED THEN
+                                UPDATE SET channel = :channel, value = :value
+                            WHEN NOT MATCHED THEN
+                                INSERT (thread_id, checkpoint_id, task_id, idx, channel, value, created_at)
+                                VALUES (:thread_id, :checkpoint_id, :task_id, :idx, :channel, :value, GETUTCDATE());
+                        """),
+                        row,
+                    )
+                session.commit()
+            except Exception:
+                session.rollback()
+                # Never let write-persist failure break graph execution.
+                return
     
     def clear_thread(self, thread_id: str) -> None:
         """Clear all checkpoints for a thread."""
@@ -514,7 +588,21 @@ class AsyncAzureSQLCheckpointSaver(BaseCheckpointSaver):
             Column("metadata", Text, nullable=True),
             Column("created_at", DateTime, default=datetime.utcnow, nullable=False),
         )
-    
+        # Intermediate writes table — captures pending node writes between
+        # checkpoints so a mid-graph crash does not lose work.
+        self.writes_table_name = f"{self.table_name}_writes"
+        self.writes_table = Table(
+            self.writes_table_name,
+            self.metadata,
+            Column("thread_id", NVARCHAR(500), primary_key=True),
+            Column("checkpoint_id", NVARCHAR(500), primary_key=True),
+            Column("task_id", NVARCHAR(500), primary_key=True),
+            Column("idx", NVARCHAR(50), primary_key=True),
+            Column("channel", NVARCHAR(500), nullable=False),
+            Column("value", Text, nullable=False),
+            Column("created_at", DateTime, default=datetime.utcnow, nullable=False),
+        )
+
     async def asetup(self) -> None:
         """Create the checkpoints table if it doesn't exist."""
         async with self.async_engine.begin() as conn:
@@ -767,10 +855,71 @@ class AsyncAzureSQLCheckpointSaver(BaseCheckpointSaver):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
-        """Put writes to the database (placeholder implementation)."""
-        # This could be implemented to store intermediate writes
-        # For now, we'll skip this as it's optional for basic functionality
-        pass
+        """Persist intermediate node writes (async).
+
+        LangGraph calls this after each node completes but before the
+        checkpoint is finalised. Storing them lets a mid-graph crash
+        recover without losing the work the completed nodes produced.
+        Failures are logged-and-swallowed so they never break the graph.
+        """
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_id = config["configurable"].get("checkpoint_id") or ""
+        if not writes:
+            return
+
+        try:
+            type_str_default, _ = self.serde.dumps_typed(None)
+        except Exception:
+            type_str_default = ""
+
+        rows: list[dict] = []
+        for idx, (channel, value) in enumerate(writes):
+            try:
+                type_str, data_bytes = self.serde.dumps_typed(value)
+                payload = {
+                    "_type": type_str,
+                    "_encoding": "base64",
+                    "_data": base64.b64encode(data_bytes).decode("ascii"),
+                }
+                serialised = json.dumps(payload, ensure_ascii=False)
+            except Exception:
+                serialised = json.dumps({"_type": type_str_default, "_data": ""})
+            rows.append({
+                "thread_id": thread_id,
+                "checkpoint_id": checkpoint_id,
+                "task_id": task_id,
+                "idx": str(idx),
+                "channel": str(channel),
+                "value": serialised,
+            })
+
+        async with self.AsyncSessionLocal() as session:
+            try:
+                for row in rows:
+                    await session.execute(
+                        text(f"""
+                            MERGE {self.writes_table_name} AS target
+                            USING (SELECT :thread_id AS thread_id, :checkpoint_id AS checkpoint_id,
+                                          :task_id AS task_id, :idx AS idx) AS src
+                            ON target.thread_id = src.thread_id
+                               AND target.checkpoint_id = src.checkpoint_id
+                               AND target.task_id = src.task_id
+                               AND target.idx = src.idx
+                            WHEN MATCHED THEN
+                                UPDATE SET channel = :channel, value = :value
+                            WHEN NOT MATCHED THEN
+                                INSERT (thread_id, checkpoint_id, task_id, idx, channel, value, created_at)
+                                VALUES (:thread_id, :checkpoint_id, :task_id, :idx, :channel, :value, GETUTCDATE());
+                        """),
+                        row,
+                    )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                # Never let write-persist failure break graph execution.
+                return
+            finally:
+                await session.close()
     
     async def aclear_thread(self, thread_id: str) -> None:
         """Clear all checkpoints for a thread."""

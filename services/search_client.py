@@ -1,9 +1,15 @@
 from typing import Dict, List, Tuple
 
+import asyncio
 import logging
 import re
 
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import (
+    HttpResponseError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from azure.search.documents import SearchClient
 from azure.search.documents.models import (
     VectorizedQuery,
@@ -18,6 +24,7 @@ from config import (
     AZURE_SEARCH_SCORE_THRESHOLD,
     AZURE_SEARCH_VECTOR_FIELD,
     DISCOVERY_TOP_K,
+    QA_PAIR_TIE_BREAK_BOOST,
     SELECT_FIELDS,
     TOP_K,
 )
@@ -154,10 +161,18 @@ class SearchService:
         reraise=True,
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=0.5),
-        retry=retry_if_exception_type(Exception),
+        retry=retry_if_exception_type(
+            (HttpResponseError, ServiceRequestError, ServiceResponseError)
+        ),
     )
     async def _safe_search(self, client, **kwargs):
-        return client.search(**kwargs)
+        # The Azure SDK's SearchClient is synchronous and blocks while iterating
+        # results. Materialize the iterator on a worker thread to avoid blocking
+        # the asyncio event loop (otherwise parallel_search_node serializes).
+        def _run() -> list:
+            return list(client.search(**kwargs))
+
+        return await asyncio.to_thread(_run)
 
     async def unified_search(
         self, query: dict, embedded_query: list, odata_filter: str | None = None
@@ -174,7 +189,13 @@ class SearchService:
             fields=AZURE_SEARCH_VECTOR_FIELD,
         )
 
-        select_fields = [f.strip() for f in SELECT_FIELDS.split(",")] + ["function", "sub_function"]
+        # Always include function/sub_function/content_type so callers can
+        # render type-appropriate citations (qa_pair → URL only,
+        # document → file_name + page_number + URL).
+        select_fields = list({
+            *(f.strip() for f in SELECT_FIELDS.split(",") if f.strip()),
+            "function", "sub_function", "content_type",
+        })
 
         search_kwargs = dict(
             search_text=query.get("query", ""),
@@ -204,10 +225,11 @@ class SearchService:
             if reranker_score is not None:
                 score = float(reranker_score)
             else:
-                # Hybrid score (BM25 + vector) is 0–1; scale to 0–4 for
-                # consistent threshold comparison with reranker scores.
+                # Hybrid score (BM25 + vector) is roughly 0–1 but unbounded;
+                # rescale to 0–4 and clamp so BM25 outliers cannot inflate
+                # past the reranker's natural ceiling.
                 hybrid_score = float(r.get("@search.score", 0.0))
-                score = hybrid_score * 4.0
+                score = max(0.0, min(hybrid_score, 1.0)) * 4.0
 
             enriched.append({
                 "file_name": r.get("file_name", ""),
@@ -216,6 +238,12 @@ class SearchService:
                 "source_url": _normalize_source_url(r.get("source_url", "")),
                 "function": r.get("function", ""),
                 "sub_function": r.get("sub_function", ""),
+                # Preserve content_type so the caller can choose a
+                # type-appropriate citation format (qa_pair vs document).
+                # Default to "qa_pair" only when missing — that is the
+                # historic behaviour and keeps citations URL-only when the
+                # index lacks the field.
+                "content_type": (r.get("content_type") or "qa_pair").strip() or "qa_pair",
                 "@search.reranker_score": score,
             })
 
@@ -229,60 +257,91 @@ class SearchService:
         query: dict,
         embedded_query: list,
         base_filter: str | None = None,
-        content_type: str = "document",
+        content_type: str = "qa_pair",  # accepted for back-compat; no longer used as a filter
         top_k: int = DISCOVERY_TOP_K,
         skip_last_resort: bool = False,
     ) -> List[Dict]:
-        """Unified waterfall search strategy.
+        """Federated single-pass retrieval with progressive filter relaxation.
 
-        Tries progressively broader searches until results are found:
-          Level 1: qa_pair + base_filter       (threshold: full)
-          Level 2: document + base_filter      (threshold: relaxed)
-          Level 3: base_filter only            (threshold: very relaxed)
-          Level 4: no filter at all            (threshold: very relaxed) — skipped if skip_last_resort=True
+        ``content_type`` is **not** used as a query filter — qa_pair and
+        document chunks compete head-to-head against the semantic reranker.
+        A small additive boost (QA_PAIR_TIE_BREAK_BOOST) is applied to
+        qa_pair scores during ordering only, so when reranker scores are
+        within noise the curated QA wins, but a strong document chunk can
+        always outrank a weak qa_pair.
 
-        Returns results sorted by reranker score, capped at top_k.
+        Levels (each tries one search call):
+          L1: base_filter (function + date)            threshold: relaxed
+          L2: function filter dropped, date kept       threshold: very relaxed
+          L3: no filter at all (last resort)           threshold: very relaxed
+              — skipped when skip_last_resort=True
+
+        The ``content_type`` parameter is kept in the signature so existing
+        callers don't break; its value is ignored.
         """
-        all_results: list = []
+        # The previous waterfall used content_type as the primary filter,
+        # which created an asymmetry where qa_pair-default queries never
+        # reached document hits except via the no-filter last resort. The
+        # federated approach removes that asymmetry while preserving qa_pair
+        # preference via the score boost.
+        del content_type  # silence "unused" linters; intentional no-op
 
-        # ── Level 1 & 2: Content-type fallback chain ──
-        fallback_chain = [content_type]
-        if content_type == "document":
-            fallback_chain.append("qa_pair")
+        # ── Level 1: Federated, full base_filter ──
+        raw = await self.unified_search(query, embedded_query, odata_filter=base_filter)
+        qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _DOC_THRESHOLD]
+        if qualified:
+            ranked = self._rank_with_qa_boost(qualified)
+            logger.info(
+                "search_with_retry: L1 federated found=%d (threshold=%.2f)",
+                len(ranked), _DOC_THRESHOLD,
+            )
+            return ranked[:top_k]
 
-        for ct in fallback_chain:
-            ct_filter = f"content_type eq '{ct}'"
-            odata_filter = f"({base_filter}) and ({ct_filter})" if base_filter else ct_filter
-            threshold = _QA_THRESHOLD if ct == "qa_pair" else _DOC_THRESHOLD
+        # ── Level 2: Drop function filter (user may have wrong chip) ──
+        # Only run if function clauses were actually present — otherwise this
+        # would be identical to Level 3.
+        if base_filter:
+            relaxed = strip_function_filter(base_filter)
+            if relaxed != base_filter:
+                raw = await self.unified_search(query, embedded_query, odata_filter=relaxed)
+                qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
+                if qualified:
+                    ranked = self._rank_with_qa_boost(qualified)
+                    logger.info(
+                        "search_with_retry: L2 fn-relaxed found=%d (threshold=%.2f)",
+                        len(ranked), _FALLBACK_THRESHOLD,
+                    )
+                    return ranked[:top_k]
 
-            raw = await self.unified_search(query, embedded_query, odata_filter=odata_filter)
-            qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= threshold]
+        # ── Level 3: No filter at all (last resort) ──
+        if skip_last_resort:
+            return []
 
-            if qualified:
-                logger.info(
-                    "search_with_retry: L%d ct=%s found=%d (threshold=%.2f)",
-                    fallback_chain.index(ct) + 1, ct, len(qualified), threshold,
-                )
-            all_results.extend(qualified)
-            if len(all_results) >= top_k:
-                break
+        raw = await self.unified_search(query, embedded_query, odata_filter=None)
+        qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
+        if qualified:
+            ranked = self._rank_with_qa_boost(qualified)
+            logger.info(
+                "search_with_retry: L3 no-filter found=%d (threshold=%.2f)",
+                len(ranked), _FALLBACK_THRESHOLD,
+            )
+            return ranked[:top_k]
 
-        # ── Level 3: No content_type filter, keep base_filter ──
-        if not all_results and base_filter:
-            raw = await self.unified_search(query, embedded_query, odata_filter=base_filter)
-            qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
-            if qualified:
-                logger.info("search_with_retry: L3 no-ct found=%d (threshold=%.2f)", len(qualified), _FALLBACK_THRESHOLD)
-            all_results.extend(qualified)
+        return []
 
-        # ── Level 4: No filter at all (last resort) ──
-        if not all_results and not skip_last_resort:
-            raw = await self.unified_search(query, embedded_query, odata_filter=None)
-            qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
-            if qualified:
-                logger.info("search_with_retry: L4 no-filter found=%d (threshold=%.2f)", len(qualified), _FALLBACK_THRESHOLD)
-            all_results.extend(qualified)
+    @staticmethod
+    def _rank_with_qa_boost(results: List[Dict]) -> List[Dict]:
+        """Sort results, applying a small additive boost to qa_pair items.
 
-        # Sort by score and cap
-        all_results.sort(key=lambda r: r.get("@search.reranker_score", 0), reverse=True)
-        return all_results[:top_k]
+        The boost only affects ordering (effective_score) — never the
+        threshold gate that already ran upstream. This means a weak
+        qa_pair cannot recall its way past the threshold, but among
+        items that already qualified it gets the tie-break.
+        """
+        for r in results:
+            ct = (r.get("content_type") or "").strip().lower()
+            base_score = float(r.get("@search.reranker_score", 0.0))
+            boost = QA_PAIR_TIE_BREAK_BOOST if ct == "qa_pair" else 0.0
+            r["@search.effective_score"] = base_score + boost
+        results.sort(key=lambda r: r.get("@search.effective_score", 0.0), reverse=True)
+        return results

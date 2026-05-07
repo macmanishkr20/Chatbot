@@ -26,9 +26,8 @@ def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
                 meta_parts.append(f"Function: {function}")
             if sub_fn:
                 meta_parts.append(f"Sub-function: {sub_fn}")
-            if not source_url:
-                source_url = f"{function}_internal_QnA_document" if function else "internal_QnA_document"
-            meta_parts.append(f"Source: {source_url}")
+            if source_url:
+                meta_parts.append(f"Source: {source_url}")
 
             fallback = doc.get("file_name")
             header = f"[{i}] " + (" | ".join(meta_parts) if meta_parts else fallback)

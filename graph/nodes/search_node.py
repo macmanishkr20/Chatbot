@@ -70,6 +70,9 @@ def _strip_internal_fields(results: list) -> list:
             "source_url": r.get("source_url", ""),
             "function": r.get("function", ""),
             "sub_function": r.get("sub_function", ""),
+            # content_type drives citation format downstream
+            # (qa_pair → URL only, document → file_name + page_number + URL).
+            "content_type": (r.get("content_type") or "qa_pair").strip() or "qa_pair",
         })
     return cleaned
 
@@ -118,7 +121,6 @@ async def search_node(state: RAGState) -> dict:
             return {
                 "events": [],
                 "functions_found": [],
-                "is_ambiguous": False,
                 "error_info": {
                     "error_code": empty_detail.get("error_code", "NO_EVENTS"),
                     "text": empty_detail.get("text", "No relevant events found."),
@@ -147,5 +149,4 @@ async def search_node(state: RAGState) -> dict:
         return {
             "events": _strip_internal_fields(curated),
             "functions_found": functions_found,
-            "is_ambiguous": False,
         }

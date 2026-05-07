@@ -47,8 +47,6 @@ class RAGState(TypedDict, total=False):
     # ── Query processing ──
     rewritten_query: dict | None   # {"query": str, "filter": str | None}
     functions_found: list[str]
-    is_ambiguous: bool
-    pending_ambiguous_query: dict | None  # Original query context saved during ambiguity
     needs_multi_search: bool  # True when search found multiple functions, triggers iterative search
     multi_search_status: list[str]  # Status messages from iterative multi-function search (streamed via updates mode)
 

@@ -28,7 +28,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 
 load_dotenv()
 
-from config import MAX_INPUT_LENGTH, RATE_LIMIT_PER_MINUTE
+from config import CANCEL_SIGNAL_TTL_SECONDS, MAX_INPUT_LENGTH, RATE_LIMIT_PER_MINUTE
 from graph.context_manager import trim_messages_to_budget
 from graph.nodes.supervisor import get_graph
 from graph.state import RAGState
@@ -79,8 +79,33 @@ callback_handler = (
 graph = None
 
 # ── In-memory cancel signals (keyed by thread_id) ──
-# For multi-worker deployments, replace with Redis.
-_cancel_signals: dict[str, bool] = {}
+# Each entry is a UNIX timestamp at which the signal was set; expired entries
+# are pruned on read so the dict cannot grow unboundedly. For multi-worker
+# deployments, replace with Redis pub/sub.
+import time as _time
+
+_cancel_signals: dict[str, float] = {}
+
+
+def _prune_cancel_signals(now: float | None = None) -> None:
+    """Drop cancel signals older than CANCEL_SIGNAL_TTL_SECONDS."""
+    now = now if now is not None else _time.time()
+    expired = [
+        tid for tid, ts in _cancel_signals.items()
+        if now - ts > CANCEL_SIGNAL_TTL_SECONDS
+    ]
+    for tid in expired:
+        _cancel_signals.pop(tid, None)
+
+
+def _consume_cancel_signal(thread_id: str) -> bool:
+    """Atomically check + clear a cancel signal, ignoring expired entries."""
+    now = _time.time()
+    _prune_cancel_signals(now)
+    ts = _cancel_signals.pop(thread_id, None)
+    if ts is None:
+        return False
+    return (now - ts) <= CANCEL_SIGNAL_TTL_SECONDS
 
 # ── Nodes whose LLM token output is meaningful prose for the end user ──
 # NOTE: "Supervisor" is intentionally excluded. Its LLM uses
@@ -363,7 +388,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
             except asyncio.QueueEmpty:
                 break
         # ── Check cancellation ──
-        if _cancel_signals.pop(thread_id, False):
+        if _consume_cancel_signal(thread_id):
             yield sse_format({"type": "final", "cancelled": True})
             return
 
@@ -692,7 +717,8 @@ async def cancel_chat(body: CancelRequest):
     """
     _validate_user(body.user_id)
     thread_id = f"{body.user_id}_{body.chat_session_id}"
-    _cancel_signals[thread_id] = True
+    _prune_cancel_signals()
+    _cancel_signals[thread_id] = _time.time()
     return {"status": "cancel_requested"}
 
 
@@ -830,8 +856,6 @@ async def edit_message(
             "suggestive_actions": None,
             "conversation_title": None,
             "citation_map": None,
-            "is_ambiguous": False,
-            "pending_ambiguous_query": None,
             "requires_function_selection": False,
             "function_required_reason": None,
             "function_hint": None,
@@ -914,8 +938,6 @@ async def edit_message(
         "suggestive_actions": None,
         "conversation_title": None,
         "citation_map": None,
-        "is_ambiguous": False,
-        "pending_ambiguous_query": None,
         "requires_function_selection": False,
         "function_required_reason": None,
         "function_hint": None,
