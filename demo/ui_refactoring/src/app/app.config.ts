@@ -7,6 +7,7 @@ import { provideRouter } from '@angular/router';
 import { BrowserModule } from '@angular/platform-browser';
 import {
   provideHttpClient,
+  withInterceptors,
   withInterceptorsFromDi,
   HTTP_INTERCEPTORS,
   withFetch,
@@ -35,6 +36,7 @@ import { environment } from '../environments/environment';
 import { routes } from './app.routes';
 import { NgxPermissionsModule } from 'ngx-permissions';
 import { LoaderInterceptor } from './_shared/interceptors/loader.interceptor';
+import { sessionCheckInterceptor } from './_shared/interceptors/session.check.interceptor';
 
 export function loggerCallback(logLevel: LogLevel, message: string) {
   console.log(message);
@@ -101,7 +103,11 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     importProvidersFrom(BrowserModule, NgxPermissionsModule.forRoot()),
     provideNoopAnimations(),
-    provideHttpClient(withInterceptorsFromDi(), withFetch()),
+    provideHttpClient(
+      withInterceptors([sessionCheckInterceptor]),
+      withInterceptorsFromDi(),
+      withFetch()
+    ),
     {
       provide: HTTP_INTERCEPTORS,
       useClass: MsalInterceptor,

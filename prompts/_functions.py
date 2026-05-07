@@ -8,15 +8,17 @@ MENA_FUNCTIONS_CATALOG = """\
     • Facilities Management (FM), office services, and workplace operations
     • Meeting room booking, reception, access cards, parking, office equipment
     • Purchase requisitions, PO creation support, shopping carts, goods receipt
-    • Event logistics support (non‑branding, non‑marketing)
+    • Office and workplace logistics support (non‑branding, non‑marketing)
     • Travel coordination support via tools (Concur, Dnata) but not policy ownership
+    • Transportation service provided for employees
  
     Excludes:
     • Travel policy, billing, or invoice settlement (Finance)
     • Event branding, communications, or social media (BMC)
+    • Event logistics, event vendor sourcing, or venue booking (TME)
     • Supplier strategy, sourcing, or negotiations (SCS)
     • Recruitment policy, learning, or HR programs (Talent)
-    • Legal contracts or regulatory interpretation (GCO)"
+    • Legal contracts or regulatory interpretation (GCO)" 
  
 - function: BMC; Full form: "Brand Marketing Communications (BMC)"; description: "Brand Marketing Communications (BMC) owns brand governance, external communications, marketing strategy, social media, SCORE approvals, event branding, and reputation management for CBS.
  
@@ -26,7 +28,7 @@ MENA_FUNCTIONS_CATALOG = """\
     • SCORE (System for Communication Oversight, Review and Evaluation)
     • Social media strategy, publishing, approvals, and analytics
     • Brand identity, templates, visuals, tone of voice
-    • Event branding, invitations, signage, production support
+    • Brand governance and approval for event branding, invitations, and signage
     • Digital marketing, website content, campaigns
     • Alliance visibility and sponsorship governance
  
@@ -81,7 +83,7 @@ MENA_FUNCTIONS_CATALOG = """\
     • Contract templates, NDAs, pre‑bid agreements
     • Legal review and contractual guidance
     • Professional Indemnity Insurance (PII)
-    • Data protection and privacy guidance, AML/KYC compliance obligations
+    • Data protection, privacy guidance, AML/KYC compliance obligations and escalate for client code of conduct
     • Legal policies and governance
     • GCO templates and policy finder support
  
@@ -109,8 +111,9 @@ MENA_FUNCTIONS_CATALOG = """\
     • Engagement economics or billing (Finance)
     • Brand communications (BMC)
     • Vendor sourcing (SCS)"
+    • AML/KYC obligations in PSM (GCO)
  
-- function: SCS; Full form: "Supply Chain Services (SCS)"; description: "Supply Chain Services (SCS) governs procurement, supplier onboarding, CW and subcontractor engagement, and sourcing across CBS.
+- function: SCS; Full form: "Supply Chain Services (SCS)"; description: "Supply Chain Services (SCS) governs procurement, supplier onboarding, CW and subcontractor engagement, and sourcing across CBS. SCS focuses on **ongoing vendor relationships and supplier procurement strategy**, NOT event-specific vendor selection.
  
     SCS is the authority for how EY engages third‑party vendors.
  
@@ -119,27 +122,31 @@ MENA_FUNCTIONS_CATALOG = """\
     • CW and subcontractor hiring
     • Procurement policy and thresholds
     • Smart Intake and category selection
-    • Supplier contracts coordination (with GCO)
-    • Procurement approvals and governance
+    • Supplier strategy and vendor sourcing for business operations
+    • Procurement policy and vendor sourcing governance
  
     Excludes:
     • Invoice processing or payments (Finance)
     • Office purchase request initiation (AWS)
     • Legal contract interpretation (GCO)
+    • Event venue selection or event vendor sourcing (TME)
     • Event branding or communications (BMC)"
  
-- function: TME; Full form: "Travel, Meetings & Events (TME)"; description: "Travel, Meetings & Events (TME) manages business travel, meetings, and event execution from a logistics perspective.
- 
+- function: TME; Full form: "Travel, Meetings & Events (TME)"; description: "Travel, Meetings & Events (TME) is the authority for event-related logistics, including event vendor selection, venue sourcing, and event execution. TME handles tactical event vendor needs for specific events and owns event vendor sourcing.
+
     Includes:
-    • Business travel booking tools and coordination
+    • Business travel, Hotel booking tools and coordination
     • Meeting and event logistics execution
+    • Event venue selection and event vendor sourcing
     • Travel vendors and compliance operations
+    • Event branding execution logistics (printing, on-site setup, vendor coordination) in alignment with BMC approvals
     • Event logistics (non‑branding)
+    • Event venue compliance workflow execution (including whether BRIDGE is required for a venue/event setup)
  
     Excludes:
-    • Event branding and communications (BMC)
+    • Brand policy ownership and final approval (BMC); operational event setup/logistics remains with TME
     • Travel policy ownership (Finance)
-    • Supplier strategy (SCS)
+    • Supplier strategy and ongoing vendor sourcing (SCS)
     • Facilities and workplace operations (AWS)"
  
 - function: Talent; Full form: "Talent"; description: "The Talent function manages the employee lifecycle, learning, immigration, benefits, and people policies for CBS.
@@ -162,7 +169,7 @@ MENA_FUNCTIONS_CATALOG = """\
 # Left: UI chip code (used by frontend & state["function"] from user selection)
 # Right: Azure Search index value (used in OData filters)
 #
-# The function_gate LLM outputs the *search value* (right side).
+# The function_gate outputs the *search value* (right side).
 # The frontend sends the *chip code* (left side).
 
 CHIP_TO_SEARCH: dict[str, str] = {

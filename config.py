@@ -41,14 +41,14 @@ AZURE_SEARCH_VECTOR_FIELD = os.getenv("AZURE_SEARCH_VECTOR_FIELD", "content_vect
 AZURE_SEARCH_TOP_K = int(os.getenv("AZURE_SEARCH_TOP_K", "3"))
 AZURE_SEARCH_VECTOR_COLUMNS = os.getenv("AZURE_SEARCH_VECTOR_COLUMNS", "content_vector")
 AZURE_SEARCH_CONTENT_COLUMNS = os.getenv("AZURE_SEARCH_CONTENT_COLUMNS", "content")
-AZURE_SEARCH_SCORE_THRESHOLD = float(os.getenv("AZURE_SEARCH_SCORE_THRESHOLD", "0.5"))
+AZURE_SEARCH_SCORE_THRESHOLD = float(os.getenv("AZURE_SEARCH_SCORE_THRESHOLD", "1.5"))
 AZURE_SEARCH_API_VERSION = get_secret("AZURE-SEARCH-API-VERSION", "2023-11-01")
 
 SELECT_FIELDS = get_secret(
     "AZURE-SEARCH-SELECT-FIELDS",
     "file_name,page_number,content,source_url",
 )
-TOP_K = int(get_secret("AZURE-SEARCH-TOP-K", "3"))
+TOP_K = int(get_secret("AZURE-SEARCH-TOP-K", "5"))
 
 # ──────────────────────────── Azure OpenAI ───────────────────────────
 
@@ -99,14 +99,11 @@ _biz_exc_raw = os.getenv(
 )
 BUSINESS_EXCEPTION_DETAILS: dict = json.loads(_biz_exc_raw) if _biz_exc_raw else {}
 
-MAX_TOKENS = int(os.getenv("MAX-TOKENS", "600"))
+MAX_TOKENS = int(os.getenv("MAX-TOKENS", "1200"))
 SNIPPET_CHARS = int(os.getenv("SNIPPET-CHARS", "800"))
 
 
 AZURE_OPENAI_CHAT_API_VERSION = os.getenv("AZURE_OPENAI_CHAT_API_VERSION", "2024-10-21")
-
-# ── LMS Leave Snapshot API ──
-LMS_LEAVE_SNAPSHOT_URL = os.getenv("LMS_LEAVE_SNAPSHOT_URL", "")
 AMBIGUITY_SCORE_RATIO = float(os.getenv("AMBIGUITY_SCORE_RATIO", "0.6"))
 AZURE_SEARCH_SEMANTIC_CONFIG = get_secret("AZURE-SEARCH-SEMANTIC-CONFIG", "")
 DISCOVERY_TOP_K = int(os.getenv("DISCOVERY_TOP_K", "10"))
@@ -129,12 +126,6 @@ TITLE_MAX_LENGTH = int(os.getenv("TITLE_MAX_LENGTH", "60"))
 
 # ── Input validation ──
 MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))
-
-# ── Retrieval grading (CRAG — Corrective RAG) ──
-GRADER_RELEVANCE_THRESHOLD = float(os.getenv("GRADER_RELEVANCE_THRESHOLD", "0.5"))
-GRADER_MAX_RETRIES = int(os.getenv("GRADER_MAX_RETRIES", "1"))
-GRADER_MAX_TOKENS = int(os.getenv("GRADER_MAX_TOKENS", "150"))
-GRADER_TEMPERATURE = float(os.getenv("GRADER_TEMPERATURE", "0.0"))
 
 # ── Parallel search / Planner (Phase 2) ──
 PARALLEL_SEARCH_TIMEOUT = int(os.getenv("PARALLEL_SEARCH_TIMEOUT", "10000"))  # ms per function

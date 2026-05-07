@@ -22,7 +22,7 @@
 
         <!-- New Chat Button -->
         <div class="new-chat-btn-wrapper px-3 mb-3">
-            <button type="button" class="new-chat-btn" (click)="chatStore.startNewChat()">
+            <button type="button" class="new-chat-btn" (click)="chatStore.startNewChat()" [disabled]="chatStore.isStreaming()">
                 <i class="bi bi-stars"></i>
                 <span class="label-text">New Chat</span>
             </button>
@@ -61,23 +61,28 @@
                             } @else {
                             <div class="conv-row">
                                 <div class="conv-info">
-                                    <span class="conv-title">{{ conv.title }}</span>
+                                    <span class="conv-title" [title]="conv.title">{{ conv.title }}</span>
                                     <span class="conv-date">{{ conv.modifiedAt | date:'MMM d, y' }}</span>
                                 </div>
-                                <!-- <div class="conv-actions" (click)="$event.stopPropagation()">
-                                    <button type="button" class="conv-action-btn" title="Unpin"
-                                            (click)="onPinConversation(conv)">
-                                        <i class="bi bi-pin-angle-fill unpin-icon"></i>
+                                <div class="conv-actions" (click)="$event.stopPropagation()" ngbDropdown container="body" placement="bottom-end">
+                                    <button type="button" class="conv-action-btn" ngbDropdownToggle title="More options">
+                                        <i class="bi bi-three-dots-vertical"></i>
                                     </button>
-                                    <button type="button" class="conv-action-btn" title="Rename"
-                                            (click)="onRenameConversation(conv)">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
-                                    <button type="button" class="conv-action-btn btn-delete" title="Delete"
-                                            (click)="onDeleteConversation(conv)">
-                                        <i class="bi bi-trash3"></i>
-                                    </button>
-                                </div> -->
+                                    <div ngbDropdownMenu class="conv-dropdown-menu">
+                                        <button ngbDropdownItem class="conv-dropdown-item" (click)="onPinConversation(conv)">
+                                            <span class="unpin-wrapper"><img src="assets/pin.png" alt="Unpin" class="conv-menu-icon"></span>
+                                            <span>Unpin</span>
+                                        </button>
+                                        <button ngbDropdownItem class="conv-dropdown-item" (click)="onRenameConversation(conv)">
+                                            <img src="assets/edit-pencil.png" alt="Rename" class="conv-menu-icon">
+                                            <span>Rename</span>
+                                        </button>
+                                        <button ngbDropdownItem class="conv-dropdown-item btn-delete" (click)="onDeleteConversation(conv)">
+                                            <img src="assets/trash.png" alt="Delete" class="conv-menu-icon">
+                                            <span>Delete</span>
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
                             }
                         </li>
@@ -119,23 +124,28 @@
                                 } @else {
                                 <div class="conv-row">
                                     <div class="conv-info">
-                                        <span class="conv-title">{{ conv.title }}</span>
+                                        <span class="conv-title" [title]="conv.title">{{ conv.title }}</span>
                                         <span class="conv-date">{{ conv.modifiedAt | date:'MMM d, y' }}</span>
                                     </div>
-                                    <!-- <div class="conv-actions" (click)="$event.stopPropagation()">
-                                        <button type="button" class="conv-action-btn" title="Pin"
-                                                (click)="onPinConversation(conv)">
-                                            <i class="bi bi-pin-angle"></i>
+                                    <div class="conv-actions" (click)="$event.stopPropagation()" ngbDropdown container="body" placement="bottom-end">
+                                        <button type="button" class="conv-action-btn" ngbDropdownToggle title="More options">
+                                            <i class="bi bi-three-dots-vertical"></i>
                                         </button>
-                                        <button type="button" class="conv-action-btn" title="Rename"
-                                                (click)="onRenameConversation(conv)">
-                                            <i class="bi bi-pencil-square"></i>
-                                        </button>
-                                        <button type="button" class="conv-action-btn btn-delete" title="Delete"
-                                                (click)="onDeleteConversation(conv)">
-                                            <i class="bi bi-trash3"></i>
-                                        </button>
-                                    </div> -->
+                                        <div ngbDropdownMenu class="conv-dropdown-menu">
+                                            <button ngbDropdownItem class="conv-dropdown-item" (click)="onPinConversation(conv)">
+                                                <img src="assets/pin.png" alt="Pin" class="conv-menu-icon">
+                                                <span>Pin</span>
+                                            </button>
+                                            <button ngbDropdownItem class="conv-dropdown-item" (click)="onRenameConversation(conv)">
+                                                <img src="assets/edit-pencil.png" alt="Rename" class="conv-menu-icon">
+                                                <span>Rename</span>
+                                            </button>
+                                            <button ngbDropdownItem class="conv-dropdown-item btn-delete" (click)="onDeleteConversation(conv)">
+                                                <img src="assets/trash.png" alt="Delete" class="conv-menu-icon">
+                                                <span>Delete</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </div>
                                 }
                             </li>
@@ -178,3 +188,20 @@
     <router-outlet></router-outlet>
 </div>
 </div>
+
+<!-- Delete Confirmation Modal -->
+<ng-template #deleteConfirmModal let-modal>
+  <div class="delete-modal-content">
+    <div class="delete-modal-header">
+      <i class="bi bi-exclamation-triangle-fill delete-modal-icon"></i>
+      <h5 class="delete-modal-title">Delete Conversation</h5>
+    </div>
+    <div class="delete-modal-body">
+      <p>Are you sure you want to delete this conversation? This action cannot be undone.</p>
+    </div>
+    <div class="delete-modal-footer">
+      <button type="button" class="btn-modal btn-modal-cancel" (click)="modal.dismiss()">Cancel</button>
+      <button type="button" class="btn-modal btn-modal-delete" (click)="modal.close()">Delete</button>
+    </div>
+  </div>
+</ng-template>

@@ -8,6 +8,8 @@ import { ChatService } from './chat.service';
 import {
   ChatResponse,
   Citation,
+  ContentFinalEvent,
+  ContentReplaceEvent,
   DeepSearchEvent,
   FinalEvent,
   SSEEvent,
@@ -209,7 +211,7 @@ export class ChatStore {
       source_url: [],
       start_date: '',
       end_date: '',
-      content_type: 'qa_pair',
+      content_type: 'document',
     });
   }
 
@@ -250,7 +252,7 @@ export class ChatStore {
       source_url: [],
       start_date: '',
       end_date: '',
-      content_type: 'qa_pair',
+      content_type: 'document',
     });
   }
 
@@ -626,6 +628,32 @@ export class ChatStore {
               return { ...m, deepSearchDone: true, deepSearchCollapsed: true };
             }
             return m;
+          }),
+        );
+        break;
+      }
+
+      case 'content_replace': {
+        // [NO_ANSWER] retry path: replace all streamed content with new response.
+        // Clear any pending drip queue and replace content directly.
+        this.contentQueue = '';
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.trackId !== assistantTrackId) return m;
+            return { ...m, content: (event as ContentReplaceEvent).content };
+          }),
+        );
+        break;
+      }
+
+      case 'content_final': {
+        // Post-processed content with rebuilt citations. Replace streamed
+        // content with the final authoritative version for citation accuracy.
+        this.contentQueue = '';
+        this.messages.update(msgs =>
+          msgs.map(m => {
+            if (m.trackId !== assistantTrackId) return m;
+            return { ...m, content: (event as ContentFinalEvent).content };
           }),
         );
         break;

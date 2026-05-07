@@ -1,14 +1,18 @@
 """
-Rewrite node — query rewriting, filter extraction, and filter parsing (ASK-only).
+Rewrite node — query rewriting, filter extraction, coreference resolution,
+and query decomposition (ASK-only).
 """
 
 import datetime
 import json
+import logging
 import re
 from langchain_core.messages import BaseMessage
 from services.telemetry import get_tracer_span
 from graph.state import RAGState
 from prompts.rewrite import (
+    COREFERENCE_RESOLUTION_SYSTEM,
+    QUERY_DECOMPOSITION_SYSTEM,
     REWRITE_QUERY_FILTER_SYSTEM_PROMPT,
     rewrite_query_filter_user_template,
 )
@@ -22,6 +26,8 @@ from config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # ───────────────── Ambiguity Resolution ─────────────────
@@ -140,6 +146,113 @@ def filter_to_vector(filter_string: str) -> dict:
 
     odata_filter = parse(filter_string)
     return {"filter": odata_filter if odata_filter else None}
+
+# ───────────────── Coreference Resolution ─────────────────
+
+
+_FOLLOW_UP_INDICATORS = re.compile(
+    r"\b(it|that|this|they|them|those|its|their|these|the same|"
+    r"what about|how about|and for|same for|also for|tell me more)\b",
+    re.IGNORECASE,
+)
+
+
+def _likely_needs_coreference(query: str, has_history: bool) -> bool:
+    """Fast heuristic: does this query look like a follow-up?"""
+    if not has_history:
+        return False
+    # Short queries (< 6 words) with no explicit topic are likely follow-ups
+    words = query.split()
+    if len(words) <= 5 and _FOLLOW_UP_INDICATORS.search(query):
+        return True
+    # Very short input (likely a topic switch like "TME:" or "Finance?")
+    if len(words) <= 2 and not query.endswith("?"):
+        return True
+    # Contains pronouns/references
+    if _FOLLOW_UP_INDICATORS.search(query):
+        return True
+    return False
+
+
+@retry_with_llm_backoff()
+async def _resolve_coreferences(query: str, conversation_context: str, llm_model: str) -> str:
+    """Resolve pronouns and references using conversation history."""
+    user_prompt = (
+        f"<conversation_history>\n{conversation_context}\n</conversation_history>\n\n"
+        f"<current_query>{query}</current_query>"
+    )
+    messages = [
+        {"role": "system", "content": COREFERENCE_RESOLUTION_SYSTEM},
+        {"role": "user", "content": user_prompt},
+    ]
+    client = create_async_client(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        azure_key=AZURE_OPENAI_KEY,
+        llm_model=llm_model,
+    )
+    response = await client.chat.completions.create(
+        **prepare_model_args(
+            request_messages=messages,
+            stream=False,
+            use_data=False,
+            tools=None,
+            tool_choice=None,
+            response_format="json_object",
+            llm_model=llm_model,
+        )
+    )
+    result = json.loads(response.choices[0].message.content)
+    if result.get("needs_resolution") and result.get("resolved_query"):
+        return result["resolved_query"]
+    return query
+
+
+# ───────────────── Query Decomposition ─────────────────
+
+
+_DECOMPOSITION_SIGNALS = re.compile(
+    r"\b(compare|comparison|difference between|versus|vs\.?|"
+    r"how does .+ differ from|contrast|both .+ and|"
+    r"across .+ and|between .+ and)\b",
+    re.IGNORECASE,
+)
+
+
+def _likely_needs_decomposition(query: str) -> bool:
+    """Fast heuristic: does this query need decomposition?"""
+    return bool(_DECOMPOSITION_SIGNALS.search(query))
+
+
+@retry_with_llm_backoff()
+async def _decompose_query(query: str, llm_model: str) -> list[str] | None:
+    """Decompose a complex query into sub-queries. Returns None if not needed."""
+    messages = [
+        {"role": "system", "content": QUERY_DECOMPOSITION_SYSTEM},
+        {"role": "user", "content": query},
+    ]
+    client = create_async_client(
+        azure_endpoint=AZURE_OPENAI_ENDPOINT,
+        azure_key=AZURE_OPENAI_KEY,
+        llm_model=llm_model,
+    )
+    response = await client.chat.completions.create(
+        **prepare_model_args(
+            request_messages=messages,
+            stream=False,
+            use_data=False,
+            tools=None,
+            tool_choice=None,
+            response_format="json_object",
+            llm_model=llm_model,
+        )
+    )
+    result = json.loads(response.choices[0].message.content)
+    if result.get("needs_decomposition") and result.get("sub_queries"):
+        subs = result["sub_queries"]
+        # Sanity: max 3, each must be non-empty
+        return [s for s in subs[:3] if s and s.strip()]
+    return None
+
 
 # ───────────────── Conversation Context Helper ─────────────────
 
@@ -284,8 +397,40 @@ async def rewrite_node(state: RAGState) -> dict:
 
         # ASK-only
         if input_type == "ask":
+            # ── Step 1: Coreference Resolution ──
+            # Detect and resolve pronouns/references from follow-up queries
+            resolved_input = user_input
+            if _likely_needs_coreference(user_input, bool(conversation_context)):
+                try:
+                    resolved_input = await _resolve_coreferences(
+                        user_input, conversation_context, llm_model
+                    )
+                    if resolved_input != user_input:
+                        logger.info(
+                            "Coreference resolved: '%s' → '%s'",
+                            user_input, resolved_input,
+                        )
+                except Exception as exc:
+                    logger.warning("Coreference resolution failed, using original: %s", exc)
+                    resolved_input = user_input
+
+            # ── Step 2: Query Decomposition ──
+            # Detect comparison/multi-hop queries and decompose into sub-queries
+            sub_queries = None
+            if _likely_needs_decomposition(resolved_input):
+                try:
+                    sub_queries = await _decompose_query(resolved_input, llm_model)
+                    if sub_queries:
+                        logger.info(
+                            "Query decomposed: '%s' → %s",
+                            resolved_input, sub_queries,
+                        )
+                except Exception as exc:
+                    logger.warning("Query decomposition failed, using original: %s", exc)
+
+            # ── Step 3: Standard rewrite + filter extraction ──
             query_with_filter = {
-                "query": user_input,
+                "query": resolved_input,
                 "filter": {
                     "timeframe": start_date,
                     "source_url": source_url,
@@ -301,5 +446,12 @@ async def rewrite_node(state: RAGState) -> dict:
             rewritten_query["filter"] = structured_filter.get("filter")
 
             updates["rewritten_query"] = rewritten_query
+
+            # Pass sub-queries downstream if decomposition was needed
+            if sub_queries:
+                updates["sub_queries"] = [
+                    {"function": None, "query": sq} for sq in sub_queries
+                ]
+                updates["needs_multi_search"] = True
 
         return updates

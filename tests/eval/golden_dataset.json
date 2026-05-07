@@ -1,0 +1,112 @@
+[
+  {
+    "id": "eval_001",
+    "query": "What is the process to complete an Advance approval?",
+    "function": null,
+    "expected_function": "Finance",
+    "expected_keywords": ["advance", "approval", "process"],
+    "expected_answer_contains": ["approval"],
+    "content_type": "qa_pair",
+    "category": "process",
+    "difficulty": "easy"
+  },
+  {
+    "id": "eval_002",
+    "query": "How do I submit an invoice for payment?",
+    "function": null,
+    "expected_function": "Finance",
+    "expected_keywords": ["invoice", "submission", "payment"],
+    "expected_answer_contains": ["invoice", "submit"],
+    "content_type": "qa_pair",
+    "category": "process",
+    "difficulty": "easy"
+  },
+  {
+    "id": "eval_003",
+    "query": "What are the requirements for BRIDGE request for venue bookings?",
+    "function": null,
+    "expected_function": "TME",
+    "expected_keywords": ["BRIDGE", "venue", "booking", "requirements"],
+    "expected_answer_contains": ["BRIDGE"],
+    "content_type": "qa_pair",
+    "category": "process",
+    "difficulty": "medium"
+  },
+  {
+    "id": "eval_004",
+    "query": "What is the risk assessment process for new clients?",
+    "function": null,
+    "expected_function": "Risk",
+    "expected_keywords": ["risk", "assessment", "client"],
+    "expected_answer_contains": ["risk", "assessment"],
+    "content_type": "qa_pair",
+    "category": "process",
+    "difficulty": "medium"
+  },
+  {
+    "id": "eval_005",
+    "query": "How do I request time off?",
+    "function": null,
+    "expected_function": "Talent",
+    "expected_keywords": ["time off", "leave", "request"],
+    "expected_answer_contains": ["leave", "request"],
+    "content_type": "qa_pair",
+    "category": "process",
+    "difficulty": "easy"
+  },
+  {
+    "id": "eval_006",
+    "query": "What are the compliance training requirements for 2024?",
+    "function": null,
+    "expected_function": "GCO",
+    "expected_keywords": ["compliance", "training", "2024"],
+    "expected_answer_contains": ["compliance", "training"],
+    "content_type": "qa_pair",
+    "category": "policy",
+    "difficulty": "medium"
+  },
+  {
+    "id": "eval_007",
+    "query": "Compare the expense approval process across Finance and TME",
+    "function": null,
+    "expected_function": null,
+    "expected_keywords": ["expense", "approval"],
+    "expected_answer_contains": ["expense", "approval"],
+    "content_type": "qa_pair",
+    "category": "comparison",
+    "difficulty": "hard"
+  },
+  {
+    "id": "eval_008",
+    "query": "What are the hotel booking guidelines for business travel?",
+    "function": ["TME"],
+    "expected_function": "TME",
+    "expected_keywords": ["hotel", "booking", "travel", "guidelines"],
+    "expected_answer_contains": ["hotel", "booking"],
+    "content_type": "qa_pair",
+    "category": "policy",
+    "difficulty": "easy"
+  },
+  {
+    "id": "eval_009",
+    "query": "What documents are needed for onboarding a new employee?",
+    "function": null,
+    "expected_function": "Talent",
+    "expected_keywords": ["onboarding", "documents", "employee"],
+    "expected_answer_contains": ["onboarding"],
+    "content_type": "document",
+    "category": "process",
+    "difficulty": "medium"
+  },
+  {
+    "id": "eval_010",
+    "query": "What is the SLA for IT support tickets?",
+    "function": null,
+    "expected_function": "AWS",
+    "expected_keywords": ["SLA", "IT", "support", "tickets"],
+    "expected_answer_contains": ["SLA"],
+    "content_type": "qa_pair",
+    "category": "policy",
+    "difficulty": "medium"
+  }
+]

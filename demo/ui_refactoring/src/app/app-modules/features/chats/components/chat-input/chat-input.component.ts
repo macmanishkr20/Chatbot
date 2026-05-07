@@ -32,7 +32,7 @@ export class ChatInputComponent {
 
   @ViewChild('msg') textareaRef!: ElementRef<HTMLTextAreaElement>;
 
-  @Input() placeholder = 'Ask me anything on MENA...';
+  @Input() placeholder = 'Type your question';
   @Input() disabled = false;
   @Input() ariaLabel = 'Chat message input';
   @Input() enterToSend = true;

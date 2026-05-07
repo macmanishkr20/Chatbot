@@ -17,14 +17,14 @@ export const FEATURE_ROUTES: Routes = [
                 loadComponent: () => import('./pages/home/home.component')
                     .then(m => m.HomeComponent),
                 canActivate: [authGuard],
-                data: { key: 'setting_access', },
+                data: { key: 'chat_access', },
             },
             {
                 path: 'page',
                 loadComponent: () => import('./pages/lay-out/lay-out.component')
                     .then(m => m.LayOutComponent),
                 canActivate: [authGuard],
-                data: { key: 'setting_access', },
+                data: { key: 'chat_access', },
                 children: [
                     {
                         path: '', redirectTo: 'chats', pathMatch: 'full'

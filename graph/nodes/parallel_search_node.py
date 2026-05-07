@@ -1,17 +1,16 @@
 """
 Parallel search node — executes function searches concurrently via asyncio.gather().
 
-Replaces the sequential multi_function_search_node with true parallelism.
-Each function's search runs independently; results are collected and passed
-to synthesize_node for merging.
+Each function's search runs independently using SearchService.search_with_retry();
+results are collected and passed to synthesize_node for merging.
 
 Design decisions:
   - Uses asyncio.gather(return_exceptions=True) so one timeout/failure
     doesn't block others.
-  - Real-time status via asyncio.Queue (same pattern as old multi_function_search).
+  - Real-time status via asyncio.Queue for progressive UX.
   - NOT in _STREAMABLE_NODES — status goes through updates mode only.
-  - Does NOT call _generate_response for validation (unlike old sequential node).
-    The grader_node downstream handles relevance checking.
+  - Delegates retry/fallback to SearchService.search_with_retry(skip_last_resort=True)
+    to preserve function scoping.
   - Timeout per function is configurable via PARALLEL_SEARCH_TIMEOUT.
 """
 from __future__ import annotations
@@ -23,7 +22,7 @@ from langchain_core.runnables import RunnableConfig
 
 from config import PARALLEL_SEARCH_TIMEOUT, TOP_K
 from graph.state import RAGState
-from graph.nodes.search_node import _strip_internal_fields
+from graph.nodes.search_node import _embed_query, _strip_internal_fields
 from prompts._functions import CHIP_TO_SEARCH
 from services.search_client import SearchService
 from services.telemetry import get_tracer_span
@@ -31,42 +30,37 @@ from services.telemetry import get_tracer_span
 logger = logging.getLogger(__name__)
 
 
-def _build_function_filter(
-    fn: str, base_filter: str | None, content_type: str,
-) -> str:
-    """Build an OData filter scoped to a single function and content type."""
-    search_fn = CHIP_TO_SEARCH.get(fn, fn)
-    fn_clause = f"function eq '{search_fn}'"
-    ct_clause = f"content_type eq '{content_type}'"
-
-    if base_filter:
-        return f"({base_filter}) and ({fn_clause}) and ({ct_clause})"
-    return f"({fn_clause}) and ({ct_clause})"
-
-
 async def _search_single_function(
     fn: str,
     sub_query: str,
     rewritten_query: dict,
-    embedded_query: list,
     base_filter: str | None,
-    fallback_chain: list[str],
+    content_type: str,
     search_service: SearchService,
 ) -> dict:
-    """Search a single function with content-type fallback. Returns result dict."""
-    # Override query text with the sub-query from planner
+    """Search a single function — embeds the sub-query then runs waterfall search."""
+    search_fn = CHIP_TO_SEARCH.get(fn, fn)
+    fn_clause = f"function eq '{search_fn}'"
+    scoped_filter = f"({base_filter}) and ({fn_clause})" if base_filter else fn_clause
+
     query_override = {**rewritten_query, "query": sub_query}
 
-    for ct in fallback_chain:
-        odata_filter = _build_function_filter(fn, base_filter, ct)
-        results = await search_service.unified_search(
-            query_override, embedded_query, odata_filter=odata_filter,
-        )
-        if results:
-            curated = _strip_internal_fields(results[:TOP_K])
-            return {"function": fn, "events": curated, "query": sub_query}
+    # Embed the sub-query for this function search
+    embedded_query = await _embed_query(sub_query)
+    if not embedded_query:
+        return {"function": fn, "events": [], "query": sub_query}
 
-    return {"function": fn, "events": [], "query": sub_query}
+    results = await search_service.search_with_retry(
+        query_override,
+        embedded_query,
+        base_filter=scoped_filter,
+        content_type=content_type,
+        top_k=TOP_K,
+        skip_last_resort=True,
+    )
+
+    curated = _strip_internal_fields(results[:TOP_K])
+    return {"function": fn, "events": curated, "query": sub_query}
 
 
 async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
@@ -77,9 +71,8 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
     with get_tracer_span("parallel_search_node"):
         sub_queries = state.get("sub_queries") or []
         rewritten_query = state.get("rewritten_query") or {}
-        embedded_query = state.get("embedded_query")
 
-        if not sub_queries or not rewritten_query or not embedded_query:
+        if not sub_queries or not rewritten_query:
             return {
                 "parallel_results": [],
                 "error_info": {
@@ -90,12 +83,9 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
 
         base_filter = rewritten_query.get("filter") or None
         requested_ct = (state.get("content_type") or "qa_pair").strip() or "qa_pair"
-        fallback_chain = [requested_ct]
-        if requested_ct == "qa_pair":
-            fallback_chain.append("document")
 
         search_service = SearchService()
-        timeout_sec = PARALLEL_SEARCH_TIMEOUT / 1000.0  # Convert ms to seconds
+        timeout_sec = PARALLEL_SEARCH_TIMEOUT / 1000.0
 
         # ── Real-time status delivery via asyncio.Queue ──
         queue: asyncio.Queue | None = config.get("configurable", {}).get("_deep_search_queue")
@@ -108,9 +98,7 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
 
         fn_names = ", ".join(sq["function"] for sq in sub_queries)
         if len(sub_queries) == 1:
-            emit_status(
-                f"Searching in **{fn_names}** for the most relevant answer."
-            )
+            emit_status(f"Searching in **{fn_names}** for the most relevant answer.")
         else:
             emit_status(
                 f"This query spans multiple functions ({fn_names}). "
@@ -129,16 +117,14 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
                     fn=fn,
                     sub_query=sub_query,
                     rewritten_query=rewritten_query,
-                    embedded_query=embedded_query,
                     base_filter=base_filter,
-                    fallback_chain=fallback_chain,
+                    content_type=requested_ct,
                     search_service=search_service,
                 ),
                 timeout=timeout_sec,
             )
             tasks.append(task)
 
-        # Execute all searches concurrently
         raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # ── Process results ──

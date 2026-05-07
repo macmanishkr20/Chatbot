@@ -84,9 +84,15 @@
     pointer-events: none;
   }
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: rgba(40, 40, 60, 0.7);
     box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
   }
 }
 
@@ -183,10 +189,10 @@
   height: 24px;
   padding: 0;
   border: none;
-  background: rgba(255, 255, 255, 0.1);
+  background: transparent;
   border-radius: 5px;
   color: rgba(255, 255, 255, 0.7);
-  font-size: 11px;
+  font-size: 13px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 
@@ -195,26 +201,81 @@
     color: #fff;
   }
 
-  &.btn-delete:hover {
-    background: rgba(239, 68, 68, 0.2);
-    color: #ef4444;
+  &::after {
+    display: none !important;
   }
 }
 
-.unpin-icon {
-  position: relative;
-  display: inline-block;
+.conv-dropdown-menu {
+  background: #1e2030;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 4px;
+  min-width: 140px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
 
-  &::after {
-    content: '';
-    position: absolute;
-    top: -1px;
-    bottom: -1px;
-    left: 50%;
-    width: 1.5px;
-    background: currentColor;
-    transform: translateX(-50%) rotate(-45deg);
-    border-radius: 1px;
+.conv-dropdown-item {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  transition: background 0.15s;
+
+  .conv-menu-icon {
+    width: 16px;
+    height: 16px;
+    object-fit: contain;
+    opacity: 0.85;
+
+    &.unpin-icon {
+      position: relative;
+    }
+  }
+
+  .unpin-wrapper {
+    position: relative;
+    display: inline-flex;
+    width: 16px;
+    height: 16px;
+
+    .conv-menu-icon {
+      width: 16px;
+      height: 16px;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      top: -2px;
+      bottom: -2px;
+      left: 50%;
+      width: 1.5px;
+      background: rgba(255, 255, 255, 0.85);
+      transform: translateX(-50%) rotate(-45deg);
+      border-radius: 1px;
+    }
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #fff;
+
+    .conv-menu-icon {
+      opacity: 1;
+    }
+  }
+
+  &.btn-delete {
+    color: rgba(239, 68, 68, 0.85);
+
+    &:hover {
+      background: rgba(239, 68, 68, 0.12);
+      color: #ef4444;
+    }
   }
 }
 
@@ -444,3 +505,76 @@ details[open] > summary .chevron {
 :host ::ng-deep .icon-red svg { fill: #ef4444 !important; }
 :host ::ng-deep .icon-green svg path,
 :host ::ng-deep .icon-green svg { fill: #22c55e !important; }
+
+/* ── Delete Confirmation Modal ── */
+::ng-deep .delete-confirm-modal .modal-content {
+  background: #1e2030;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+}
+
+.delete-modal-content {
+  padding: 24px;
+}
+
+.delete-modal-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.delete-modal-icon {
+  font-size: 20px;
+  color: #EA011D;
+}
+
+.delete-modal-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.delete-modal-body p {
+  margin: 0;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.5;
+}
+
+.delete-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.btn-modal {
+  padding: 8px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-modal-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.85);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.15);
+  }
+}
+
+.btn-modal-delete {
+  background: #FF4336;
+  color: #fff;
+
+  &:hover {
+    background: #dc2626;
+  }
+}

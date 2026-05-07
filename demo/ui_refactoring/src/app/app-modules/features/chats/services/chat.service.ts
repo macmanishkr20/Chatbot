@@ -16,6 +16,8 @@ import {
   StoredConversation,
   StoredMessage,
 } from '../models/chat.model';
+import { AuthService } from '../../../../_shared/messaging-service/auth.service';
+import { AuthUser } from '../../../../_shared/messaging-service/auth-user';
 
 /**
  * Low-level chat API service.
@@ -35,6 +37,7 @@ import {
 export class ChatService {
   private readonly http = inject(HttpClient);
   private readonly msalService = inject(MsalService);
+  private readonly authUser = inject(AuthService<AuthUser>);
   private readonly baseUrl = `${environment.apiUrl}api/Chat`;
   private readonly feedbackUrl = `${environment.apiUrl}api/Feedback`;
   private readonly hierarchyUrl = `${environment.apiUrl}api/hierarchy`;
@@ -102,10 +105,15 @@ export class ChatService {
 
   private async *_streamPost(url: string, body: unknown, signal?: AbortSignal): AsyncGenerator<SSEEvent> {
     const token = await this.getAccessToken();
+    const sessionId = this.authUser?.user?.sessionId;
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (sessionId) {
+      headers['SessionId'] = sessionId;
     }
 
     const response = await fetch(url, {

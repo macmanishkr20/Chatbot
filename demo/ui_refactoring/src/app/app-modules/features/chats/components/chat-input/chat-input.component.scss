@@ -19,16 +19,32 @@
   padding: 0.5rem 0.75rem;
   border-radius: 40px;
   background: rgba(30, 30, 44, 0.5);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: none;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
   justify-content: space-between;
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+  transition: box-shadow 0.25s ease;
+  z-index: 1;
+
+  // Gradient border — always visible
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 40px;
+    padding: 1px;
+    opacity: 0.35;
+    background: linear-gradient(135deg, #ffe600 0% 40%, #ff32ff 79%, #ff3c00);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
 
   &:focus-within {
-    border-color: rgba(56, 189, 248, 0.5);
-    box-shadow: 0 0 12px rgba(56, 189, 248, 0.2), 0 4px 24px rgba(0, 0, 0, 0.15);
+    box-shadow: 0 0 12px rgba(249, 115, 22, 0.15), 0 4px 24px rgba(0, 0, 0, 0.15);
   }
 }
 

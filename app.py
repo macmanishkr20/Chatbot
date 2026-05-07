@@ -87,34 +87,90 @@ _cancel_signals: dict[str, bool] = {}
 # with_structured_output(RouteResponse) which streams JSON fragments,
 # not user-facing prose. Supervisor's RESPOND content is delivered via
 # the "updates" mode instead (see stream_generator).
-_STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "search"})
+_STREAMABLE_NODES: frozenset[str] = frozenset({"generate"})
 
 # ── Chain-of-thought step labels shown in the UI ──
 # Emitted as {"type": "thought"} SSE events when each node first starts.
-# Each entry: node_name → (display_name, message, group, icon)
-# Groups: preparation, understanding, retrieval, quality, response
 
-_NODE_THOUGHT: dict[str, tuple[str, str, str, str]] = {
-    "Supervisor":           ("Intent",     "Aligning intent…",                    "preparation",   "track_changes"),
-    "load_memory":          ("Recall",     "Reconnecting context…",               "preparation",   "history"),
-    "function_gate":        ("Routing",    "Confirming MENA function…",           "preparation",   "alt_route"),
-    "rewrite":              ("Focus",      "Clarifying focus…",                   "understanding", "filter_alt"),
-    "embed":                ("Meaning",    "Interpreting meaning…",               "understanding", "psychology"),
-    "search":               ("Relevance",  "Finding relevance…",                  "retrieval",     "search"),
-    "multi_function_search":("Deep Search","Searching across multiple functions…","retrieval",     "travel_explore"),
-    "planner":              ("Planning",   "Analyzing query complexity…",         "understanding", "account_tree"),
-    "parallel_search":      ("Searching",  "Searching multiple functions in parallel…", "retrieval", "manage_search"),
-    "synthesize":           ("Combining",  "Merging results…",                    "response",      "merge"),
-    "grader":               ("Quality",    "Checking relevance…",                 "quality",       "verified"),
-    "generate":             ("Response",   "Forming response…",                   "response",      "smart_toy"),
-    "persist":              ("Flow",       "Maintaining continuity…",             "response",      "save"),
-    "save_memory":          ("Memory",     "Storing insight…",                    "response",      "memory"),
-    # ── Expense / Scoreboard / LMS agent nodes ──
-    "resolve_role":         ("Auth",       "Verifying permissions…",              "preparation",   "shield"),
-    "privacy_gate":         ("Privacy",    "Checking access scope…",              "preparation",   "lock"),
-    "understand_query":     ("Planning",   "Analyzing query intent…",             "understanding", "lightbulb"),
-    "execute_query":        ("Executing",  "Running data query…",                 "retrieval",     "database"),
-    "synthesize_node":      ("Narrating",  "Forming response…",                  "response",      "smart_toy"),
+_NODE_THOUGHT: dict[str, dict[str, str]] = {
+    "Supervisor": {
+        "display": "Intent",
+        "message": "Aligning intent…",
+        "group": "preparation",
+        "icon": "assistant",
+    },
+    "load_memory": {
+        "display": "Recall",
+        "message": "Reconnecting context…",
+        "group": "preparation",
+        "icon": "history",
+    },
+    "function_gate": {
+        "display": "Routing",
+        "message": "Confirming MENA function…",
+        "group": "preparation",
+        "icon": "route",
+    },
+    "rewrite": {
+        "display": "Focus",
+        "message": "Clarifying focus…",
+        "group": "understanding",
+        "icon": "edit_note",
+    },
+    "search": {
+        "display": "Relevance",
+        "message": "Finding relevance…",
+        "group": "retrieval",
+        "icon": "search",
+    },
+    "multi_function_search": {
+        "display": "Deep Search",
+        "message": "Searching across multiple functions…",
+        "group": "retrieval",
+        "icon": "manage_search",
+    },
+    "planner": {
+        "display": "Planning",
+        "message": "Analyzing query complexity…",
+        "group": "retrieval",
+        "icon": "account_tree",
+    },
+    "parallel_search": {
+        "display": "Searching",
+        "message": "Searching multiple functions in parallel…",
+        "group": "retrieval",
+        "icon": "manage_search",
+    },
+    "synthesize": {
+        "display": "Combining",
+        "message": "Merging results…",
+        "group": "retrieval",
+        "icon": "merge",
+    },
+    "generate": {
+        "display": "Response",
+        "message": "Forming response…",
+        "group": "response",
+        "icon": "auto_fix_high",
+    },
+    "persist": {
+        "display": "Flow",
+        "message": "Maintaining continuity…",
+        "group": "response",
+        "icon": "save",
+    },
+    "save_memory": {
+        "display": "Memory",
+        "message": "Storing insight…",
+        "group": "response",
+        "icon": "bookmark",
+    },
+    "summarize": {
+        "display": "Context",
+        "message": "Condensing conversation…",
+        "group": "response",
+        "icon": "compress",
+    },
 }
 
 
@@ -172,49 +228,6 @@ if _rate_limiting_available and limiter:
 
 # ── Helpers ──
 
-def _ensure_base_messages(messages: list) -> list[BaseMessage]:
-    """Reconstruct proper BaseMessage objects from checkpoint deserialization output.
-
-    The custom AzureSQLCheckpointSaver previously used ``json.dumps(..., default=str)``
-    which stringified BaseMessage objects into their repr (e.g. "HumanMessage(content='hi')").
-    Newer checkpoints use the LangGraph serde and come back correctly deserialized, but we
-    keep this helper so old checkpoints in the DB still work gracefully.
-
-    Three possible input formats:
-    - Already-proper BaseMessage objects  → pass through as-is
-    - Dicts with a 'type'/'role' key      → reconstruct via LangChain types
-    - Repr strings                         → regex-parse type + content
-    """
-    result: list[BaseMessage] = []
-    for m in messages:
-        if isinstance(m, BaseMessage):
-            result.append(m)
-            continue
-
-        if isinstance(m, dict):
-            role = (m.get("type") or m.get("role") or "").lower()
-            content = m.get("content", "")
-            msg_id = m.get("id")
-            msg = HumanMessage(content=content) if role in ("human", "user") else AIMessage(content=content)
-            if msg_id:
-                try:
-                    object.__setattr__(msg, "id", msg_id)
-                except Exception:
-                    pass
-            result.append(msg)
-            continue
-
-        if isinstance(m, str):
-            # Legacy repr: "HumanMessage(content='...' ...)" or "AIMessage(...)"
-            is_human = m.startswith("HumanMessage") or bool(re.search(r"type=['\"]human['\"]", m))
-            content_match = re.search(r"content='((?:[^'\\]|\\.)*)'", m) or re.search(r'content="((?:[^"\\]|\\.)*)"', m)
-            content = content_match.group(1) if content_match else ""
-            result.append(HumanMessage(content=content) if is_human else AIMessage(content=content))
-            continue
-
-        logger.warning("_ensure_base_messages: unexpected type %s, skipping", type(m))
-
-    return result
 
 
 async def _build_initial_state(query: UserChatQuery) -> dict:
@@ -269,6 +282,7 @@ def _sanitize_input(text: str) -> str:
 def sse_format(payload: dict) -> str:
     return f"data: {json.dumps(payload)}\n\n"
 
+
 def _to_chip_code(value: str | None) -> str | None:
     """Convert a search-index function value to its frontend chip code.
     E.g. "Risk" → "Risk Management", "Finance" → "Finance".
@@ -305,6 +319,13 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
     # since aget_state on the parent graph may not reflect sub-graph changes.
     auto_selected_function: list[str] | None = None
 
+    # ── Generate node streaming buffer ──
+    # Buffer the first ~15 chars from generate to detect [NO_ANSWER] before
+    # flushing tokens to the client. If detected, suppress all further tokens.
+    generate_buffer: str = ""
+    generate_aborted: bool = False
+    generate_flushed: bool = False
+
     # ── Side-channel for real-time deep search status delivery ──
     # The parallel_search_node pushes status messages here as they
     # happen.  We drain the queue between graph chunks for near-real-time
@@ -322,10 +343,22 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
         while not deep_search_queue.empty():
             try:
                 status = deep_search_queue.get_nowait()
+                # Pick icon based on step content
+                if "Found" in status:
+                    ds_icon = "check_circle"
+                elif "Combining" in status:
+                    ds_icon = "merge"
+                elif "timed out" in status or "failed" in status:
+                    ds_icon = "error_outline"
+                elif "No results" in status:
+                    ds_icon = "search_off"
+                else:
+                    ds_icon = "search"
                 yield sse_format({
                     "type": "deep_search",
                     "content": status,
                     "node": "parallel_search",
+                    "icon": ds_icon,
                 })
             except asyncio.QueueEmpty:
                 break
@@ -349,11 +382,18 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     seen_nodes.add(node)
                     thought_entry = _NODE_THOUGHT.get(node)
                     if thought_entry:
-                        display_name, message, group, icon = thought_entry
+                        display_name = thought_entry["display"]
+                        message = thought_entry["message"]
                     else:
-                        display_name, message, group, icon = node, f"Processing {node}...", "response", "settings"
-                    logger.debug("thought (updates) node=%s group=%s", node, group)
-                    yield sse_format({"type": "thought", "node": display_name, "message": message, "group": group, "icon": icon})
+                        display_name, message = node, f"Processing {node}..."
+                    logger.debug("thought (updates) node=%s", node)
+                    yield sse_format({
+                        "type": "thought",
+                        "node": display_name,
+                        "message": message,
+                        "group": thought_entry.get("group", "") if thought_entry else "",
+                        "icon": thought_entry.get("icon", "settings") if thought_entry else "settings",
+                    })
 
                     # ── Supervisor RESPOND prose delivery ──
                     # Supervisor uses with_structured_output so its LLM tokens
@@ -369,6 +409,40 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                                 "node": "Supervisor",
                             })
 
+                # ── Generate node completion (runs regardless of seen_nodes) ──
+                # This fires when generate_node returns its state update.
+                # Messages-mode tokens already streamed in real-time; here we
+                # handle buffer flush, retry delivery, and citation reconciliation.
+                if node == "generate":
+                    # Flush any remaining buffer from messages mode
+                    if generate_buffer and not generate_aborted and not generate_flushed:
+                        yield sse_format({
+                            "type": "content",
+                            "content": generate_buffer,
+                            "node": "generate",
+                        })
+                        generate_buffer = ""
+                        generate_flushed = True
+
+                    gen_content = node_data.get("ai_content")
+
+                    if generate_aborted and gen_content:
+                        # Retry path — send full replacement content
+                        yield sse_format({
+                            "type": "content_replace",
+                            "content": gen_content,
+                            "node": "generate",
+                        })
+                    elif generate_flushed and gen_content:
+                        # Normal path — send final post-processed content
+                        # (citations rebuilt deterministically). The frontend
+                        # should replace the streamed content with this.
+                        yield sse_format({
+                            "type": "content_final",
+                            "content": gen_content,
+                            "node": "generate",
+                        })
+
                 # ── Multi-function search: thought event for deep search ──
                 # Status messages are delivered in real-time via the
                 # asyncio.Queue side-channel (drained at the top of this loop).
@@ -383,22 +457,63 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                 seen_nodes.add(node)
                 thought_entry = _NODE_THOUGHT.get(node)
                 if thought_entry:
-                    display_name, message, group, icon = thought_entry
+                    display_name = thought_entry["display"]
+                    message = thought_entry["message"]
                 else:
-                    display_name, message, group, icon = node, f"Processing {node}...", "response", "settings"
-                yield sse_format({"type": "thought", "node": display_name, "message": message, "group": group, "icon": icon})
+                    display_name, message = node, f"Processing {node}..."
+                yield sse_format({
+                    "type": "thought",
+                    "node": display_name,
+                    "message": message,
+                    "group": thought_entry.get("group", "") if thought_entry else "",
+                    "icon": thought_entry.get("icon", "settings") if thought_entry else "settings",
+                })
 
             if chunk_msg.content and node in _STREAMABLE_NODES:
-                yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+                # For generate node: suppress [NO_ANSWER] token fragments.
+                # The generate_node aborts after detecting [NO_ANSWER] (~12 chars),
+                # but a few leading tokens may have already been emitted by LangGraph.
+                # Buffer them and only flush once we're past the detection window.
+                if node == "generate":
+                    generate_buffer += chunk_msg.content
+                    if len(generate_buffer) < 15:
+                        continue  # still in detection window
+                    if generate_buffer.strip().startswith("[NO_ANSWER]"):
+                        # Abort — don't send anything; retry will use content_replace
+                        generate_buffer = ""
+                        generate_aborted = True
+                        continue
+                    if generate_aborted:
+                        continue  # stream was aborted, ignore remaining chunks
+                    # First flush: send accumulated buffer
+                    if generate_buffer and not generate_flushed:
+                        generate_flushed = True
+                        yield sse_format({"type": "content", "content": generate_buffer, "node": node})
+                        generate_buffer = ""
+                    else:
+                        yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
+                else:
+                    yield sse_format({"type": "content", "content": chunk_msg.content, "node": node})
 
     # ── Drain any remaining deep search status messages ──
     while not deep_search_queue.empty():
         try:
             status = deep_search_queue.get_nowait()
+            if "Found" in status:
+                ds_icon = "check_circle"
+            elif "Combining" in status:
+                ds_icon = "merge"
+            elif "timed out" in status or "failed" in status:
+                ds_icon = "error_outline"
+            elif "No results" in status:
+                ds_icon = "search_off"
+            else:
+                ds_icon = "search"
             yield sse_format({
                 "type": "deep_search",
                 "content": status,
                 "node": "parallel_search",
+                "icon": ds_icon,
             })
         except asyncio.QueueEmpty:
             break
@@ -495,8 +610,6 @@ async def chat_api(
 
     # Build or update state for this turn
     if current_state and current_state.get("messages"):
-        # Ensure messages are proper BaseMessage objects (handles legacy checkpoints)
-        current_state["messages"] = _ensure_base_messages(current_state["messages"])
         # Token-aware trimming instead of naive [-5:] slice.
         # Keeps as many recent messages as fit within the token budget;
         # the supervisor will further summarise older ones if needed.
@@ -547,9 +660,6 @@ async def chat_api(
         current_state["requires_function_selection"] = False
         current_state["function_required_reason"] = None
         current_state["function_hint"] = None
-        current_state["grader_score"] = None
-        current_state["grader_retry_count"] = 0
-        current_state["grader_passed"] = None
         current_state["plan_type"] = None
         current_state["sub_queries"] = None
         current_state["parallel_results"] = None
@@ -627,8 +737,6 @@ async def regenerate_chat(
         pass
 
     if current_state and current_state.get("messages"):
-        # Ensure messages are proper BaseMessage objects (handles legacy checkpoints)
-        current_state["messages"] = _ensure_base_messages(current_state["messages"])
         current_state["messages"] = trim_messages_to_budget(
             current_state["messages"]
         )
@@ -641,9 +749,6 @@ async def regenerate_chat(
         current_state["response"] = None
         current_state["suggestive_actions"] = None
         current_state["conversation_title"] = None
-        current_state["grader_score"] = None
-        current_state["grader_retry_count"] = 0
-        current_state["grader_passed"] = None
         current_state["plan_type"] = None
         current_state["sub_queries"] = None
         current_state["parallel_results"] = None
@@ -730,9 +835,6 @@ async def edit_message(
             "requires_function_selection": False,
             "function_required_reason": None,
             "function_hint": None,
-            "grader_score": None,
-            "grader_retry_count": 0,
-            "grader_passed": None,
             "plan_type": None,
             "sub_queries": None,
             "parallel_results": None,
@@ -747,9 +849,7 @@ async def edit_message(
             media_type="text/event-stream",
         )
 
-    # Ensure messages are proper BaseMessage objects (handles legacy checkpoints
-    # that were serialised with default=str, coming back as repr strings or dicts)
-    messages = _ensure_base_messages(current_state["messages"])
+    messages = current_state["messages"]
 
     # Find the user messages to determine which one to edit
     user_msg_positions = [
@@ -819,9 +919,6 @@ async def edit_message(
         "requires_function_selection": False,
         "function_required_reason": None,
         "function_hint": None,
-        "grader_score": None,
-        "grader_retry_count": 0,
-        "grader_passed": None,
         "plan_type": None,
         "sub_queries": None,
         "parallel_results": None,

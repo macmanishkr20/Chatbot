@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, OnInit, signal } from '@angular/core';
+import { Component, computed, inject, OnInit, signal, TemplateRef, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
+import { NgbDropdownModule, NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ChatStore } from '../../services/chat.store';
 import { RouterLink, RouterOutlet } from '@angular/router';
 import { SideBarStore } from '../../services/sidebar.store';
@@ -28,6 +28,7 @@ export class ChatSidebarComponent implements OnInit {
 
   readonly chatStore = inject(ChatStore);
   sidebarStore = inject(SideBarStore);
+  private readonly modalService = inject(NgbModal);
   readonly SidebarCodes = SidebarCodes;
 
   sidebarCollapsed = true;
@@ -59,6 +60,10 @@ export class ChatSidebarComponent implements OnInit {
   /** Rename state */
   renamingConvId: number | null = null;
   renameTitle = '';
+
+  /** Delete confirmation state */
+  @ViewChild('deleteConfirmModal') deleteConfirmModal!: TemplateRef<unknown>;
+  private pendingDeleteConv: ConversationsVM | null = null;
 
   /** Admin sidebar items (kept unchanged) */
   adminItems: NavItem[] = [];
@@ -157,8 +162,21 @@ export class ChatSidebarComponent implements OnInit {
 
   // ── Delete ──
   onDeleteConversation(conv: ConversationsVM): void {
+    this.pendingDeleteConv = conv;
+    this.modalService.open(this.deleteConfirmModal, {
+      centered: true,
+      size: 'sm',
+      windowClass: 'delete-confirm-modal'
+    }).result.then(
+      () => this.confirmDelete(),
+      () => { this.pendingDeleteConv = null; }
+    );
+  }
+
+  confirmDelete(): void {
+    if (!this.pendingDeleteConv) return;
+    const conv = this.pendingDeleteConv;
     this.chatStore.deleteConversation(conv);
-    // Also unpin if pinned
     if (this.pinnedIds().has(conv.id)) {
       this.pinnedIds.update(ids => {
         const updated = new Set(ids);
@@ -167,6 +185,7 @@ export class ChatSidebarComponent implements OnInit {
       });
       this.savePinnedIds();
     }
+    this.pendingDeleteConv = null;
   }
 
   // ── LocalStorage helpers for pins ──

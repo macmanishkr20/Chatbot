@@ -22,7 +22,7 @@ microsoft-agents-hosting-aiohttp>=0.8.0
 # ── Azure AI / OpenAI ──
 openai>=1.0.0
 azure-identity
-azure-search-documents>=11.4.0
+azure-search-documents==11.6.0
 azure-core
 azure-keyvault-secrets
 tiktoken

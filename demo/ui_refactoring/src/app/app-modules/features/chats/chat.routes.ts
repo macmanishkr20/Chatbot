@@ -12,21 +12,21 @@ export const CHAT_ROUTES: Routes = [
                 loadComponent: () => import('./pages/chat-container/chat-container.component')
                     .then(m => m.ChatContainerComponent),
                 canActivateChild: [authGuard],
-                data: { key: 'setting_access' },
+                data: { key: 'chat_access' },
                 children: [
                     {
                         path: '',
                         loadComponent: () => import('./components/chat-window/chat-window.component')
                             .then(m => m.ChatWindowComponent),
                         canActivate: [authGuard],
-                        data: { key: 'setting_access' },
+                        data: { key: 'chat_access' },
                     },
                     {
                         path: ':id',
                         loadComponent: () => import('./components/chat-window/chat-window.component')
                             .then(m => m.ChatWindowComponent),
                         canActivate: [authGuard],
-                        data: { key: 'setting_access' },
+                        data: { key: 'chat_access' },
                     }
                 ]
             }

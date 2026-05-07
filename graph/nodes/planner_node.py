@@ -60,6 +60,20 @@ async def planner_node(state: RAGState) -> dict:
                 deduped_functions.append(normalized)
         functions_found = deduped_functions
 
+        # ── Fast-path: rewrite_node already decomposed the query ──
+        # When query decomposition (Fix #1) produces sub_queries before search,
+        # honour them directly — they represent the user's explicit multi-hop intent.
+        existing_sub_queries = state.get("sub_queries")
+        if existing_sub_queries and len(existing_sub_queries) > 1:
+            logger.info(
+                "planner: using pre-decomposed sub_queries (%d) from rewrite_node",
+                len(existing_sub_queries),
+            )
+            return {
+                "plan_type": "complex",
+                "sub_queries": existing_sub_queries,
+            }
+
         # ── Fast-path: single function or missing data → simple ──
         if len(functions_found) <= 1 or not query_text:
             sub_queries = [{"function": functions_found[0], "query": query_text}] if functions_found else []
@@ -93,6 +107,15 @@ async def planner_node(state: RAGState) -> dict:
             if not valid_subs:
                 valid_subs = [{"function": fn, "query": query_text} for fn in functions_found]
                 complexity = "complex"
+
+            # Ensure ALL functions_found are represented in sub_queries.
+            # search_node already determined these functions have comparable scores
+            # (no clear winner), so the planner should not drop any of them.
+            covered_fns = {sq["function"] for sq in valid_subs}
+            for fn in functions_found:
+                if fn not in covered_fns:
+                    valid_subs.append({"function": fn, "query": query_text})
+                    complexity = "complex"
 
             logger.info(
                 "planner: complexity=%s sub_queries=%d functions=%s",

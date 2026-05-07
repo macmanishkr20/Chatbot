@@ -1,12 +1,53 @@
+import asyncio
 from collections import defaultdict
-
-from langchain_core.messages import AIMessage
+import logging
 
 from graph.state import RAGState
 from services.telemetry import get_tracer_span
-from config import AMBIGUITY_SCORE_RATIO, BUSINESS_EXCEPTION_DETAILS, TOP_K
+from config import (
+    AMBIGUITY_SCORE_RATIO,
+    AZURE_OPENAI_EMBED_API_KEY,
+    AZURE_OPENAI_EMBED_ENDPOINT,
+    BUSINESS_EXCEPTION_DETAILS,
+    TOP_K,
+)
 from prompts._functions import CHIP_TO_SEARCH
+from services.openai_client import (
+    create_sync_client,
+    get_embedding_model,
+    retry_with_embedding_backoff,
+)
 from services.search_client import SearchService
+
+logger = logging.getLogger(__name__)
+
+
+# ── Embedding ──────────────────────────────────────────────────────────────
+
+
+@retry_with_embedding_backoff()
+def _generate_embeddings(text: str, client, embedding_model: str) -> list:
+    """Generate embeddings using the sync Azure OpenAI client."""
+    return client.embeddings.create(input=[text], model=embedding_model).data[0].embedding
+
+
+async def _embed_query(query_text: str) -> list | None:
+    """Generate vector embeddings for a query string."""
+    if not query_text:
+        return None
+
+    embedding_model = get_embedding_model("embedding")
+    client = create_sync_client(
+        azure_endpoint=AZURE_OPENAI_EMBED_ENDPOINT,
+        azure_key=AZURE_OPENAI_EMBED_API_KEY,
+        llm_model=embedding_model,
+    )
+    return await asyncio.to_thread(
+        _generate_embeddings, query_text, client, embedding_model=embedding_model
+    )
+
+
+# ── Helpers ────────────────────────────────────────────────────────────────
 
 
 def _group_by_function(results: list) -> tuple[dict[str, list], dict[str, float]]:
@@ -34,44 +75,43 @@ def _strip_internal_fields(results: list) -> list:
 
 
 async def search_node(state: RAGState) -> dict:
-    """LangGraph search node — Azure Search + ambiguity handling."""
+    """LangGraph search node — embeds query then runs unified waterfall search."""
     with get_tracer_span("search_node"):
         rewritten_query = state.get("rewritten_query")
-        embedded_query = state.get("embedded_query")
 
-        if not rewritten_query or not embedded_query:
+        if not rewritten_query or not rewritten_query.get("query"):
             return {
                 "events": [],
                 "error_info": {"error_code": "NO_QUERY", "text": "No query to search."},
             }
 
+        # ── Embed the query (previously a separate node) ──
+        embedded_query = await _embed_query(rewritten_query["query"])
+        if not embedded_query:
+            return {
+                "events": [],
+                "error_info": {"error_code": "EMBED_FAILED", "text": "Failed to embed query."},
+            }
+
+        # ── Build base filter (date/function filters, NOT content_type) ──
         base_filter = rewritten_query.get("filter") or None
 
         user_functions = state.get("function", [])
         if user_functions:
-            # Map chip codes to search-index values (e.g. "Risk Management" → "Risk")
             search_fns = [CHIP_TO_SEARCH.get(f, f) for f in user_functions]
             fn_filter = " or ".join(f"function eq '{f}'" for f in search_fns)
             base_filter = f"({base_filter}) and ({fn_filter})" if base_filter else fn_filter
 
-        def _with_content_type(filter_expr: str | None, content_type: str) -> str:
-            ct_filter = f"content_type eq '{content_type}'"
-            return f"({filter_expr}) and ({ct_filter})" if filter_expr else ct_filter
-
         requested_ct = (state.get("content_type") or "qa_pair").strip() or "qa_pair"
-        fallback_chain = [requested_ct]
-        if requested_ct == "qa_pair":
-            fallback_chain.append("document")
 
+        # ── Single call handles the entire waterfall (Levels 1-4) ──
         search_service = SearchService()
-        all_results: list = []
-        for ct in fallback_chain:
-            odata_filter = _with_content_type(base_filter, ct)
-            all_results = await search_service.unified_search(
-                rewritten_query, embedded_query, odata_filter=odata_filter
-            )
-            if all_results:
-                break
+        all_results = await search_service.search_with_retry(
+            rewritten_query,
+            embedded_query,
+            base_filter=base_filter,
+            content_type=requested_ct,
+        )
 
         if not all_results:
             empty_detail = BUSINESS_EXCEPTION_DETAILS.get("empty_events", {})
@@ -85,6 +125,7 @@ async def search_node(state: RAGState) -> dict:
                 },
             }
 
+        # ── Ambiguity handling: group by function ──
         function_groups, function_scores = _group_by_function(all_results)
         functions_found = list(function_groups.keys())
 
@@ -99,15 +140,9 @@ async def search_node(state: RAGState) -> dict:
                 curated = function_groups[top_fn][:TOP_K]
                 functions_found = [top_fn]
             else:
-                # Multiple functions with no clear winner — trigger iterative
-                # multi-function search instead of blocking the user.
+                curated = all_results[:TOP_K]
                 ranked_fns = sorted(function_scores, key=function_scores.get, reverse=True)
-                return {
-                    "events": all_results[:TOP_K],
-                    "functions_found": ranked_fns,
-                    "is_ambiguous": False,
-                    "needs_multi_search": True,
-                }
+                functions_found = ranked_fns
 
         return {
             "events": _strip_internal_fields(curated),

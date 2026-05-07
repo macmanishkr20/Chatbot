@@ -37,27 +37,27 @@ export class ChatContainerComponent {
     this.homePrompts = [
       {
         id: 1,
-        title: 'What is the internal transfer process',
-        prompt: 'What is the internal transfer process?',
-        serviceName: 'Talent',
+        title: 'What is the Purchase Order (PO) process?',
+        prompt: 'What is the Purchase Order (PO) process?',
+        serviceName: 'AWS',
       },
       {
         id: 2,
-        title: 'What is MENA Pursuit process',
-        prompt: 'What is MENA Pursuit process',
-        serviceName: 'C&I',
-      },
-      {
-        id: 3,
-        title: 'Where can I access the GCO templates?',
-        prompt: 'Where can I access the GCO templates?',
+        title: 'What are the GCO Business Guidelines?',
+        prompt: 'What are the GCO Business Guidelines?',
         serviceName: 'GCO',
       },
       {
+        id: 3,
+        title: 'What is the RFP Process?',
+        prompt: 'What is the RFP Process?',
+        serviceName: 'C&I',
+      },
+      {
         id: 4,
-        title: 'How do I submit  a BRIDGE request?',
-        prompt: 'How do I submit  a BRIDGE request?',
-        serviceName: 'Risk Management',
+        title: 'What is the MENA Professional Qualification (PQ) Policy?',
+        prompt: 'What is the MENA Professional Qualification (PQ) Policy?',
+        serviceName: 'Talent',
       },
     ];
   }

@@ -161,6 +161,18 @@ export interface ContentEvent {
   content: string;
 }
 
+export interface ContentReplaceEvent {
+  type: 'content_replace';
+  node: string;
+  content: string;
+}
+
+export interface ContentFinalEvent {
+  type: 'content_final';
+  node: string;
+  content: string;
+}
+
 export interface DeepSearchEvent {
   type: 'deep_search';
   node: string;
@@ -182,7 +194,7 @@ export interface FinalEvent {
   selected_function?: string | null;
 }
 
-export type SSEEvent = ThoughtEvent | ContentEvent | DeepSearchEvent | FinalEvent;
+export type SSEEvent = ThoughtEvent | ContentEvent | ContentReplaceEvent | ContentFinalEvent | DeepSearchEvent | FinalEvent;
 
 export interface SuggestiveAction {
   short_title: string;
@@ -238,7 +250,7 @@ export interface ChatRequest {
   start_date: string;
   end_date: string;
   preferred_language?: string;
-  content_type?: 'qa_pair' | 'document';
+  content_type?: 'document' | 'qa_pair';
 }
 
 export interface EditRequest {
@@ -252,7 +264,7 @@ export interface EditRequest {
   source_url: string[];
   start_date: string;
   end_date: string;
-  content_type?: 'qa_pair' | 'document';
+  content_type?: 'document' | 'qa_pair';
 }
 
 export interface RegenerateRequest {

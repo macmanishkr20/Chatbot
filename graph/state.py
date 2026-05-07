@@ -46,7 +46,6 @@ class RAGState(TypedDict, total=False):
 
     # ── Query processing ──
     rewritten_query: dict | None   # {"query": str, "filter": str | None}
-    embedded_query: list | None
     functions_found: list[str]
     is_ambiguous: bool
     pending_ambiguous_query: dict | None  # Original query context saved during ambiguity
@@ -80,11 +79,6 @@ class RAGState(TypedDict, total=False):
     # ── Output ──
     response: dict | None
     error_info: dict | None
-
-    # ── Retrieval grading (CRAG — Corrective RAG) ──
-    grader_score: float | None
-    grader_retry_count: int
-    grader_passed: bool | None
 
     # ── Multi-step agent (parallel search — Phase 2) ──
     plan_type: str | None          # "simple" | "complex"

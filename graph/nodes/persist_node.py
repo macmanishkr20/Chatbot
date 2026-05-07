@@ -1,13 +1,13 @@
 """
 Persist node — save conversation record and AI content to Azure SQL.
 
-This node creates the Conversations / ChatMessages rows that power the
-frontend's history APIs.  Conversation *context* for the LLM is handled
-by the checkpointer (short-term) and Store (long-term) — this node
-only writes the structured records the frontend needs.
+Pure I/O node: writes structured records the frontend needs.
+No LLM calls — title generation is fire-and-forget (background task).
 
-Also emits an AIMessage into LangGraph messages for checkpoint persistence.
+Conversation *context* for the LLM is handled by the checkpointer
+(short-term) and Store (long-term).
 """
+import asyncio
 import json
 import logging
 
@@ -16,18 +16,10 @@ from langchain_core.messages import AIMessage
 logger = logging.getLogger(__name__)
 
 from graph.state import RAGState
-from config import AZURE_OPENAI_ENDPOINT, AZURE_OPENAI_KEY
 from models.chat_models import (
     ApplicationChatQuery,
     BusinessExceptionResponse,
     InputType,
-)
-from prompts.summarize import SUMMARIZE_PROMPT
-from services.openai_client import (
-    create_async_client,
-    get_llm_model,
-    prepare_model_args,
-    retry_with_llm_backoff,
 )
 from graph.nodes.title_node import generate_title
 from services.sql_client import SQLChatClient
@@ -53,26 +45,6 @@ def _build_app_query(state: RAGState) -> ApplicationChatQuery:
         start_date=state.get("start_date", ""),
         end_date=state.get("end_date", ""),
     )
-
-
-# ───────────────── Summarization ─────────────────
-
-
-@retry_with_llm_backoff()
-async def _summarize_prompt(user_message: str, llm_model: str, **kwargs) -> str:
-    """Summarize the user prompt for storage efficiency."""
-    messages = [
-        {"role": "system", "content": SUMMARIZE_PROMPT},
-        {"role": "user", "content": user_message},
-    ]
-    model_args = prepare_model_args(messages, False, False, None, None, "text", llm_model)
-    client = create_async_client(
-        azure_endpoint=AZURE_OPENAI_ENDPOINT,
-        azure_key=AZURE_OPENAI_KEY,
-        llm_model=llm_model,
-    )
-    response = await client.chat.completions.create(**model_args)
-    return str(response.choices[0].message.content)
 
 
 # ───────────────── AI Content Persistence ─────────────────
@@ -103,16 +75,33 @@ async def _save_ai_content(
         except json.JSONDecodeError:
             app_query.ai_content = [{"raw": cleaned}]
 
-    # Summarize and save
-    llm_model = get_llm_model("rewrite_query")
+    # Store full prompt text directly — no LLM summarization needed
     prompt_text = app_query.prompt or app_query.user_input
-    try:
-        summarized = await _summarize_prompt(prompt_text, llm_model=llm_model)
-        app_query.summurized_prompt = summarized
-    except Exception:
-        app_query.summurized_prompt = prompt_text[:500]
+    app_query.summurized_prompt = prompt_text[:2000]  # Cap at reasonable DB limit
 
     await scc.save_ai_content(app_query)
+
+
+# ───────────────── Background Title Generation ─────────────────
+
+
+async def _generate_title_background(
+    user_input: str, ai_content: str, chat_id: str, user_id: str
+):
+    """Fire-and-forget title generation — runs after response is sent."""
+    try:
+        title = await generate_title(user_input, ai_content)
+        scc = SQLChatClient()
+        await scc.connect()
+        await scc.ensure()
+        await scc.upsert_chat({
+            "id": chat_id,
+            "title": title,
+            "userId": user_id,
+        })
+        logger.info("Background title generated: %s", title)
+    except Exception as e:
+        logger.warning("Background title generation failed: %s", e)
 
 
 # ───────────────── Node ─────────────────
@@ -121,12 +110,10 @@ async def _save_ai_content(
 async def persist_node(state: RAGState) -> dict:
     """Create conversation/message records in SQL and save AI content.
 
-    The checkpointer/Store handle LLM context; this node only writes
-    the structured rows the frontend APIs (``/conversations``) need.
+    Pure I/O — no LLM calls in the critical path.
+    Title generation is fire-and-forget (background asyncio task).
     """
     with get_tracer_span("persist_node"):
-        # Track whether this is a brand-new conversation (no chat_id yet).
-        # If so, we'll auto-generate a title after saving AI content.
         is_new_conversation = state.get("chat_id") is None
 
         app_query = _build_app_query(state)
@@ -174,23 +161,14 @@ async def persist_node(state: RAGState) -> dict:
                 "response": {"error": error_info},
             }
 
-        # Ambiguity — save the disambiguation message to SQL as free-form
-        # Only applies if is_ambiguous is set AND no ai_content was produced
-        # (i.e. multi_function_search_node did not resolve it).
+        # Ambiguity — save the disambiguation message to SQL
         if state.get("is_ambiguous") and not state.get("ai_content"):
             ambiguity_response = state.get("response") or {}
             ambiguity_text = ambiguity_response.get("message", "")
             if ambiguity_text:
                 app_query.ai_content_free_form = ambiguity_text
                 app_query.is_free_form = True
-                llm_model = get_llm_model("rewrite_query")
-                try:
-                    summarized = await _summarize_prompt(
-                        app_query.user_input, llm_model=llm_model
-                    )
-                    app_query.summurized_prompt = summarized
-                except Exception:
-                    app_query.summurized_prompt = app_query.user_input[:500]
+                app_query.summurized_prompt = app_query.user_input[:2000]
                 await scc.save_ai_content_free_form(app_query)
                 await scc.save_ai_content(app_query)
             return {
@@ -206,21 +184,17 @@ async def persist_node(state: RAGState) -> dict:
         if ai_content:
             await _save_ai_content(ai_content, app_query, scc)
 
-        # ── Auto-generate conversation title for new conversations ──
-        # Same UX as Claude/ChatGPT: title appears after the first exchange.
+        # ── Fire-and-forget title generation for new conversations ──
         conversation_title = None
         if is_new_conversation and ai_content:
-            try:
-                conversation_title = await generate_title(
-                    state.get("user_input", ""), ai_content
+            asyncio.create_task(
+                _generate_title_background(
+                    state.get("user_input", ""),
+                    ai_content,
+                    app_query.chat_id,
+                    app_query.user_id,
                 )
-                await scc.upsert_chat({
-                    "id": app_query.chat_id,
-                    "title": conversation_title,
-                    "userId": app_query.user_id,
-                })
-            except Exception as e:
-                logger.warning("Title generation failed: %s", e)
+            )
 
         return {
             "chat_id": app_query.chat_id,

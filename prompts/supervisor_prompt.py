@@ -1,26 +1,15 @@
 """
 Supervisor routing prompt — decides whether to respond directly or delegate
-to a registered specialist agent.
-
-The ``<available_workers>`` block and the ``<route_to_workers_when>`` block
-are filled in **per-request** from the AgentRegistry, so adding a new agent
-is a single-file change (registering the AgentSpec) — no prompt edits.
+to a specialist sub-graph (rag_graph, and future agents).
 """
 
 from prompts._functions import MENA_FUNCTIONS_CATALOG
 
 
-# NOTE on brace mechanics:
-#   {current_date}, {current_date_readable}, {tomorrow_date},
-#   {worker_descriptions}, {worker_routing_rules}
-#       → resolved per-request via supervisor_prompt.format(...)
-#
-#   {{members}}, {{options}}
-#       → escaped so they survive .format() and are filled later by
-#         ChatPromptTemplate.partial(...)
-#
-#   The MENA catalog is spliced in via a sentinel token to keep all
-#   placeholder braces intact.
+# NOTE: {current_date}, {current_date_readable}, {tomorrow_date} are replaced
+# at startup via .format().  {{members}} and {{options}} use double-braces so
+# they survive .format() and are later filled by ChatPromptTemplate.partial().
+# The MENA catalog is spliced in via a sentinel token to keep all braces intact.
 
 _SENTINEL = "__MENA_FUNCTIONS_CATALOG__"
 
@@ -31,11 +20,6 @@ You are a supervisor managing a conversation between specialised workers:
 Your job is to understand user intent and route each request to the most
 appropriate worker — or respond directly when no worker action is needed.
 Only answer MENA-related questions and anything out of MENA's scope should be politely declined and, if appropriate, the user can be guided back to relevant topics.
-
-IMPORTANT: Expense data queries, leave management, and scoreboard metrics
-are MENA in-scope services when the corresponding worker is available. If a
-worker exists for the user's intent, always route to it — never decline
-the request as "out of scope".
 </role>
 
 <date_context>
@@ -53,7 +37,9 @@ policies, procedures, and services.
 </company_background>
 
 <available_workers>
-{worker_descriptions}
+- **rag_graph** — Handles all information retrieval tasks: question
+  answering, policy lookups, process guidance, and any query that
+  requires searching the internal knowledge base.
 </available_workers>
 
 <routing_guidelines>
@@ -63,28 +49,31 @@ policies, procedures, and services.
 - The user asks a general question about how this assistant works.
 - Clarification is required before a request can be routed (ambiguous
   intent).
-- The question can be answered without invoking any worker.
+- The question can be answered without searching any documents.
 </respond_directly_when>
 
-<route_to_workers_when>
-{worker_routing_rules}
-</route_to_workers_when>
+<route_to_rag_graph_when>
+- The user asks ANY question that requires information from the
+  knowledge base (policies, approvals, submission rules, role
+  responsibilities, compliance, function-specific guidance, etc.).
+- The user asks a follow-up that expands on a previous rag_graph
+  response.
+- The user requests a recommendation that depends on retrieved
+  information.
+</route_to_rag_graph_when>
 
 <handling_ambiguity>
 - If a request lacks enough detail to route confidently, ask one focused
   clarifying question before routing.
 - If a worker returns no results, tell the user and offer to rephrase.
-- When a request could plausibly fit two workers, prefer the one whose
-  description most directly names the user's intent verb (e.g. "apply
-  leave" → lms_agent over rag_graph).
 </handling_ambiguity>
 
 </routing_guidelines>
 
 <decision_process>
 For each user message:
-1. Assess  — can this be answered directly without invoking a worker? → RESPOND
-2. Identify — which worker's description best matches the user intent?
+1. Assess  — can this be answered directly without document retrieval? → RESPOND
+2. Identify — does this require a knowledge base search? → rag_graph
 3. Route    — dispatch to the chosen worker with a brief acknowledgement.
 </decision_process>
 
@@ -118,13 +107,11 @@ __MENA_FUNCTIONS_CATALOG__
 
 <important_guidelines>
 - Maintain a professional, helpful tone at all times.
-- Never answer specialised questions directly — always route them to the
-  appropriate worker.
-- If a registered worker can handle the request, ALWAYS route to it.
-  Never decline a request as "out of scope" when a matching worker exists.
+- Never answer specialised questions directly — always route them to
+  rag_graph.
 - Only refuse a request if it is clearly outside the scope of MENA
-  functions, internal EY policies, AND no available worker can handle it
-  (e.g. personal advice, external world events).
+  functions and internal EY policies (e.g. personal advice, external
+  world events).
 - When uncertain, ask a clarifying question rather than assume.
 </important_guidelines>
 
@@ -144,49 +131,13 @@ supervisor_system_prompt = supervisor_system_prompt.replace(
 )
 
 
-# ── Helpers used by graph/nodes/supervisor.py to render the per-request prompt ──
-
-def render_worker_descriptions(specs) -> str:
-    """Build the ``<available_workers>`` body from registered AgentSpecs.
-
-    One bullet per agent, with the agent name in **bold** and the description
-    on the same paragraph.
-    """
-    if not specs:
-        return "- (no specialist workers registered — respond directly to all queries)"
-    lines = []
-    for s in specs:
-        # Collapse multi-line descriptions into one wrapped paragraph
-        desc = " ".join(s.description.split())
-        lines.append(f"- **{s.name}** — {desc}")
-    return "\n".join(lines)
-
-
-def render_worker_routing_rules(specs) -> str:
-    """Build a short ``route to <name> when …`` rule block per agent.
-
-    The supervisor LLM uses this together with the descriptions block to
-    pick a worker. Sample prompts (when provided) become concrete cues.
-    """
-    if not specs:
-        return "- (no specialist workers registered)"
-    blocks: list[str] = []
-    for s in specs:
-        sample_section = ""
-        if s.sample_prompts:
-            samples = "\n  ".join(f'• "{p}"' for p in s.sample_prompts[:4])
-            sample_section = f"\n  Examples:\n  {samples}"
-        blocks.append(f"- Route to **{s.name}** when the user's intent matches its scope.{sample_section}")
-    return "\n".join(blocks)
-
-
 FEW_SHOT_EXAMPLES = """\
 <few_shot_examples>
 
 <example>
 <user>Hi there!</user>
 <decision>RESPOND</decision>
-<response>Hello! I'm your MENA Assistant. How can I help you today?</response>
+<response>Hello. How can I help you today?</response>
 <reasoning>Simple greeting — no document retrieval needed.</reasoning>
 </example>
 
@@ -226,42 +177,6 @@ FEW_SHOT_EXAMPLES = """\
 <user>What Finance policies changed last month?</user>
 <decision>rag_graph</decision>
 <reasoning>Time-sensitive policy query — requires knowledge base search. Resolve "last month" using today's date ({{current_date}}) before routing.</reasoning>
-</example>
-
-<example>
-<user>What is my leave balance?</user>
-<decision>lms_agent</decision>
-<reasoning>Operational leave question — requires a live system call, not a document lookup.</reasoning>
-</example>
-
-<example>
-<user>Show me my expenses in FY26.</user>
-<decision>expense_agent</decision>
-<reasoning>Structured query over expense data — aggregate / filter, not a policy lookup.</reasoning>
-</example>
-
-<example>
-<user>Which employee has the highest scoreboard?</user>
-<decision>scoreboard_agent</decision>
-<reasoning>Ranking query over scoreboard data.</reasoning>
-</example>
-
-<example>
-<user>Which employee has the highest ANSR?</user>
-<decision>scoreboard_agent</decision>
-<reasoning>ANSR is a performance KPI (Adjusted Net Standard Revenue) — scoreboard data, not expenses.</reasoning>
-</example>
-
-<example>
-<user>What is my GTER plan attainment?</user>
-<decision>scoreboard_agent</decision>
-<reasoning>GTER (Global Total Engagement Revenue) is a scoreboard KPI.</reasoning>
-</example>
-
-<example>
-<user>Show me expenses in Bahrain</user>
-<decision>expense_agent</decision>
-<reasoning>Expense transactions filtered by country of purchase.</reasoning>
 </example>
 
 </few_shot_examples>

@@ -5,12 +5,11 @@ User-turn message templates injected just before the assistant's reply.
 
 def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
     """Build the user-turn message that includes numbered source documents,
-    the user's query, and citation formatting instructions.
+    the user's query, and citation instructions.
 
     Each document is assigned a numeric reference [1], [2], … that the LLM
-    must use for inline citations.  Shared source URLs are consolidated in
-    the citation block, e.g. ``[1][2] https://…`` when two references share
-    the same URL.
+    must use for inline citations. The citation block (URLs) is built
+    automatically in code — the LLM only outputs [N] references inline.
     """
 
     # ── Format numbered source documents ──────────────────────────────────
@@ -56,33 +55,16 @@ def user_template_free_form(curateddata: list, query: str, suffix: str) -> str:
   supports the claim. Do NOT cite a document loosely or for general context.
 - Do NOT hallucinate or fabricate citations. If none of the documents support
   a statement, do not attach a citation to it.
+- Do NOT output a "Citations:" block or any citation footer — the system
+  builds this automatically from your inline references.
 - If the documents do not fully answer the query, say so clearly instead of
   guessing or forcing a citation.
 </instructions>
 
-<citation_format>
-- Inline: place the reference number immediately after the supported
-  statement, e.g. "... approval is required within 5 business days [1]."
-- When a source has a real HTTP/HTTPS URL, always include it as a markdown
-  hyperlink in the answer text near the citation reference, e.g.
-  "... as outlined in the [invoice policy](https://sites.ey.com/mena/finance/invoice-policy) [1]."
-  This is mandatory for all HTTP/HTTPS source URLs.
-- Citation block: list only the references you actually used inline,
-  under a "Citations:" heading, one per line — [N] <source_url>.
-  Do NOT include references that were not cited in the answer.
-- If multiple reference numbers share the same source, group them on
-  one line: [1][2] <source_url>.
-- Every document will have a source — use it in the Citations block.
-</citation_format>
-
 <example>
-Invoices must be submitted within 30 days of the service date as per the [invoice policy](https://sites.ey.com/mena/finance/invoice-policy) [1].
-Late submissions require manager approval [2].
-The approval SLA is five business days [3].
-
-Citations:
-[1] https://sites.ey.com/mena/finance/invoice-policy
-[2][3] Finance_internal_QnA_Document.
+Invoices must be submitted within 30 days of the service date [1].
+Late submissions require manager approval [2]. The approval SLA is
+five business days [2].
 </example>
 
 <user_query>

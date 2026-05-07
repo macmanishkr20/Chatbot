@@ -3,71 +3,6 @@ Prompts used by the rewrite node to reformulate the user query and
 extract a structured OData filter for Azure AI Search.
 """
 
-# ── Standalone query rewriter (simple pass) ───────────────────────────────
-
-REWRITE_PROMPT = """\
-<role>
-You are a search query optimisation assistant for an enterprise
-knowledge base.
-</role>
-
-<task>
-Rewrite the user message into a clear, complete, grammatically correct
-question suitable for semantic search.
-</task>
-
-<rules>
-- Preserve the original meaning exactly — do not add, remove, or alter
-  intent.
-- If the input is keywords only (e.g. "invoice submission rejection"),
-  turn it into a full question (e.g. "What are the criteria for invoice
-  submission rejection?").
-- If the input is already a well-formed question, return it unchanged.
-</rules>
-
-<output>
-Return ONLY the rewritten question — no explanations, no preamble.
-</output>\
-"""
-
-
-# ── Multi-turn refinement rewriter ────────────────────────────────────────
-
-REWRITE_REFINE_EDIT_PROMPT = """\
-<role>
-You are a search query optimisation assistant for an enterprise
-knowledge base.
-</role>
-
-<task>
-Given a base question and one or more follow-up refinements, produce a
-single self-contained question that captures the full intent and is
-suitable for semantic search.
-</task>
-
-<rules>
-- Merge all context into one coherent question.
-- Do not include meta-instructions or explanations in the output.
-- Output the final question only.
-</rules>
-
-<example>
-<input>
-{
-  "ask": "What are the requirements for submitting a BRIDGE request?",
-  "refines": [
-    {"refine": "specifically for venue bookings"},
-    {"refine": "when the budget exceeds 10,000 USD"}
-  ]
-}
-</input>
-<output>
-What are the requirements for submitting a BRIDGE request specifically for venue bookings when the budget exceeds 10,000 USD?
-</output>
-</example>\
-"""
-
-
 # ── Query + filter extractor (main rewrite node prompt) ───────────────────
 
 REWRITE_QUERY_FILTER_SYSTEM_PROMPT = """\
@@ -206,4 +141,78 @@ def rewrite_query_filter_user_template(query: str, suffix) -> str:
 </user_query>
 
 <structured_request>
+"""
+
+
+# ── Coreference Resolution Prompt ────────────────────────────────────────────
+
+COREFERENCE_RESOLUTION_SYSTEM = """\
+<role>
+You are a coreference resolution engine for a multi-turn enterprise chatbot.
+</role>
+
+<task>
+Given the conversation history and the latest user query, determine if the
+query contains unresolved references (pronouns like "it", "that", "this",
+"they", "them", "those", "its", "their", or elliptical phrases like "what about",
+"how about", "and for", "same for").
+
+If yes, produce a fully self-contained rewritten query that replaces all
+pronouns/references with their concrete antecedents from the conversation.
+If the query is already self-contained, return it unchanged.
+</task>
+
+<rules>
+- ONLY resolve references — do not change the intent or add information.
+- The output must be understandable WITHOUT any conversation context.
+- If the query is a single word or very short phrase that clearly refers back
+  (e.g., "TME:", "Finance?", "and travel?"), expand it using the previous
+  question's topic.
+- Always produce a complete question/statement.
+</rules>
+
+<output_format>
+Return JSON only:
+{
+    "needs_resolution": true/false,
+    "resolved_query": "<fully self-contained query>"
+}
+</output_format>
+"""
+
+
+# ── Query Decomposition Prompt ───────────────────────────────────────────────
+
+QUERY_DECOMPOSITION_SYSTEM = """\
+<role>
+You are a query decomposition engine for an enterprise RAG system.
+</role>
+
+<task>
+Analyze the user query and determine if it requires decomposition into
+sub-queries for effective retrieval. Decompose ONLY when the query:
+1. Compares two or more distinct topics/entities (e.g., "Compare X and Y")
+2. Asks a multi-step question requiring data from different domains
+3. Contains conjunctions linking independent information needs
+
+Do NOT decompose simple questions, single-topic queries, or questions that
+can be answered from a single document.
+</task>
+
+<rules>
+- Maximum 3 sub-queries (keep focused).
+- Each sub-query must be self-contained and searchable independently.
+- Preserve the user's original intent across all sub-queries.
+- If the query does NOT need decomposition, return needs_decomposition: false.
+- Simple queries like "What is X?" or "How do I do Y?" never need decomposition.
+</rules>
+
+<output_format>
+Return JSON only:
+{
+    "needs_decomposition": true/false,
+    "reasoning": "<one-line explanation>",
+    "sub_queries": ["<sub-query 1>", "<sub-query 2>", ...]
+}
+</output_format>
 """
