@@ -20,9 +20,9 @@ import logging
 
 from langchain_core.runnables import RunnableConfig
 
-from config import PARALLEL_SEARCH_TIMEOUT, TOP_K
+from config import MAX_PARALLEL_SEARCHES, PARALLEL_SEARCH_TIMEOUT, TOP_K
 from graph.state import RAGState
-from graph.nodes.search_node import _embed_query, _strip_internal_fields
+from graph.nodes.search_node import _embed_query, _strip_internal_fields, _with_content_type
 from prompts._functions import CHIP_TO_SEARCH
 from services.search_client import SearchService
 from services.telemetry import get_tracer_span
@@ -37,30 +37,46 @@ async def _search_single_function(
     base_filter: str | None,
     content_type: str,
     search_service: SearchService,
+    semaphore: asyncio.Semaphore,
 ) -> dict:
-    """Search a single function — embeds the sub-query then runs waterfall search."""
-    search_fn = CHIP_TO_SEARCH.get(fn, fn)
-    fn_clause = f"function eq '{search_fn}'"
-    scoped_filter = f"({base_filter}) and ({fn_clause})" if base_filter else fn_clause
+    """Search a single function with content-type fallback chain.
 
-    query_override = {**rewritten_query, "query": sub_query}
+    Acquires a semaphore slot before making any API call to prevent
+    concurrent request throttling from Azure Search / OpenAI.
+    """
+    try:
+        search_fn = CHIP_TO_SEARCH.get(fn, fn)
+        fn_clause = f"function eq '{search_fn}'"
+        scoped_filter = f"({base_filter}) and ({fn_clause})" if base_filter else fn_clause
 
-    # Embed the sub-query for this function search
-    embedded_query = await _embed_query(sub_query)
-    if not embedded_query:
+        query_override = {**rewritten_query, "query": sub_query}
+
+        # Embed the sub-query — semaphore limits concurrent OpenAI calls
+        async with semaphore:
+            embedded_query = await _embed_query(sub_query)
+        if not embedded_query:
+            return {"function": fn, "events": [], "query": sub_query}
+
+        # Search — semaphore limits concurrent Azure Search calls
+        async with semaphore:
+            odata_filter = _with_content_type(scoped_filter, content_type)
+            all_results = await search_service.unified_search(
+                query_override, embedded_query, odata_filter=odata_filter
+            )
+
+        # Fallback to qa_pair if document returned nothing
+        if not all_results and content_type == "document":
+            async with semaphore:
+                qa_filter = _with_content_type(scoped_filter, "qa_pair")
+                all_results = await search_service.unified_search(
+                    query_override, embedded_query, odata_filter=qa_filter
+                )
+
+        curated = _strip_internal_fields(all_results[:TOP_K])
+        return {"function": fn, "events": curated, "query": sub_query}
+    except Exception as exc:
+        logger.warning("_search_single_function(%s) failed: %s", fn, exc, exc_info=True)
         return {"function": fn, "events": [], "query": sub_query}
-
-    results = await search_service.search_with_retry(
-        query_override,
-        embedded_query,
-        base_filter=scoped_filter,
-        content_type=content_type,
-        top_k=TOP_K,
-        skip_last_resort=True,
-    )
-
-    curated = _strip_internal_fields(results[:TOP_K])
-    return {"function": fn, "events": curated, "query": sub_query}
 
 
 async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
@@ -82,10 +98,14 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
             }
 
         base_filter = rewritten_query.get("filter") or None
-        requested_ct = (state.get("content_type") or "qa_pair").strip() or "qa_pair"
+        requested_ct = (state.get("content_type") or "document").strip() or "document"
 
         search_service = SearchService()
         timeout_sec = PARALLEL_SEARCH_TIMEOUT / 1000.0
+
+        # Semaphore limits concurrent API calls to Azure Search / OpenAI
+        # to prevent throttling (429 errors) when many functions are searched.
+        semaphore = asyncio.Semaphore(MAX_PARALLEL_SEARCHES)
 
         # ── Real-time status delivery via asyncio.Queue ──
         queue: asyncio.Queue | None = config.get("configurable", {}).get("_deep_search_queue")
@@ -120,6 +140,7 @@ async def parallel_search_node(state: RAGState, config: RunnableConfig) -> dict:
                     base_filter=base_filter,
                     content_type=requested_ct,
                     search_service=search_service,
+                    semaphore=semaphore,
                 ),
                 timeout=timeout_sec,
             )

@@ -22,7 +22,6 @@ import logging
 
 from langchain_core.messages import BaseMessage, RemoveMessage
 
-from config import SUMMARIZE_KEEP_RECENT, SUMMARIZE_THRESHOLD
 from graph.state import RAGState
 from services.openai_client import (
     create_async_client,
@@ -33,12 +32,12 @@ from services.telemetry import get_tracer_span
 
 logger = logging.getLogger(__name__)
 
-# After this many messages in state, trigger summarization (configurable).
-# Default 20 ≈ 10 user-assistant exchanges — enough context before compression.
-_SUMMARIZE_THRESHOLD = SUMMARIZE_THRESHOLD
+# After this many messages in state, trigger summarization.
+# 20 messages ≈ 10 user-assistant exchanges — enough context before compression.
+_SUMMARIZE_THRESHOLD = 20
 # Keep the last N messages verbatim; summarise everything before them.
-# Default 6 = last 3 full exchanges — preserves immediate conversational context.
-_KEEP_RECENT = SUMMARIZE_KEEP_RECENT
+# 6 messages = last 3 full exchanges — preserves immediate conversational context.
+_KEEP_RECENT = 6
 
 _SUMMARIZE_SYSTEM = """\
 You are a conversation summarizer for an EY MENA internal chatbot.

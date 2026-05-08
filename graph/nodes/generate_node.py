@@ -14,7 +14,7 @@ from config import (
     AZURE_OPENAI_KEY,
     AZURE_OPENAI_CHAT_API_VERSION,
     AZURE_OPENAI_TEMPERATURE,
-    GROUNDEDNESS_THRESHOLD,
+    DUAL_CONTENT_SEARCH_ENABLED,
     MAX_TOKENS,
 )
 from prompts.system import SYSTEM_FREE_FORM_PROMPT, SYSTEM_JSON_FORM_PROMPT
@@ -86,6 +86,13 @@ def _create_message_structure(
 
     # Build history from LangGraph checkpoint messages using unified context manager
     if langgraph_messages:
+        # Filter out prior fallback messages so the LLM judges fresh results
+        # independently, without being influenced by earlier "I couldn't find..." turns.
+        filtered_messages = [
+            m for m in langgraph_messages
+            if not (isinstance(m, AIMessage) and m.content == _FALLBACK_MESSAGE)
+        ]
+
         # Calculate available token budget for history (model limit minus reserved)
         real_model_name, tokens_limit = get_model_info(llm_model)
         reserved_tokens = (
@@ -98,25 +105,15 @@ def _create_message_structure(
             )
             + int(MAX_TOKENS)
         )
-        # Floor budget at 0 — passing a negative budget to the trimmer would
-        # admit messages anyway (kept[0] check) and silently exceed the model
-        # window. Treat over-budget as "no history fits" instead.
-        available_budget = max(0, tokens_limit - reserved_tokens)
+        available_budget = tokens_limit - reserved_tokens
 
         # Use unified context manager for sliding window trimming
-        if available_budget > 0:
-            history_msgs = trim_messages_to_budget(
-                langgraph_messages[:-1],  # Exclude current message (appended separately)
-                token_budget=available_budget,
-                model=real_model_name,
-            )
-            messages.extend(history_msgs)
-        else:
-            logger.warning(
-                "generate_node: history budget exhausted by system prompt + user_template "
-                "(reserved=%d limit=%d) — skipping prior messages",
-                reserved_tokens, tokens_limit,
-            )
+        history_msgs = trim_messages_to_budget(
+            filtered_messages[:-1],  # Exclude current message (appended separately)
+            token_budget=available_budget,
+            model=real_model_name,
+        )
+        messages.extend(history_msgs)
 
     messages.append(user_template_message)
     return messages
@@ -155,12 +152,32 @@ def _get_llm(llm_model: str, tools: list | None) -> AzureChatOpenAI:
     return llm
 
 
+# ── Document fallback detection ───────────────────────────────────────────
+# Phrases the LLM uses when it can't answer from document content.
+# Triggers a graph-level retry with content_type="qa_pair".
+_DOC_FALLBACK_PHRASES = (
+    "the provided documents do not explicitly state",
+    "does not explicitly state",
+    "not explicitly mentioned",
+    "no relevant information found",
+    "the documents do not specify",
+    "i wasn't able to find a specific answer",
+    "couldn't find a specific answer",
+    "rephrase your question",
+    "I couldn't find a specific answer to your question in the available knowledge base. Please try rephrasing your query or provide more details."
+)
+
+
+def _needs_document_fallback(ai_content: str) -> bool:
+    """Check if the LLM response indicates documents didn't contain the answer."""
+    text = (ai_content or "").lower()
+    return any(phrase in text for phrase in _DOC_FALLBACK_PHRASES)
+
+
 # ── Groundedness Verification ──────────────────────────────────────────────
 
 # Minimum ratio of claim tokens found in source document content.
-# Configurable via GROUNDEDNESS_THRESHOLD env var (default 0.25 — same as
-# previously hardcoded value, so behaviour is preserved).
-_GROUNDEDNESS_THRESHOLD = GROUNDEDNESS_THRESHOLD
+_GROUNDEDNESS_THRESHOLD = 0.25
 
 _STOPWORDS = frozenset({
     "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
@@ -177,77 +194,18 @@ _STOPWORDS = frozenset({
 })
 
 
-_TOKEN_RE = re.compile(r"\b[a-z0-9]+(?:[-/][a-z0-9]+)*\b")
-# Numbers, codes, IDs, capitalised entities — high-signal tokens that must
-# always be preserved (and weighted) regardless of stopword filtering.
-_ENTITY_RE = re.compile(r"\b[A-Z0-9][A-Z0-9_/\-]{1,}\b")
-
-
 def _tokenize(text: str) -> set[str]:
     """Extract meaningful lowercase tokens (skip stopwords and short tokens)."""
-    words = _TOKEN_RE.findall(text.lower())
+    words = re.findall(r"\b[a-z0-9]+(?:[-/][a-z0-9]+)*\b", text.lower())
     return {w for w in words if w not in _STOPWORDS and len(w) > 2}
-
-
-def _bigrams(tokens_sequence: list[str]) -> set[tuple[str, str]]:
-    """Build bigram set from an ordered token sequence (post stopword filter)."""
-    return set(zip(tokens_sequence, tokens_sequence[1:]))
-
-
-def _ordered_tokens(text: str) -> list[str]:
-    """Return content tokens in order (used for bigrams)."""
-    return [
-        w for w in _TOKEN_RE.findall(text.lower())
-        if w not in _STOPWORDS and len(w) > 2
-    ]
-
-
-def _entities(text: str) -> set[str]:
-    """Extract identifier-like tokens (codes, IDs, capitalised acronyms)."""
-    return {m.lower() for m in _ENTITY_RE.findall(text)}
-
-
-def _grounded_score(claim: str, doc_content: str) -> float:
-    """Composite groundedness score in [0, 1].
-
-    Combines three signals so coincidental single-word matches no longer
-    pass while genuine multi-word claims with shared phrasing pass cleanly:
-      - unigram Jaccard-style ratio (original signal, weight 0.5)
-      - bigram overlap ratio       (phrase-level signal, weight 0.3)
-      - entity overlap ratio       (codes/IDs/acronyms, weight 0.2)
-    Falls back gracefully when either side has too little signal.
-    """
-    claim_tokens = _tokenize(claim)
-    doc_tokens = _tokenize(doc_content)
-    if not claim_tokens or not doc_tokens:
-        return 0.0
-
-    unigram_ratio = len(claim_tokens & doc_tokens) / len(claim_tokens)
-
-    claim_seq = _ordered_tokens(claim)
-    doc_seq = _ordered_tokens(doc_content)
-    claim_bigrams = _bigrams(claim_seq)
-    if claim_bigrams:
-        bigram_ratio = len(claim_bigrams & _bigrams(doc_seq)) / len(claim_bigrams)
-    else:
-        bigram_ratio = unigram_ratio  # short claim — fall back to unigrams
-
-    claim_entities = _entities(claim)
-    if claim_entities:
-        entity_ratio = len(claim_entities & _entities(doc_content)) / len(claim_entities)
-    else:
-        entity_ratio = unigram_ratio  # no entities — fall back to unigrams
-
-    return 0.5 * unigram_ratio + 0.3 * bigram_ratio + 0.2 * entity_ratio
 
 
 def _verify_groundedness(ai_content: str, events: list) -> str:
     """Remove inline citations not grounded in the cited source document.
 
-    Splits output into segments around [N] references, checks composite
-    overlap (unigrams + bigrams + entities) between the preceding claim text
-    and the cited document's content. Strips ungrounded citations
-    (composite score < threshold).
+    Splits output into segments around [N] references, checks token-level
+    overlap between the preceding claim text and the cited document's content.
+    Strips ungrounded citations (overlap < threshold).
     """
     if not events or not ai_content:
         return ai_content
@@ -272,16 +230,18 @@ def _verify_groundedness(ai_content: str, events: list) -> str:
                 for ref_str in refs:
                     idx = int(ref_str) - 1
                     if 0 <= idx < len(events):
-                        doc_content = events[idx].get("content", "") or ""
-                        if not doc_content.strip():
+                        doc_content = events[idx].get("content", "")
+                        doc_tokens = _tokenize(doc_content)
+                        if not doc_tokens:
                             continue
-                        score = _grounded_score(current_claim, doc_content)
-                        if score >= _GROUNDEDNESS_THRESHOLD:
+                        overlap = claim_tokens & doc_tokens
+                        ratio = len(overlap) / len(claim_tokens)
+                        if ratio >= _GROUNDEDNESS_THRESHOLD:
                             verified.append(ref_str)
                         else:
                             logger.debug(
-                                "groundedness: stripped [%s] (score=%.2f < %.2f)",
-                                ref_str, score, _GROUNDEDNESS_THRESHOLD,
+                                "groundedness: stripped [%s] (overlap=%.2f < %.2f)",
+                                ref_str, ratio, _GROUNDEDNESS_THRESHOLD,
                             )
 
                 if verified:
@@ -298,67 +258,16 @@ def _verify_groundedness(ai_content: str, events: list) -> str:
 # ── Citation Block Builder ─────────────────────────────────────────────────
 
 
-def _format_citation_line(refs: list[str], doc: dict) -> str:
-    """Format one citation line based on the cited document's content_type.
-
-    Behaviour by type:
-      * qa_pair  → ``[N] <source_url>``
-                   The Q&A pair *is* the canonical answer; URL is enough.
-                   When no URL is indexed, the line is dropped (returns "").
-      * document → ``[N] <file_name> (page <N>) — <source_url>``
-                   For indexed PDFs/Word docs the file + page is the natural
-                   reference a reader expects; the URL is appended when
-                   present. Pieces missing from the index are dropped
-                   gracefully; if nothing usable is available the line is
-                   dropped (returns "").
-    """
-    refs_label = "".join(f"[{r}]" for r in refs)
-    content_type = (doc.get("content_type") or "qa_pair").strip().lower()
-    source_url = (doc.get("source_url") or "").strip()
-
-    if content_type != "document":
-        # qa_pair (default) — URL only. Drop the line entirely if no URL
-        # is available (no synthetic identifiers).
-        if not source_url:
-            return ""
-        return f"{refs_label} {source_url}"
-
-    # document — build "file (page N) — url", omitting pieces gracefully.
-    file_name = (doc.get("file_name") or "").strip()
-    page_raw = doc.get("page_number")
-    page_str = str(page_raw).strip() if page_raw not in (None, "") else ""
-
-    label_parts: list[str] = []
-    if file_name:
-        if page_str:
-            label_parts.append(f"{file_name} (page {page_str})")
-        else:
-            label_parts.append(file_name)
-    elif page_str:
-        label_parts.append(f"page {page_str}")
-
-    if label_parts and source_url:
-        return f"{refs_label} {label_parts[0]} — {source_url}"
-    if label_parts:
-        return f"{refs_label} {label_parts[0]}"
-    if source_url:
-        return f"{refs_label} {source_url}"
-    # No metadata at all — drop the line.
-    return ""
-
-
 def _rebuild_citations_block(ai_content: str, events: list) -> str:
-    """Build the Citations block deterministically from event metadata.
+    """Build the Citations block entirely in code from events source data.
 
     The LLM only outputs inline [N] references. This function:
-      1. Extracts all [N] references from the LLM output.
-      2. Looks up the cited event's content_type and metadata.
-      3. Builds a per-ref line via _format_citation_line() — qa_pair gets
-         a URL-only line, document gets a file + page + URL line.
-      4. Groups consecutive refs that resolve to the same line so output
-         stays compact (e.g. ``[1][2] doc.pdf (page 4) — https://…``).
-      5. Strips any LLM-emitted Citations block (defense in depth) and
-         appends the rebuilt one.
+    1. Extracts all [N] references from the LLM output
+    2. Maps each to the actual source_url from events
+    3. Renumbers citations sequentially starting from [1]
+    4. Groups shared URLs (e.g. [1][2] https://...)
+    5. Strips any LLM-generated citation block (safety net)
+    6. Appends the deterministic code-built block
     """
     if not events:
         return ai_content
@@ -367,48 +276,53 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
     if not used_refs:
         return ai_content
 
-    # Build (ref → formatted-line) and group refs that share an identical line.
-    # A line is empty when the cited event has no usable metadata; skip those.
-    ref_to_line: "OrderedDict[str, str]" = OrderedDict()
+    # Map original refs to source URLs (skip invalid/internal URLs)
+    ref_to_url: dict[str, str] = {}
     for ref_str in used_refs:
         idx = int(ref_str) - 1
         if 0 <= idx < len(events):
-            line = _format_citation_line([ref_str], events[idx])
-            if line:
-                ref_to_line[ref_str] = line
+            doc = events[idx]
+            source_url = (doc.get("source_url") or "").strip()
+            # Skip internal chatbot URLs — not useful as citations
+            if "MENABusinessEnablementChatbot" in source_url:
+                source_url = ""
+            if source_url:
+                ref_to_url[ref_str] = source_url
 
-    # Always strip any LLM-emitted Citations block (defense in depth) so we
-    # never leak a stale block when there's nothing real to attach.
+    if not ref_to_url:
+        # Strip any LLM-generated citation block and inline refs with no valid URL
+        stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
+        stripped = re.sub(r"\[\d+\]", "", stripped)
+        return stripped
+
+    # Renumber: map original ref numbers to sequential 1, 2, 3...
+    valid_refs = sorted(ref_to_url.keys(), key=int)
+    old_to_new: dict[str, str] = {old: str(i + 1) for i, old in enumerate(valid_refs)}
+
+    # Replace inline refs in content (strip refs without valid URLs)
     stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
 
-    if not ref_to_line:
-        return stripped
+    def _replace_ref(m: re.Match) -> str:
+        old_ref = m.group(1)
+        new_ref = old_to_new.get(old_ref)
+        return f"[{new_ref}]" if new_ref else ""
 
-    # Group refs whose individual line (with [r] stripped) matches.
-    line_body_to_refs: "OrderedDict[str, list[str]]" = OrderedDict()
-    for ref_str, line in ref_to_line.items():
-        # Strip leading "[r]" cluster to compare bodies.
-        body = re.sub(r"^(\[\d+\])+\s*", "", line)
-        line_body_to_refs.setdefault(body, []).append(ref_str)
+    stripped = re.sub(r"\[(\d+)\]", _replace_ref, stripped)
 
-    # Emit one merged line per body, using the cited doc for formatting.
-    citation_lines: list[str] = []
-    for body, refs in line_body_to_refs.items():
-        # Re-render with the merged refs against the first ref's doc so the
-        # body matches exactly (every ref in this group shares the same body).
-        first_idx = int(refs[0]) - 1
-        if 0 <= first_idx < len(events):
-            line = _format_citation_line(refs, events[first_idx])
-            if line:
-                citation_lines.append(line)
-        else:
-            refs_label = "".join(f"[{r}]" for r in refs)
-            citation_lines.append(f"{refs_label} {body}")
+    # Build citations block with new numbering
+    url_to_refs: OrderedDict[str, list[str]] = OrderedDict()
+    for old_ref in valid_refs:
+        url = ref_to_url[old_ref]
+        new_ref = old_to_new[old_ref]
+        url_to_refs.setdefault(url, []).append(new_ref)
 
-    if not citation_lines:
-        return stripped
+    citation_lines = []
+    for url, refs in url_to_refs.items():
+        refs_label = "".join(f"[{r}]" for r in refs)
+        citation_lines.append(f"{refs_label} {url}")
 
     new_block = "Citations:\n" + "\n".join(citation_lines)
+
     return f"{stripped}\n\n{new_block}"
 
 
@@ -471,21 +385,14 @@ async def _generate_response(
                     idx = int(ref_str) - 1
                     if 0 <= idx < len(events):
                         doc = events[idx]
-                        source_url = (doc.get("source_url") or "").strip()
-                        # Skip citation-map entries that have no usable
-                        # provenance — no synthetic identifiers.
-                        file_name = (doc.get("file_name") or "").strip()
-                        if not source_url and not file_name:
-                            continue
-                        citation_map[ref_str] = {
-                            "url": source_url,
-                            "content_snippet": (doc.get("content", ""))[:200],
-                            # Persist provenance so follow-up turns can also
-                            # render type-appropriate citations consistently.
-                            "content_type": (doc.get("content_type") or "qa_pair"),
-                            "file_name": file_name,
-                            "page_number": doc.get("page_number", ""),
-                        }
+                        source_url = doc.get("source_url", "")
+                        if "MENABusinessEnablementChatbot" in source_url:
+                            source_url = ""
+                        if source_url:
+                            citation_map[ref_str] = {
+                                "url": source_url,
+                                "content_snippet": (doc.get("content", ""))[:200],
+                            }
 
         return ai_content, prompt_used, citation_map, response
 
@@ -525,10 +432,21 @@ async def generate_node(state: RAGState) -> dict:
             response = AIMessage(content=ai_content)
             citation_map = None
 
+        # ── Detect if document fallback should trigger ──
+        # Skip when dual search is on — both content types already searched.
+        # Only retries once: document → qa_pair (prevented by doc_fallback_attempted)
+        trigger_fallback = (
+            not DUAL_CONTENT_SEARCH_ENABLED
+            and _needs_document_fallback(ai_content)
+            and state.get("content_type", "document") == "document"
+            and not state.get("doc_fallback_attempted", False)
+        )
+
         return {
             "ai_content": ai_content,
             "prompt_used": prompt_used,
             "citation_map": citation_map,
+            "needs_doc_fallback": trigger_fallback,
             "messages": [response],
             "events": events,
         }

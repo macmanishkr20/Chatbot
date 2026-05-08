@@ -115,6 +115,9 @@ APPLICATIONINSIGHTS_CONNECTION_STRING = get_secret("APPLICATIONINSIGHTS-CONNECTI
 # Max recent messages to keep in full before summarising older ones.
 # Older messages are condensed into a summary to stay within token limits.
 MAX_RECENT_MESSAGES = int(os.getenv("MAX_RECENT_MESSAGES", "6"))
+# Max messages retained in checkpoint state. Older messages are pruned
+# to prevent unbounded growth and serialization timeouts.
+MAX_CHECKPOINT_MESSAGES = int(os.getenv("MAX_CHECKPOINT_MESSAGES", "20"))
 # Max tokens to allocate for conversation history in the supervisor prompt.
 SUPERVISOR_HISTORY_TOKEN_BUDGET = int(os.getenv("SUPERVISOR_HISTORY_TOKEN_BUDGET", "3000"))
 
@@ -127,25 +130,12 @@ TITLE_MAX_LENGTH = int(os.getenv("TITLE_MAX_LENGTH", "60"))
 # ── Input validation ──
 MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))
 
+# ── Dual content-type search ──
+DUAL_CONTENT_SEARCH_ENABLED = os.getenv("DUAL_CONTENT_SEARCH_ENABLED", "true").lower() == "true"
+
 # ── Parallel search / Planner (Phase 2) ──
 PARALLEL_SEARCH_TIMEOUT = int(os.getenv("PARALLEL_SEARCH_TIMEOUT", "10000"))  # ms per function
+MAX_PARALLEL_SEARCHES = int(os.getenv("MAX_PARALLEL_SEARCHES", "3"))  # max concurrent Azure Search calls
+MAX_SUB_QUERIES = int(os.getenv("MAX_SUB_QUERIES", "5"))  # max sub-queries from planner
 PLANNER_MAX_TOKENS = int(os.getenv("PLANNER_MAX_TOKENS", "200"))
 PLANNER_TEMPERATURE = float(os.getenv("PLANNER_TEMPERATURE", "0.0"))
-
-# ── Groundedness verification (citation overlap check) ──
-GROUNDEDNESS_THRESHOLD = float(os.getenv("GROUNDEDNESS_THRESHOLD", "0.25"))
-
-# ── Summarization thresholds ──
-SUMMARIZE_THRESHOLD = int(os.getenv("SUMMARIZE_THRESHOLD", "20"))
-SUMMARIZE_KEEP_RECENT = int(os.getenv("SUMMARIZE_KEEP_RECENT", "6"))
-SUMMARY_MAX_CHARS = int(os.getenv("SUMMARY_MAX_CHARS", "3000"))
-
-# ── Cancel-signal TTL (seconds) — prevents unbounded growth in /chat/cancel ──
-CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
-
-# ── Federated retrieval tie-break ──
-# Additive score boost given to content_type='qa_pair' results when ranking.
-# Applied only to ordering, never to the threshold gate, so a weak QA pair
-# can never out-recall a strong document — but when scores are within noise,
-# the curated QA wins. 0.15 is ~3.75% of the 0–4 reranker scale.
-QA_PAIR_TIE_BREAK_BOOST = float(os.getenv("QA_PAIR_TIE_BREAK_BOOST", "0.15"))

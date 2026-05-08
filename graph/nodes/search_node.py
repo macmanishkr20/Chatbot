@@ -9,6 +9,7 @@ from config import (
     AZURE_OPENAI_EMBED_API_KEY,
     AZURE_OPENAI_EMBED_ENDPOINT,
     BUSINESS_EXCEPTION_DETAILS,
+    DUAL_CONTENT_SEARCH_ENABLED,
     TOP_K,
 )
 from prompts._functions import CHIP_TO_SEARCH
@@ -63,18 +64,24 @@ def _group_by_function(results: list) -> tuple[dict[str, list], dict[str, float]
 def _strip_internal_fields(results: list) -> list:
     cleaned = []
     for r in results:
-        cleaned.append({
+        entry = {
             "file_name": r.get("file_name", ""),
             "page_number": r.get("page_number", ""),
             "content": r.get("content", ""),
             "source_url": r.get("source_url", ""),
             "function": r.get("function", ""),
             "sub_function": r.get("sub_function", ""),
-            # content_type drives citation format downstream
-            # (qa_pair → URL only, document → file_name + page_number + URL).
-            "content_type": (r.get("content_type") or "qa_pair").strip() or "qa_pair",
-        })
+        }
+        if r.get("_source_type"):
+            entry["_source_type"] = r["_source_type"]
+        cleaned.append(entry)
     return cleaned
+
+
+def _with_content_type(filter_expr: str | None, content_type: str) -> str:
+    """Append a content_type eq clause to an existing OData filter."""
+    ct_filter = f"content_type eq '{content_type}'"
+    return f"({filter_expr}) and ({ct_filter})" if filter_expr else ct_filter
 
 
 async def search_node(state: RAGState) -> dict:
@@ -105,22 +112,54 @@ async def search_node(state: RAGState) -> dict:
             fn_filter = " or ".join(f"function eq '{f}'" for f in search_fns)
             base_filter = f"({base_filter}) and ({fn_filter})" if base_filter else fn_filter
 
-        requested_ct = (state.get("content_type") or "qa_pair").strip() or "qa_pair"
-
-        # ── Single call handles the entire waterfall (Levels 1-4) ──
+        # ── Content-type search: dual parallel or sequential fallback ──
         search_service = SearchService()
-        all_results = await search_service.search_with_retry(
-            rewritten_query,
-            embedded_query,
-            base_filter=base_filter,
-            content_type=requested_ct,
-        )
+        all_results: list = []
+
+        if DUAL_CONTENT_SEARCH_ENABLED:
+            # Parallel search both content types simultaneously
+            doc_filter = _with_content_type(base_filter, "document")
+            qa_filter = _with_content_type(base_filter, "qa_pair")
+
+            doc_results, qa_results = await asyncio.gather(
+                search_service.unified_search(rewritten_query, embedded_query, odata_filter=doc_filter),
+                search_service.unified_search(rewritten_query, embedded_query, odata_filter=qa_filter),
+            )
+
+            for r in doc_results:
+                r["_source_type"] = "document"
+            for r in qa_results:
+                r["_source_type"] = "qa_pair"
+
+            # Merge by relevance score (descending) so the most relevant
+            # results from either content type appear first.
+            combined = doc_results + qa_results
+            combined.sort(
+                key=lambda r: r.get("@search.reranker_score", 0.0),
+                reverse=True,
+            )
+            all_results = combined
+        else:
+            # Sequential fallback: document → qa_pair
+            requested_ct = (state.get("content_type") or "document").strip() or "document"
+            fallback_chain = [requested_ct]
+            if requested_ct == "document":
+                fallback_chain.append("qa_pair")
+
+            for ct in fallback_chain:
+                odata_filter = _with_content_type(base_filter, ct)
+                all_results = await search_service.unified_search(
+                    rewritten_query, embedded_query, odata_filter=odata_filter
+                )
+                if all_results:
+                    break
 
         if not all_results:
             empty_detail = BUSINESS_EXCEPTION_DETAILS.get("empty_events", {})
             return {
                 "events": [],
                 "functions_found": [],
+                "is_ambiguous": False,
                 "error_info": {
                     "error_code": empty_detail.get("error_code", "NO_EVENTS"),
                     "text": empty_detail.get("text", "No relevant events found."),
@@ -149,4 +188,6 @@ async def search_node(state: RAGState) -> dict:
         return {
             "events": _strip_internal_fields(curated),
             "functions_found": functions_found,
+            "is_ambiguous": False,
+            "needs_multi_search": len(functions_found) > 1,
         }

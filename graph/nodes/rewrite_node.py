@@ -333,12 +333,55 @@ async def _rewrite_filters_query(query_with_filter: dict, llm_model: str, conver
 async def rewrite_node(state: RAGState) -> dict:
     """
     ASK-only rewrite node: rewrite query and extract structured search filter.
+    Also handles ambiguity resolution from a previous turn.
     """
 
     # START REWRITE NODE SPAN
     with get_tracer_span("rewrite_node"):
 
-        updates: dict = {}
+        updates = {}
+
+        # ── Ambiguity resolution ──
+        # If the previous turn was ambiguous, check if the user is selecting a function.
+        pending = state.get("pending_ambiguous_query")
+        if pending and state.get("is_ambiguous"):
+            user_input = state.get("user_input", "")
+            functions_found = state.get("functions_found", [])
+
+            # First check if an explicit function filter was provided via the API
+            explicit_functions = state.get("function", [])
+            matched_fn = None
+            if explicit_functions:
+                for ef in explicit_functions:
+                    for fn in functions_found:
+                        if ef.strip().lower() == fn.strip().lower():
+                            matched_fn = fn
+                            break
+                    if matched_fn:
+                        break
+
+        # Then try to match from user input text
+            if not matched_fn and user_input:
+                matched_fn = _match_function(user_input, functions_found)
+
+            if matched_fn:
+                # Restore the original user_input so persist_node saves the real question
+                original_user_input = pending.get("user_input", "")
+                result = {
+                    "rewritten_query": pending["rewritten_query"],
+                    "function": [matched_fn],
+                    "is_ambiguous": False,
+                    "pending_ambiguous_query": None,
+                    "functions_found": [matched_fn],
+                }
+                if original_user_input:
+                    result["user_input"] = original_user_input
+                return result
+            # No match — user is asking a new question; clear ambiguity and fall through
+
+        # Always clear ambiguity state when proceeding with normal rewrite
+        updates["is_ambiguous"] = False
+        updates["pending_ambiguous_query"] = None
 
         input_type = state.get("input_type", "ask")
         user_input = state.get("user_input", "")

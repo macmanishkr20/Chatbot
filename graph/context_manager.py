@@ -17,7 +17,7 @@ paragraph so the LLM retains context without blowing the token budget.
 import logging
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from config import MAX_RECENT_MESSAGES, SUMMARY_MAX_CHARS, SUPERVISOR_HISTORY_TOKEN_BUDGET
+from config import MAX_RECENT_MESSAGES, SUPERVISOR_HISTORY_TOKEN_BUDGET
 from services.openai_client import get_tokens_count, get_llm_model
 
 logger = logging.getLogger(__name__)
@@ -99,8 +99,9 @@ def split_and_summarise(
 
     # Cap the summary so it doesn't grow unbounded across long conversations.
     # ~4 chars per token → 3000 chars ≈ 750 tokens, well within budget.
-    if len(summary) > SUMMARY_MAX_CHARS:
-        summary = summary[-SUMMARY_MAX_CHARS:]
+    MAX_SUMMARY_CHARS = 3000
+    if len(summary) > MAX_SUMMARY_CHARS:
+        summary = summary[-MAX_SUMMARY_CHARS:]
 
     return recent, summary
 

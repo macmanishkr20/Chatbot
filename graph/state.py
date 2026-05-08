@@ -33,7 +33,11 @@ class RAGState(TypedDict, total=False):
     start_date: str
     end_date: str
     preferred_language: str | None
-    content_type: str  # "qa_pair" (default) | "document" — search index filter
+    content_type: str  # "document" (default) | "qa_pair" — search index content_type filter
+
+    # ── Document → QA fallback (graph-level retry) ──
+    needs_doc_fallback: bool       # trigger retry with qa_pair after no-answer generation
+    doc_fallback_attempted: bool   # prevent infinite fallback loop
 
     # ── Function gate (selection enforcement before search) ──
     requires_function_selection: bool
@@ -47,6 +51,8 @@ class RAGState(TypedDict, total=False):
     # ── Query processing ──
     rewritten_query: dict | None   # {"query": str, "filter": str | None}
     functions_found: list[str]
+    is_ambiguous: bool
+    pending_ambiguous_query: dict | None  # Original query context saved during ambiguity
     needs_multi_search: bool  # True when search found multiple functions, triggers iterative search
     multi_search_status: list[str]  # Status messages from iterative multi-function search (streamed via updates mode)
 

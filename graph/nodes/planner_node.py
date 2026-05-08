@@ -13,7 +13,7 @@ from __future__ import annotations
 import json
 import logging
 
-from config import PLANNER_MAX_TOKENS, PLANNER_TEMPERATURE
+from config import MAX_SUB_QUERIES, PLANNER_MAX_TOKENS, PLANNER_TEMPERATURE
 from graph.state import RAGState
 from prompts.planner import PLANNER_SYSTEM_PROMPT, planner_user_template
 from services.openai_client import (
@@ -116,6 +116,23 @@ async def planner_node(state: RAGState) -> dict:
                 if fn not in covered_fns:
                     valid_subs.append({"function": fn, "query": query_text})
                     complexity = "complex"
+
+            # Cap sub-queries to prevent API throttling from too many parallel searches.
+            # Keep one sub-query per unique function, prioritising the LLM-decomposed
+            # ones (they appear first in valid_subs) over the catch-all fallbacks.
+            if len(valid_subs) > MAX_SUB_QUERIES:
+                logger.info(
+                    "planner: capping sub_queries from %d to %d",
+                    len(valid_subs), MAX_SUB_QUERIES,
+                )
+                # Deduplicate: keep the first (most specific) sub-query per function
+                seen_fns: set[str] = set()
+                deduped: list[dict] = []
+                for sq in valid_subs:
+                    if sq["function"] not in seen_fns:
+                        seen_fns.add(sq["function"])
+                        deduped.append(sq)
+                valid_subs = deduped[:MAX_SUB_QUERIES]
 
             logger.info(
                 "planner: complexity=%s sub_queries=%d functions=%s",

@@ -111,6 +111,10 @@ class SupervisorGraph:
 
         The system prompt is built per-request via _build_system_prompt()
         so that date references are always fresh.
+
+        Uses a non-streaming LLM clone for structured output to avoid
+        PydanticSerializationUnexpectedValue when the checkpointer
+        serialises intermediate AIMessages with a `parsed` field.
         """
         system_prompt = _build_system_prompt()
         lang = state.get("preferred_language") or "English"
@@ -121,7 +125,11 @@ class SupervisorGraph:
                 ("human", f"Ensure your response is in language: {lang}"),
             ]
         ).partial(options=str(OPTIONS_FOR_NEXT), members=", ".join(MEMBERS))
-        return prompt | self.llm.with_structured_output(RouteResponse)
+        # Disable streaming for structured output — supervisor routing decisions
+        # are not streamed to the user, and streaming + with_structured_output
+        # causes Pydantic serialisation warnings in the checkpointer.
+        routing_llm = self.llm.bind(stream=False)
+        return prompt | routing_llm.with_structured_output(RouteResponse)
 
     async def supervisor_agent(self, state: RAGState) -> Dict[str, Any]:
         """Route requests and provide direct responses when appropriate.

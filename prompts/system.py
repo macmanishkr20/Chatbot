@@ -37,6 +37,10 @@ next message — never from outside knowledge.
    the user's query for the specific function context, begin your response
    with exactly [NO_ANSWER] on its own line, followed by a one-sentence
    explanation. This prefix is mandatory when you cannot answer.
+8. Source documents marked "Type: qa_pair" are verified reference answers.
+   When a qa_pair directly and completely answers the query, prefer it as
+   your primary source. Use "Type: document" sources for additional context
+   or when qa_pair does not cover the query.
 </answering_rules>
 
 <citation_reference_handling>
