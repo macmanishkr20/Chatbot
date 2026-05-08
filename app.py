@@ -274,9 +274,6 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "preferred_language": query.preferred_language,
         "content_type": query.content_type or "qa_pair",
         "requires_function_selection": False,
-        # Corrective-RAG counters — reset every turn.
-        "no_answer": False,
-        "search_retry_count": 0,
     }
 
 
@@ -691,10 +688,6 @@ async def chat_api(
         current_state["plan_type"] = None
         current_state["sub_queries"] = None
         current_state["parallel_results"] = None
-        # Reset diagnostic flags every turn so prior [NO_ANSWER] state doesn't
-        # bleed into a fresh question.
-        current_state["no_answer"] = False
-        current_state["search_retry_count"] = 0
         state = current_state
     else:
         state = await _build_initial_state(query)
@@ -785,8 +778,6 @@ async def regenerate_chat(
         current_state["plan_type"] = None
         current_state["sub_queries"] = None
         current_state["parallel_results"] = None
-        current_state["no_answer"] = False
-        current_state["search_retry_count"] = 0
         state = current_state
     else:
         raise HTTPException(status_code=404, detail="No conversation state found")
@@ -871,8 +862,6 @@ async def edit_message(
             "plan_type": None,
             "sub_queries": None,
             "parallel_results": None,
-            "no_answer": False,
-            "search_retry_count": 0,
         }
     if not current_state or not current_state.get("messages"):
         logger.warning(
@@ -955,8 +944,6 @@ async def edit_message(
         "plan_type": None,
         "sub_queries": None,
         "parallel_results": None,
-        "no_answer": False,
-        "search_retry_count": 0,
     }
 
     return StreamingResponse(

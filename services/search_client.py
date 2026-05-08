@@ -24,6 +24,7 @@ from config import (
     AZURE_SEARCH_SCORE_THRESHOLD,
     AZURE_SEARCH_VECTOR_FIELD,
     DISCOVERY_TOP_K,
+    QA_PAIR_TIE_BREAK_BOOST,
     SELECT_FIELDS,
     TOP_K,
 )
@@ -256,72 +257,91 @@ class SearchService:
         query: dict,
         embedded_query: list,
         base_filter: str | None = None,
-        content_type: str = "document",  # accepted for back-compat; not used as a filter
+        content_type: str = "qa_pair",  # accepted for back-compat; no longer used as a filter
         top_k: int = DISCOVERY_TOP_K,
         skip_last_resort: bool = False,
     ) -> List[Dict]:
-        """Sequential waterfall: document → qa_pair → no filter.
+        """Federated single-pass retrieval with progressive filter relaxation.
 
-        Each level runs a single search call and returns its results as
-        soon as any pass the level's threshold. The ``content_type``
-        parameter is retained in the signature for back-compat but is
-        ignored — the level order is fixed.
+        ``content_type`` is **not** used as a query filter — qa_pair and
+        document chunks compete head-to-head against the semantic reranker.
+        A small additive boost (QA_PAIR_TIE_BREAK_BOOST) is applied to
+        qa_pair scores during ordering only, so when reranker scores are
+        within noise the curated QA wins, but a strong document chunk can
+        always outrank a weak qa_pair.
 
-        Levels:
-          L1: content_type='document' + base_filter   (threshold: relaxed)
-              Documents are the primary corpus.
-          L2: content_type='qa_pair'  + base_filter   (threshold: full)
-              Curated Q&A backstop when documents miss.
-          L3: no filter at all                        (threshold: very relaxed)
-              Last resort — skipped when skip_last_resort=True.
+        Levels (each tries one search call):
+          L1: base_filter (function + date)            threshold: relaxed
+          L2: function filter dropped, date kept       threshold: very relaxed
+          L3: no filter at all (last resort)           threshold: very relaxed
+              — skipped when skip_last_resort=True
 
-        Each level uses its appropriate threshold so a weak match in one
-        type cannot pre-empt a strong match in another that hasn't been
-        checked yet.
-
-        Returns results sorted by raw reranker score, capped at top_k.
+        The ``content_type`` parameter is kept in the signature so existing
+        callers don't break; its value is ignored.
         """
-        del content_type  # intentional — ordering is fixed by the level chain
+        # The previous waterfall used content_type as the primary filter,
+        # which created an asymmetry where qa_pair-default queries never
+        # reached document hits except via the no-filter last resort. The
+        # federated approach removes that asymmetry while preserving qa_pair
+        # preference via the score boost.
+        del content_type  # silence "unused" linters; intentional no-op
 
-        sorted_by_score = lambda rs: sorted(  # noqa: E731
-            rs, key=lambda r: r.get("@search.reranker_score", 0.0), reverse=True
-        )
-
-        # ── Level 1: documents + base_filter ──
-        ct_filter = "content_type eq 'document'"
-        odata_filter = f"({base_filter}) and ({ct_filter})" if base_filter else ct_filter
-        raw = await self.unified_search(query, embedded_query, odata_filter=odata_filter)
+        # ── Level 1: Federated, full base_filter ──
+        raw = await self.unified_search(query, embedded_query, odata_filter=base_filter)
         qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _DOC_THRESHOLD]
         if qualified:
+            ranked = self._rank_with_qa_boost(qualified)
             logger.info(
-                "search_with_retry: L1 document found=%d (threshold=%.2f)",
-                len(qualified), _DOC_THRESHOLD,
+                "search_with_retry: L1 federated found=%d (threshold=%.2f)",
+                len(ranked), _DOC_THRESHOLD,
             )
-            return sorted_by_score(qualified)[:top_k]
+            return ranked[:top_k]
 
-        # ── Level 2: qa_pair + base_filter ──
-        ct_filter = "content_type eq 'qa_pair'"
-        odata_filter = f"({base_filter}) and ({ct_filter})" if base_filter else ct_filter
-        raw = await self.unified_search(query, embedded_query, odata_filter=odata_filter)
-        qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _QA_THRESHOLD]
-        if qualified:
-            logger.info(
-                "search_with_retry: L2 qa_pair found=%d (threshold=%.2f)",
-                len(qualified), _QA_THRESHOLD,
-            )
-            return sorted_by_score(qualified)[:top_k]
+        # ── Level 2: Drop function filter (user may have wrong chip) ──
+        # Only run if function clauses were actually present — otherwise this
+        # would be identical to Level 3.
+        if base_filter:
+            relaxed = strip_function_filter(base_filter)
+            if relaxed != base_filter:
+                raw = await self.unified_search(query, embedded_query, odata_filter=relaxed)
+                qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
+                if qualified:
+                    ranked = self._rank_with_qa_boost(qualified)
+                    logger.info(
+                        "search_with_retry: L2 fn-relaxed found=%d (threshold=%.2f)",
+                        len(ranked), _FALLBACK_THRESHOLD,
+                    )
+                    return ranked[:top_k]
 
-        # ── Level 3: no filter at all (last resort) ──
+        # ── Level 3: No filter at all (last resort) ──
         if skip_last_resort:
             return []
 
         raw = await self.unified_search(query, embedded_query, odata_filter=None)
         qualified = [r for r in raw if r.get("@search.reranker_score", 0) >= _FALLBACK_THRESHOLD]
         if qualified:
+            ranked = self._rank_with_qa_boost(qualified)
             logger.info(
                 "search_with_retry: L3 no-filter found=%d (threshold=%.2f)",
-                len(qualified), _FALLBACK_THRESHOLD,
+                len(ranked), _FALLBACK_THRESHOLD,
             )
-            return sorted_by_score(qualified)[:top_k]
+            return ranked[:top_k]
 
         return []
+
+    @staticmethod
+    def _rank_with_qa_boost(results: List[Dict]) -> List[Dict]:
+        """Sort results, applying a small additive boost to qa_pair items.
+
+        The boost only affects ordering (effective_score) — never the
+        threshold gate that already ran upstream. This means a weak
+        qa_pair cannot recall its way past the threshold, but among
+        items that already qualified it gets the tie-break.
+        """
+        for r in results:
+            ct = (r.get("content_type") or "").strip().lower()
+            base_score = float(r.get("@search.reranker_score", 0.0))
+            boost = QA_PAIR_TIE_BREAK_BOOST if ct == "qa_pair" else 0.0
+            r["@search.effective_score"] = base_score + boost
+        results.sort(key=lambda r: r.get("@search.effective_score", 0.0), reverse=True)
+        return results

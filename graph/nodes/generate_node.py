@@ -298,23 +298,6 @@ def _verify_groundedness(ai_content: str, events: list) -> str:
 # ── Citation Block Builder ─────────────────────────────────────────────────
 
 
-def _link_if_http(url: str) -> str:
-    """Wrap URL in an anchor tag opening in a new tab if it's http(s).
-
-    Only http:// and https:// URLs are made clickable — internal identifiers,
-    SharePoint paths that didn't get normalised, or any other non-web string
-    is returned as plain text. ``rel="noopener noreferrer"`` is the standard
-    pairing with ``target="_blank"`` to prevent the new tab from accessing
-    ``window.opener`` and to suppress referer leakage.
-    """
-    if not url:
-        return ""
-    lowered = url.lower()
-    if lowered.startswith("http://") or lowered.startswith("https://"):
-        return f'<a href="{url}" target="_blank" rel="noopener noreferrer">{url}</a>'
-    return url
-
-
 def _format_citation_line(refs: list[str], doc: dict) -> str:
     """Format one citation line based on the cited document's content_type.
 
@@ -332,16 +315,13 @@ def _format_citation_line(refs: list[str], doc: dict) -> str:
     refs_label = "".join(f"[{r}]" for r in refs)
     content_type = (doc.get("content_type") or "qa_pair").strip().lower()
     source_url = (doc.get("source_url") or "").strip()
-    # Only the URL portion is wrapped in an anchor; the file_name and page
-    # parts stay as plain text per product requirement.
-    linked_url = _link_if_http(source_url) if source_url else ""
 
     if content_type != "document":
         # qa_pair (default) — URL only. Drop the line entirely if no URL
         # is available (no synthetic identifiers).
         if not source_url:
             return ""
-        return f"{refs_label} {linked_url}"
+        return f"{refs_label} {source_url}"
 
     # document — build "file (page N) — url", omitting pieces gracefully.
     file_name = (doc.get("file_name") or "").strip()
@@ -358,11 +338,11 @@ def _format_citation_line(refs: list[str], doc: dict) -> str:
         label_parts.append(f"page {page_str}")
 
     if label_parts and source_url:
-        return f"{refs_label} {label_parts[0]} — {linked_url}"
+        return f"{refs_label} {label_parts[0]} — {source_url}"
     if label_parts:
         return f"{refs_label} {label_parts[0]}"
     if source_url:
-        return f"{refs_label} {linked_url}"
+        return f"{refs_label} {source_url}"
     # No metadata at all — drop the line.
     return ""
 
@@ -404,31 +384,18 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
     if not ref_to_line:
         return stripped
 
-    # Group refs whose individual line (with [r] stripped) matches. Track
-    # the originating event for each group so we can sort document-first.
+    # Group refs whose individual line (with [r] stripped) matches.
     line_body_to_refs: "OrderedDict[str, list[str]]" = OrderedDict()
     for ref_str, line in ref_to_line.items():
+        # Strip leading "[r]" cluster to compare bodies.
         body = re.sub(r"^(\[\d+\])+\s*", "", line)
         line_body_to_refs.setdefault(body, []).append(ref_str)
 
-    # Build (priority, refs, body) tuples. Priority orders document (0) before
-    # qa_pair / unknown (1) so the citation block lists docs first; within a
-    # priority bucket the natural [N] order is preserved (stable sort).
-    grouped: list[tuple[int, list[str], str]] = []
-    for body, refs in line_body_to_refs.items():
-        first_idx = int(refs[0]) - 1
-        ct = ""
-        if 0 <= first_idx < len(events):
-            ct = (events[first_idx].get("content_type") or "").strip().lower()
-        priority = 0 if ct == "document" else 1
-        grouped.append((priority, refs, body))
-
-    grouped.sort(key=lambda t: t[0])  # stable — preserves intra-bucket order
-
-    # Emit one merged line per group, re-rendering against the cited doc so
-    # the body and ref-cluster match exactly.
+    # Emit one merged line per body, using the cited doc for formatting.
     citation_lines: list[str] = []
-    for _, refs, body in grouped:
+    for body, refs in line_body_to_refs.items():
+        # Re-render with the merged refs against the first ref's doc so the
+        # body matches exactly (every ref in this group shares the same body).
         first_idx = int(refs[0]) - 1
         if 0 <= first_idx < len(events):
             line = _format_citation_line(refs, events[first_idx])
@@ -529,29 +496,21 @@ async def generate_node(state: RAGState) -> dict:
     Uses streaming=True with ainvoke() so LangGraph's "messages" stream mode
     captures each token for real-time SSE delivery to the client.
 
-    Generation NEVER re-searches — all retry/fallback is handled upstream by
-    SearchService.search_with_retry() in search_node. When events are empty
-    or the LLM emits [NO_ANSWER], we replace ai_content with a user-friendly
-    fallback message AND set ``no_answer=True`` in state so downstream
-    nodes / telemetry can distinguish a genuine answer from a fallback.
-
-    The ``no_answer`` / ``search_retry_count`` state fields are kept for
-    diagnostics and to leave the door open for a future corrective-RAG
-    loop without having to re-plumb state.
+    Generation NEVER re-searches — all retry/fallback is handled upstream
+    by SearchService.search_with_retry() in search_node.
+    If [NO_ANSWER], returns a user-friendly fallback message.
     """
     with get_tracer_span("generate_node"):
         events = state.get("events", [])
 
-        # ── No events: nothing to generate from ──
+        # ── No events: search exhausted all retries upstream ──
         if not events:
-            logger.info("generate_node: empty events — emitting fallback")
             return {
                 "ai_content": _FALLBACK_MESSAGE,
                 "prompt_used": "",
                 "citation_map": None,
                 "messages": [AIMessage(content=_FALLBACK_MESSAGE)],
                 "events": [],
-                "no_answer": True,
             }
 
         # ── Generate response (streaming) ──
@@ -561,25 +520,15 @@ async def generate_node(state: RAGState) -> dict:
 
         # ── Handle [NO_ANSWER] — LLM couldn't answer from the provided context ──
         if (ai_content or "").strip().startswith("[NO_ANSWER]"):
-            logger.info("generate_node: [NO_ANSWER] — emitting fallback")
+            logger.info("generate_node: [NO_ANSWER] — returning fallback message")
             ai_content = _FALLBACK_MESSAGE
             response = AIMessage(content=ai_content)
             citation_map = None
-            return {
-                "ai_content": ai_content,
-                "prompt_used": prompt_used,
-                "citation_map": citation_map,
-                "messages": [response],
-                "events": events,
-                "no_answer": True,
-            }
 
-        # ── Successful generation ──
         return {
             "ai_content": ai_content,
             "prompt_used": prompt_used,
             "citation_map": citation_map,
             "messages": [response],
             "events": events,
-            "no_answer": False,
         }

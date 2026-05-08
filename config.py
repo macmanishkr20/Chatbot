@@ -143,3 +143,9 @@ SUMMARY_MAX_CHARS = int(os.getenv("SUMMARY_MAX_CHARS", "3000"))
 # ── Cancel-signal TTL (seconds) — prevents unbounded growth in /chat/cancel ──
 CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
 
+# ── Federated retrieval tie-break ──
+# Additive score boost given to content_type='qa_pair' results when ranking.
+# Applied only to ordering, never to the threshold gate, so a weak QA pair
+# can never out-recall a strong document — but when scores are within noise,
+# the curated QA wins. 0.15 is ~3.75% of the 0–4 reranker scale.
+QA_PAIR_TIE_BREAK_BOOST = float(os.getenv("QA_PAIR_TIE_BREAK_BOOST", "0.15"))
