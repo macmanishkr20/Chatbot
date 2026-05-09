@@ -485,6 +485,7 @@ async def generate_node(state: RAGState) -> dict:
                 "citation_map": None,
                 "messages": [AIMessage(content=_FALLBACK_MESSAGE)],
                 "events": [],
+                "error_info": None,
             }
 
         # ── Generate response (streaming) ──
