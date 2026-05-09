@@ -378,6 +378,14 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                     auto_selected_function = node_data["function"]
                     logger.info("function_gate auto-selected: %s", auto_selected_function)
 
+                # Reset streaming state so the second generate pass (after
+                # doc-fallback) is treated as a fresh streaming run.
+                if node == "set_doc_fallback":
+                    generate_buffer = ""
+                    generate_aborted = False
+                    generate_flushed = False
+                    seen_nodes.discard("generate")
+
                 if node and node not in seen_nodes:
                     seen_nodes.add(node)
                     thought_entry = _NODE_THOUGHT.get(node)
