@@ -18,6 +18,7 @@ from typing import Any
 from langchain_core.messages import AIMessage
 from langgraph.graph import END, StateGraph
 
+from services.telemetry import get_tracer_span, record_exception
 from graph.state import RAGState
 from graph.nodes.memory_node import load_memory_node, save_memory_node
 from graph.nodes.rewrite_node import rewrite_node
@@ -47,24 +48,26 @@ def _safe_node(node_fn):
     _accepts_config = "config" in inspect.signature(node_fn).parameters
 
     async def _wrapped(state: RAGState, config=None):
-        try:
-            if _accepts_config:
-                return await node_fn(state, config)
-            return await node_fn(state)
-        except Exception as exc:
-            logger.error(
-                "Node '%s' failed: %s", node_fn.__name__, exc, exc_info=True,
-            )
-            return {
-                "ai_content": _ERROR_MESSAGE,
-                "is_free_form": True,
-                "error_info": {
-                    "error_code": "NODE_ERROR",
-                    "text": f"{node_fn.__name__}: {type(exc).__name__}: {exc}",
-                },
-                "messages": [AIMessage(content=_ERROR_MESSAGE)],
-                "events": [],
-            }
+        with get_tracer_span(f"node.{node_fn.__name__}"):
+            try:
+                if _accepts_config:
+                    return await node_fn(state, config)
+                return await node_fn(state)
+            except Exception as exc:
+                logger.error(
+                    "Node '%s' failed: %s", node_fn.__name__, exc, exc_info=True,
+                )
+                record_exception(exc, {"node": node_fn.__name__})
+                return {
+                    "ai_content": _ERROR_MESSAGE,
+                    "is_free_form": True,
+                    "error_info": {
+                        "error_code": "NODE_ERROR",
+                        "text": f"{node_fn.__name__}: {type(exc).__name__}: {exc}",
+                    },
+                    "messages": [AIMessage(content=_ERROR_MESSAGE)],
+                    "events": [],
+                }
     _wrapped.__name__ = node_fn.__name__
     return _wrapped
 

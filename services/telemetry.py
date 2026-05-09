@@ -2,6 +2,7 @@
 Azure Application Insights telemetry setup.
 Production-ready OpenTelemetry configuration.
 """
+import logging
 
 from azure.monitor.opentelemetry import configure_azure_monitor
 from opentelemetry import trace
@@ -10,6 +11,8 @@ from opentelemetry.instrumentation.requests import RequestsInstrumentor
 from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
 
 from config import APPLICATIONINSIGHTS_CONNECTION_STRING
+
+logger = logging.getLogger(__name__)
 
 
 _tracer = None
@@ -22,10 +25,11 @@ def setup_azure_telemetry(app=None):
     """
     # Reads the connection string
     connection_string = APPLICATIONINSIGHTS_CONNECTION_STRING
-    print("[LOG]---connection_string---", connection_string)
     if not connection_string:
         # Telemetry disabled safely if env variable not present
+        logger.info("App Insights connection string not set; telemetry disabled.")
         return None
+    logger.info("App Insights telemetry enabled.")
 
     #Connects to Azure Application Insights
     #Starts sending logs, traces, errors, metrics to Azure
@@ -66,13 +70,35 @@ def get_tracer_span(span_name: str):
     If tracer is None (telemetry not initialized), returns a no-op context manager.
     """
     from contextlib import contextmanager
-    
+
     @contextmanager
     def no_op():
         yield
-    
+
     tracer = get_tracer()
     if tracer is None:
         return no_op()
-    
-    return tracer.start_as_current_span(span_name) 
+
+    return tracer.start_as_current_span(span_name)
+
+
+def record_event(name: str, attributes: dict | None = None) -> None:
+    """Add an event to the current active span. No-op if telemetry disabled."""
+    try:
+        span = trace.get_current_span()
+        if span is None:
+            return
+        span.add_event(name, attributes=attributes or {})
+    except Exception:
+        logger.debug("record_event failed", exc_info=True)
+
+
+def record_exception(exc: BaseException, attributes: dict | None = None) -> None:
+    """Record an exception on the current active span. No-op if telemetry disabled."""
+    try:
+        span = trace.get_current_span()
+        if span is None:
+            return
+        span.record_exception(exc, attributes=attributes or {})
+    except Exception:
+        logger.debug("record_exception failed", exc_info=True)

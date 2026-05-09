@@ -2,6 +2,7 @@
 Unified configuration for MenaBot.
 All environment variables consolidated in one place.
 """
+import logging
 import os
 import json
 from dotenv import load_dotenv
@@ -10,9 +11,11 @@ load_dotenv(override=True)
 
 from helpers.keyvaultmanager import get_secret
 
+logger = logging.getLogger(__name__)
+
 
 ENVIRONMENT = os.getenv("ENVIRONMENT")
-print(f"[LOG]----{ENVIRONMENT}---ENVIRONMENT in config.py")
+logger.debug("ENVIRONMENT loaded: %s", ENVIRONMENT)
 
 
 # MSSQL_CONNECTION_STRING = get_secret("MSSQL-CONNECTION-STRING")

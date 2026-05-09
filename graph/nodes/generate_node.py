@@ -8,7 +8,7 @@ from langchain_openai import AzureChatOpenAI
 
 from graph.state import RAGState
 from graph.context_manager import trim_messages_to_budget
-from services.telemetry import get_tracer_span
+from services.telemetry import get_tracer_span, record_event
 from config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
@@ -509,6 +509,18 @@ async def generate_node(state: RAGState) -> dict:
             and state.get("content_type", "document") == "document"
             and not state.get("doc_fallback_attempted", False)
         )
+
+        # ── Telemetry on doc-fallback cycle ──
+        if trigger_fallback:
+            record_event("doc_fallback_triggered", {
+                "content_type": state.get("content_type", "document"),
+            })
+        elif state.get("doc_fallback_attempted"):
+            qa_resolved = (ai_content or "").strip() != _FALLBACK_MESSAGE
+            record_event(
+                "doc_fallback_qa_resolved" if qa_resolved else "doc_fallback_qa_also_failed",
+                {"events_count": len(events)},
+            )
 
         return {
             "ai_content": ai_content,
