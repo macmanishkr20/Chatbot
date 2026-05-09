@@ -95,13 +95,15 @@ async def search_node(state: RAGState) -> dict:
                 "error_info": {"error_code": "NO_QUERY", "text": "No query to search."},
             }
 
-        # ── Embed the query (previously a separate node) ──
-        embedded_query = await _embed_query(rewritten_query["query"])
+        # ── Embed the query (reuse cached embedding on doc-fallback retry) ──
+        embedded_query = state.get("embedded_query")
         if not embedded_query:
-            return {
-                "events": [],
-                "error_info": {"error_code": "EMBED_FAILED", "text": "Failed to embed query."},
-            }
+            embedded_query = await _embed_query(rewritten_query["query"])
+            if not embedded_query:
+                return {
+                    "events": [],
+                    "error_info": {"error_code": "EMBED_FAILED", "text": "Failed to embed query."},
+                }
 
         # ── Build base filter (date/function filters, NOT content_type) ──
         base_filter = rewritten_query.get("filter") or None
@@ -165,6 +167,7 @@ async def search_node(state: RAGState) -> dict:
                 "events": [],
                 "functions_found": [],
                 "is_ambiguous": False,
+                "embedded_query": embedded_query,
                 "error_info": {
                     "error_code": empty_detail.get("error_code", "NO_EVENTS"),
                     "text": empty_detail.get("text", "No relevant events found."),
@@ -195,4 +198,5 @@ async def search_node(state: RAGState) -> dict:
             "functions_found": functions_found,
             "is_ambiguous": False,
             "needs_multi_search": len(functions_found) > 1,
+            "embedded_query": embedded_query,
         }
