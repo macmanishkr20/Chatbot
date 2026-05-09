@@ -4,16 +4,27 @@ import logging
 import re
 
 from azure.core.credentials import AzureKeyCredential
+from azure.core.exceptions import (
+    HttpResponseError,
+    ServiceRequestError,
+    ServiceResponseError,
+)
 from azure.search.documents import SearchClient
 from azure.search.documents.models import (
     VectorizedQuery,
 )
-from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+from tenacity import (
+    retry,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_exponential,
+)
 
 from config import (
     AZURE_SEARCH_INDEX_NAME,
     AZURE_SEARCH_API_KEY,
     AZURE_SEARCH_ENDPOINT,
+    AZURE_SEARCH_MAX_RETRIES,
     AZURE_SEARCH_SEMANTIC_CONFIG,
     AZURE_SEARCH_SCORE_THRESHOLD,
     AZURE_SEARCH_VECTOR_FIELD,
@@ -21,6 +32,16 @@ from config import (
     SELECT_FIELDS,
     TOP_K,
 )
+
+
+def _is_transient_search_error(exc: BaseException) -> bool:
+    """Retry only on transient Azure Search errors (429/5xx/network)."""
+    if isinstance(exc, (ServiceRequestError, ServiceResponseError)):
+        return True
+    if isinstance(exc, HttpResponseError):
+        status = getattr(exc, "status_code", None)
+        return status == 429 or (status is not None and 500 <= status < 600)
+    return False
 
 logger = logging.getLogger(__name__)
 
@@ -157,9 +178,9 @@ class SearchService:
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=0.5),
-        retry=retry_if_exception_type(Exception),
+        stop=stop_after_attempt(AZURE_SEARCH_MAX_RETRIES),
+        wait=wait_exponential(multiplier=0.5, max=8),
+        retry=retry_if_exception(_is_transient_search_error),
     )
     async def _safe_search(self, client, **kwargs):
         return client.search(**kwargs)

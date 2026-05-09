@@ -79,26 +79,8 @@ callback_handler = (
 # Global compiled graph instance (initialised once at startup)
 graph = None
 
-# ── In-memory cancel signals (keyed by thread_id → expiry epoch) ──
-# For multi-worker deployments, replace with Redis.
-# TTL prevents unbounded growth when a user cancels and never returns.
-_CANCEL_SIGNAL_TTL_SECONDS = 300
-_cancel_signals: dict[str, float] = {}
-
-
-def _prune_cancel_signals() -> None:
-    """Drop expired cancel signals. Called on every read/write."""
-    now = time.time()
-    expired = [k for k, exp in _cancel_signals.items() if exp <= now]
-    for k in expired:
-        _cancel_signals.pop(k, None)
-
-
-def _consume_cancel_signal(thread_id: str) -> bool:
-    """Atomically check-and-clear an unexpired cancel signal."""
-    _prune_cancel_signals()
-    exp = _cancel_signals.pop(thread_id, None)
-    return exp is not None and exp > time.time()
+# ── Cancel signals (backend-agnostic; redis or in-memory with TTL) ──
+from services.cancel_signals import set_cancel, consume_cancel
 
 # ── Nodes whose LLM token output is meaningful prose for the end user ──
 # NOTE: "Supervisor" is intentionally excluded. Its LLM uses
@@ -381,7 +363,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
             except asyncio.QueueEmpty:
                 break
         # ── Check cancellation ──
-        if _consume_cancel_signal(thread_id):
+        if consume_cancel(thread_id):
             yield sse_format({"type": "final", "cancelled": True})
             return
 
@@ -451,8 +433,18 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                         generate_flushed = True
 
                     gen_content = node_data.get("ai_content")
+                    gen_error = node_data.get("error_info")
 
-                    if generate_aborted and gen_content:
+                    if gen_error and gen_content:
+                        # Mid-stream LLM failure — _safe_node returned the
+                        # error message. Force content_replace so any partial
+                        # tokens already streamed get overwritten in the UI.
+                        yield sse_format({
+                            "type": "content_replace",
+                            "content": gen_content,
+                            "node": "generate",
+                        })
+                    elif generate_aborted and gen_content:
                         # Retry path — send full replacement content
                         yield sse_format({
                             "type": "content_replace",
@@ -465,6 +457,14 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                         # should replace the streamed content with this.
                         yield sse_format({
                             "type": "content_final",
+                            "content": gen_content,
+                            "node": "generate",
+                        })
+                    elif gen_content:
+                        # No tokens flushed yet (early failure / fallback path)
+                        # — deliver as a single content event.
+                        yield sse_format({
+                            "type": "content",
                             "content": gen_content,
                             "node": "generate",
                         })
@@ -718,8 +718,7 @@ async def cancel_chat(body: CancelRequest):
     """
     _validate_user(body.user_id)
     thread_id = f"{body.user_id}_{body.chat_session_id}"
-    _prune_cancel_signals()
-    _cancel_signals[thread_id] = time.time() + _CANCEL_SIGNAL_TTL_SECONDS
+    set_cancel(thread_id)
     return {"status": "cancel_requested"}
 
 

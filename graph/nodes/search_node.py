@@ -1,4 +1,6 @@
 import asyncio
+import hashlib
+import time
 from collections import defaultdict
 import logging
 
@@ -21,6 +23,38 @@ from services.openai_client import (
 from services.search_client import SearchService
 
 logger = logging.getLogger(__name__)
+
+
+# ── Process-local embedding cache (avoid re-embed on doc-fallback retry) ──
+# Keyed by hash of query text; entries auto-expire to bound memory.
+# Not persisted to checkpoint state — that would bloat every checkpoint by
+# ~6KB per turn for a 1.5K-dim float vector.
+_EMBED_CACHE_TTL_SECONDS = 120
+_embed_cache: dict[str, tuple[float, list]] = {}
+
+
+def _embed_cache_key(query_text: str) -> str:
+    return hashlib.sha1(query_text.encode("utf-8")).hexdigest()
+
+
+def _embed_cache_get(key: str) -> list | None:
+    entry = _embed_cache.get(key)
+    if not entry:
+        return None
+    expiry, vec = entry
+    if expiry <= time.time():
+        _embed_cache.pop(key, None)
+        return None
+    return vec
+
+
+def _embed_cache_put(key: str, vec: list) -> None:
+    # Drop expired entries opportunistically to bound size
+    now = time.time()
+    if len(_embed_cache) > 256:
+        for k in [k for k, (exp, _) in _embed_cache.items() if exp <= now]:
+            _embed_cache.pop(k, None)
+    _embed_cache[key] = (now + _EMBED_CACHE_TTL_SECONDS, vec)
 
 
 # ── Embedding ──────────────────────────────────────────────────────────────
@@ -95,8 +129,9 @@ async def search_node(state: RAGState) -> dict:
                 "error_info": {"error_code": "NO_QUERY", "text": "No query to search."},
             }
 
-        # ── Embed the query (reuse cached embedding on doc-fallback retry) ──
-        embedded_query = state.get("embedded_query")
+        # ── Embed the query (process-local cache avoids re-embed on retry) ──
+        cache_key = _embed_cache_key(rewritten_query["query"])
+        embedded_query = _embed_cache_get(cache_key)
         if not embedded_query:
             embedded_query = await _embed_query(rewritten_query["query"])
             if not embedded_query:
@@ -104,6 +139,7 @@ async def search_node(state: RAGState) -> dict:
                     "events": [],
                     "error_info": {"error_code": "EMBED_FAILED", "text": "Failed to embed query."},
                 }
+            _embed_cache_put(cache_key, embedded_query)
 
         # ── Build base filter (date/function filters, NOT content_type) ──
         base_filter = rewritten_query.get("filter") or None
@@ -167,7 +203,6 @@ async def search_node(state: RAGState) -> dict:
                 "events": [],
                 "functions_found": [],
                 "is_ambiguous": False,
-                "embedded_query": embedded_query,
                 "error_info": {
                     "error_code": empty_detail.get("error_code", "NO_EVENTS"),
                     "text": empty_detail.get("text", "No relevant events found."),
@@ -198,5 +233,4 @@ async def search_node(state: RAGState) -> dict:
             "functions_found": functions_found,
             "is_ambiguous": False,
             "needs_multi_search": len(functions_found) > 1,
-            "embedded_query": embedded_query,
         }

@@ -178,6 +178,9 @@ async def persist_node(state: RAGState) -> dict:
                 "message_id": app_query.message_id,
                 "messages": [AIMessage(content=error_text)],
                 "response": {"error": error_info},
+                "events": [],
+                "parallel_results": None,
+                "sub_queries": None,
             }
 
         # Ambiguity — save the disambiguation message to SQL
@@ -227,6 +230,12 @@ async def persist_node(state: RAGState) -> dict:
                 "chat_id": app_query.chat_id,
                 "message_id": app_query.message_id,
             },
+            # Drop turn-local data from the persisted checkpoint to keep
+            # checkpoint rows compact. Each turn re-searches; events and
+            # parallel_results are not consumed by future turns.
+            "events": [],
+            "parallel_results": None,
+            "sub_queries": None,
         }
         if prune_ops:
             result["messages"] = prune_ops

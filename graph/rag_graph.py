@@ -41,18 +41,52 @@ _ERROR_MESSAGE = (
 
 # ── Error-safe node wrapper ──
 
+def _soft_safe_node(node_fn):
+    """Wrap a node so its failure logs + records but does NOT mutate state.
+    Use for nodes whose failure should not replace user-facing ai_content
+    (persist, summarize, set_doc_fallback)."""
+    import inspect
+    _accepts_config = "config" in inspect.signature(node_fn).parameters
+    _is_async = inspect.iscoroutinefunction(node_fn)
+
+    async def _wrapped(state: RAGState, config=None):
+        with get_tracer_span(f"node.{node_fn.__name__}"):
+            try:
+                if _is_async:
+                    if _accepts_config:
+                        return await node_fn(state, config)
+                    return await node_fn(state)
+                if _accepts_config:
+                    return node_fn(state, config)
+                return node_fn(state)
+            except Exception as exc:
+                logger.error(
+                    "Node '%s' failed (soft): %s", node_fn.__name__, exc, exc_info=True,
+                )
+                record_exception(exc, {"node": node_fn.__name__})
+                return {}
+    _wrapped.__name__ = node_fn.__name__
+    return _wrapped
+
+
 def _safe_node(node_fn):
     """Wrap a graph node with error handling so unhandled exceptions
     don't crash the graph. Routes to persist with a user-friendly message."""
     import inspect
     _accepts_config = "config" in inspect.signature(node_fn).parameters
+    _is_async = inspect.iscoroutinefunction(node_fn)
 
     async def _wrapped(state: RAGState, config=None):
         with get_tracer_span(f"node.{node_fn.__name__}"):
             try:
+                if _is_async:
+                    if _accepts_config:
+                        return await node_fn(state, config)
+                    return await node_fn(state)
+                # Sync node — call directly (e.g., _set_doc_fallback)
                 if _accepts_config:
-                    return await node_fn(state, config)
-                return await node_fn(state)
+                    return node_fn(state, config)
+                return node_fn(state)
             except Exception as exc:
                 logger.error(
                     "Node '%s' failed: %s", node_fn.__name__, exc, exc_info=True,
@@ -119,18 +153,22 @@ def build_rag_graph(checkpointer: Any = None, memory_store: Any = None) -> State
     """Build and compile the RAG LangGraph StateGraph."""
     graph = StateGraph(RAGState)
 
+    # load_memory and save_memory take a `store` kwarg injected by LangGraph
+    # from the signature; wrapping them would break the injection.
     graph.add_node("load_memory", load_memory_node)
-    graph.add_node("function_gate", function_gate_node)
+    graph.add_node("save_memory", save_memory_node)
+    graph.add_node("function_gate", _safe_node(function_gate_node))
     graph.add_node("rewrite", _safe_node(rewrite_node))
     graph.add_node("search", _safe_node(search_node))
     graph.add_node("generate", _safe_node(generate_node))
-    graph.add_node("persist", persist_node)
-    graph.add_node("summarize", summarize_node)
-    graph.add_node("save_memory", save_memory_node)
+    # persist/summarize/set_doc_fallback use the soft wrapper so their
+    # failures don't replace a successful answer with an error message.
+    graph.add_node("persist", _soft_safe_node(persist_node))
+    graph.add_node("summarize", _soft_safe_node(summarize_node))
     graph.add_node("planner", _safe_node(planner_node))
     graph.add_node("parallel_search", _safe_node(parallel_search_node))
     graph.add_node("synthesize", _safe_node(synthesize_node))
-    graph.add_node("set_doc_fallback", _set_doc_fallback)
+    graph.add_node("set_doc_fallback", _soft_safe_node(_set_doc_fallback))
 
     graph.set_entry_point("load_memory")
 

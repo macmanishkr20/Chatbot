@@ -56,9 +56,6 @@ class RAGState(TypedDict, total=False):
     needs_multi_search: bool  # True when search found multiple functions, triggers iterative search
     multi_search_status: list[str]  # Status messages from iterative multi-function search (streamed via updates mode)
 
-    # ── Cached embedding (reused across doc-fallback cycles) ──
-    embedded_query: list | None
-
     # ── Search results ──
     events: list
 

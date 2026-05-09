@@ -152,3 +152,12 @@ GROUNDEDNESS_THRESHOLD = float(os.getenv("GROUNDEDNESS_THRESHOLD", "0.25"))
 SUMMARIZE_THRESHOLD = int(os.getenv("SUMMARIZE_THRESHOLD", "20"))
 # Keep the last N messages verbatim; summarise everything before them.
 SUMMARIZE_KEEP_RECENT = int(os.getenv("SUMMARIZE_KEEP_RECENT", "6"))
+
+# ── Cancel-signal backend (multi-worker safe) ──
+# "memory" (default, single-process) | "redis" (multi-worker / multi-replica)
+CANCEL_SIGNAL_BACKEND = os.getenv("CANCEL_SIGNAL_BACKEND", "memory").lower()
+CANCEL_SIGNAL_REDIS_URL = os.getenv("CANCEL_SIGNAL_REDIS_URL", "")
+CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
+
+# ── Azure Search retry ──
+AZURE_SEARCH_MAX_RETRIES = int(os.getenv("AZURE_SEARCH_MAX_RETRIES", "3"))
