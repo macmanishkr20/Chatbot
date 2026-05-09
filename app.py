@@ -16,6 +16,7 @@ import json
 import logging
 import os
 import re
+import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
@@ -78,9 +79,26 @@ callback_handler = (
 # Global compiled graph instance (initialised once at startup)
 graph = None
 
-# ── In-memory cancel signals (keyed by thread_id) ──
+# ── In-memory cancel signals (keyed by thread_id → expiry epoch) ──
 # For multi-worker deployments, replace with Redis.
-_cancel_signals: dict[str, bool] = {}
+# TTL prevents unbounded growth when a user cancels and never returns.
+_CANCEL_SIGNAL_TTL_SECONDS = 300
+_cancel_signals: dict[str, float] = {}
+
+
+def _prune_cancel_signals() -> None:
+    """Drop expired cancel signals. Called on every read/write."""
+    now = time.time()
+    expired = [k for k, exp in _cancel_signals.items() if exp <= now]
+    for k in expired:
+        _cancel_signals.pop(k, None)
+
+
+def _consume_cancel_signal(thread_id: str) -> bool:
+    """Atomically check-and-clear an unexpired cancel signal."""
+    _prune_cancel_signals()
+    exp = _cancel_signals.pop(thread_id, None)
+    return exp is not None and exp > time.time()
 
 # ── Nodes whose LLM token output is meaningful prose for the end user ──
 # NOTE: "Supervisor" is intentionally excluded. Its LLM uses
@@ -363,7 +381,7 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
             except asyncio.QueueEmpty:
                 break
         # ── Check cancellation ──
-        if _cancel_signals.pop(thread_id, False):
+        if _consume_cancel_signal(thread_id):
             yield sse_format({"type": "final", "cancelled": True})
             return
 
@@ -700,7 +718,8 @@ async def cancel_chat(body: CancelRequest):
     """
     _validate_user(body.user_id)
     thread_id = f"{body.user_id}_{body.chat_session_id}"
-    _cancel_signals[thread_id] = True
+    _prune_cancel_signals()
+    _cancel_signals[thread_id] = time.time() + _CANCEL_SIGNAL_TTL_SECONDS
     return {"status": "cancel_requested"}
 
 
