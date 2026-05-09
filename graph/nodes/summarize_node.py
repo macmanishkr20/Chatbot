@@ -22,6 +22,7 @@ import logging
 
 from langchain_core.messages import BaseMessage, RemoveMessage
 
+from config import SUMMARIZE_KEEP_RECENT, SUMMARIZE_THRESHOLD
 from graph.state import RAGState
 from services.openai_client import (
     create_async_client,
@@ -31,13 +32,6 @@ from services.openai_client import (
 from services.telemetry import get_tracer_span
 
 logger = logging.getLogger(__name__)
-
-# After this many messages in state, trigger summarization.
-# 20 messages ≈ 10 user-assistant exchanges — enough context before compression.
-_SUMMARIZE_THRESHOLD = 20
-# Keep the last N messages verbatim; summarise everything before them.
-# 6 messages = last 3 full exchanges — preserves immediate conversational context.
-_KEEP_RECENT = 6
 
 _SUMMARIZE_SYSTEM = """\
 You are a conversation summarizer for an EY MENA internal chatbot.
@@ -68,13 +62,13 @@ async def summarize_node(state: RAGState) -> dict:
         messages = state.get("messages", [])
 
         # Not enough messages to warrant summarization — no-op
-        if len(messages) <= _SUMMARIZE_THRESHOLD:
+        if len(messages) <= SUMMARIZE_THRESHOLD:
             return {}
 
         existing_summary = state.get("summary", "")
 
         # Identify messages to summarize vs keep
-        messages_to_summarize = messages[:-_KEEP_RECENT]
+        messages_to_summarize = messages[:-SUMMARIZE_KEEP_RECENT]
         if not messages_to_summarize:
             return {}
 
@@ -133,7 +127,7 @@ async def summarize_node(state: RAGState) -> dict:
 
         logger.info(
             "summarize_node: condensed %d messages into summary (%d chars), keeping %d recent",
-            len(delete_messages), len(new_summary), _KEEP_RECENT,
+            len(delete_messages), len(new_summary), SUMMARIZE_KEEP_RECENT,
         )
 
         return {

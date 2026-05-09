@@ -15,6 +15,7 @@ from config import (
     AZURE_OPENAI_CHAT_API_VERSION,
     AZURE_OPENAI_TEMPERATURE,
     DUAL_CONTENT_SEARCH_ENABLED,
+    GROUNDEDNESS_THRESHOLD,
     MAX_TOKENS,
 )
 from prompts.system import SYSTEM_FREE_FORM_PROMPT, SYSTEM_JSON_FORM_PROMPT
@@ -175,9 +176,8 @@ def _needs_document_fallback(ai_content: str) -> bool:
 
 
 # ── Groundedness Verification ──────────────────────────────────────────────
-
 # Minimum ratio of claim tokens found in source document content.
-_GROUNDEDNESS_THRESHOLD = 0.25
+# Configurable via GROUNDEDNESS_THRESHOLD env var (see config.py).
 
 _STOPWORDS = frozenset({
     "the", "a", "an", "is", "are", "was", "were", "be", "been", "being",
@@ -236,12 +236,12 @@ def _verify_groundedness(ai_content: str, events: list) -> str:
                             continue
                         overlap = claim_tokens & doc_tokens
                         ratio = len(overlap) / len(claim_tokens)
-                        if ratio >= _GROUNDEDNESS_THRESHOLD:
+                        if ratio >= GROUNDEDNESS_THRESHOLD:
                             verified.append(ref_str)
                         else:
                             logger.debug(
                                 "groundedness: stripped [%s] (overlap=%.2f < %.2f)",
-                                ref_str, ratio, _GROUNDEDNESS_THRESHOLD,
+                                ref_str, ratio, GROUNDEDNESS_THRESHOLD,
                             )
 
                 if verified:

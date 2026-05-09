@@ -142,3 +142,13 @@ MAX_PARALLEL_SEARCHES = int(os.getenv("MAX_PARALLEL_SEARCHES", "3"))  # max conc
 MAX_SUB_QUERIES = int(os.getenv("MAX_SUB_QUERIES", "5"))  # max sub-queries from planner
 PLANNER_MAX_TOKENS = int(os.getenv("PLANNER_MAX_TOKENS", "200"))
 PLANNER_TEMPERATURE = float(os.getenv("PLANNER_TEMPERATURE", "0.0"))
+
+# ── Groundedness verification (generate_node) ──
+# Min unigram overlap ratio for a citation to be considered grounded in the source.
+GROUNDEDNESS_THRESHOLD = float(os.getenv("GROUNDEDNESS_THRESHOLD", "0.25"))
+
+# ── Conversation summarization (summarize_node) ──
+# After this many messages in state, trigger summarization.
+SUMMARIZE_THRESHOLD = int(os.getenv("SUMMARIZE_THRESHOLD", "20"))
+# Keep the last N messages verbatim; summarise everything before them.
+SUMMARIZE_KEEP_RECENT = int(os.getenv("SUMMARIZE_KEEP_RECENT", "6"))
