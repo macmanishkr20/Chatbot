@@ -258,16 +258,64 @@ def _verify_groundedness(ai_content: str, events: list) -> str:
 # ── Citation Block Builder ─────────────────────────────────────────────────
 
 
+def _format_citation_line(refs: list[str], doc: dict) -> str:
+    """Format one citation line based on the cited document's _source_type.
+
+    Behaviour by type (matches feature/new_changes citation logic):
+      * qa_pair / unknown → ``[N] <source_url>`` (URL only).
+      * document          → ``[N] <file_name> (page <N>) — <source_url>``.
+
+    Internal chatbot URLs (``MENABusinessEnablementChatbot``) are dropped
+    here too so they never leak into the rendered Citations block. Returns
+    "" when nothing usable remains so the caller can skip the line.
+    """
+    refs_label = "".join(f"[{r}]" for r in refs)
+    source_type = (doc.get("_source_type") or "").strip().lower()
+    source_url = (doc.get("source_url") or "").strip()
+    if "MENABusinessEnablementChatbot" in source_url:
+        source_url = ""
+
+    if source_type == "document":
+        file_name = (doc.get("file_name") or "").strip()
+        page_raw = doc.get("page_number")
+        page_str = str(page_raw).strip() if page_raw not in (None, "") else ""
+
+        label_parts: list[str] = []
+        if file_name:
+            label_parts.append(
+                f"{file_name} (page {page_str})" if page_str else file_name
+            )
+        elif page_str:
+            label_parts.append(f"page {page_str}")
+
+        if label_parts and source_url:
+            return f"{refs_label} {label_parts[0]} — {source_url}"
+        if label_parts:
+            return f"{refs_label} {label_parts[0]}"
+        if source_url:
+            return f"{refs_label} {source_url}"
+        return ""
+
+    # qa_pair (default) — URL only. Skip when no real URL is available.
+    if not source_url:
+        return ""
+    return f"{refs_label} {source_url}"
+
+
 def _rebuild_citations_block(ai_content: str, events: list) -> str:
     """Build the Citations block entirely in code from events source data.
 
     The LLM only outputs inline [N] references. This function:
-    1. Extracts all [N] references from the LLM output
-    2. Maps each to the actual source_url from events
-    3. Renumbers citations sequentially starting from [1]
-    4. Groups shared URLs (e.g. [1][2] https://...)
-    5. Strips any LLM-generated citation block (safety net)
-    6. Appends the deterministic code-built block
+      1. Extracts all [N] references from the LLM output.
+      2. For each, formats a per-ref line via _format_citation_line() —
+         qa_pair gets ``[N] <url>``; document gets ``[N] file (page N) — <url>``.
+         Refs whose doc has no usable provenance (e.g. internal chatbot URL
+         with no file/page) are dropped.
+      3. Renumbers the surviving refs sequentially starting from [1] and
+         rewrites inline refs in the answer text to match.
+      4. Groups consecutive refs that produce identical line bodies
+         (e.g. multiple chunks from the same doc → ``[1][2] doc.pdf (page 4) — url``).
+      5. Strips any LLM-emitted Citations block (defense in depth).
     """
     if not events:
         return ai_content
@@ -276,30 +324,31 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
     if not used_refs:
         return ai_content
 
-    # Map original refs to source URLs (skip invalid/internal URLs)
-    ref_to_url: dict[str, str] = {}
+    # Build (ref → renderable line body) for refs with usable provenance.
+    # body is the line with the leading "[r]" cluster stripped, used to
+    # group refs that resolve to identical content.
+    ref_to_body: "OrderedDict[str, str]" = OrderedDict()
+    ref_to_doc_idx: dict[str, int] = {}
     for ref_str in used_refs:
         idx = int(ref_str) - 1
         if 0 <= idx < len(events):
-            doc = events[idx]
-            source_url = (doc.get("source_url") or "").strip()
-            # Skip internal chatbot URLs — not useful as citations
-            if "MENABusinessEnablementChatbot" in source_url:
-                source_url = ""
-            if source_url:
-                ref_to_url[ref_str] = source_url
+            line = _format_citation_line([ref_str], events[idx])
+            if line:
+                body = re.sub(r"^(\[\d+\])+\s*", "", line)
+                ref_to_body[ref_str] = body
+                ref_to_doc_idx[ref_str] = idx
 
-    if not ref_to_url:
-        # Strip any LLM-generated citation block and inline refs with no valid URL
+    if not ref_to_body:
+        # Strip any LLM-generated citation block and inline refs with no valid provenance
         stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
         stripped = re.sub(r"\[\d+\]", "", stripped)
         return stripped
 
-    # Renumber: map original ref numbers to sequential 1, 2, 3...
-    valid_refs = sorted(ref_to_url.keys(), key=int)
+    # Renumber surviving refs sequentially (preserves their original order).
+    valid_refs = list(ref_to_body.keys())
     old_to_new: dict[str, str] = {old: str(i + 1) for i, old in enumerate(valid_refs)}
 
-    # Replace inline refs in content (strip refs without valid URLs)
+    # Strip any LLM-emitted Citations block; rewrite inline refs with new numbers.
     stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
 
     def _replace_ref(m: re.Match) -> str:
@@ -309,20 +358,31 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
 
     stripped = re.sub(r"\[(\d+)\]", _replace_ref, stripped)
 
-    # Build citations block with new numbering
-    url_to_refs: OrderedDict[str, list[str]] = OrderedDict()
+    # Group surviving refs by line body so multiple refs to the same doc
+    # render as e.g. [1][2] doc.pdf (page 5) — url.
+    body_to_new_refs: "OrderedDict[str, list[str]]" = OrderedDict()
+    body_to_doc_idx: dict[str, int] = {}
     for old_ref in valid_refs:
-        url = ref_to_url[old_ref]
-        new_ref = old_to_new[old_ref]
-        url_to_refs.setdefault(url, []).append(new_ref)
+        body = ref_to_body[old_ref]
+        body_to_new_refs.setdefault(body, []).append(old_to_new[old_ref])
+        body_to_doc_idx.setdefault(body, ref_to_doc_idx[old_ref])
 
-    citation_lines = []
-    for url, refs in url_to_refs.items():
-        refs_label = "".join(f"[{r}]" for r in refs)
-        citation_lines.append(f"{refs_label} {url}")
+    citation_lines: list[str] = []
+    for body, new_refs in body_to_new_refs.items():
+        doc_idx = body_to_doc_idx.get(body, -1)
+        if 0 <= doc_idx < len(events):
+            line = _format_citation_line(new_refs, events[doc_idx])
+            if line:
+                citation_lines.append(line)
+                continue
+        # Fallback: use the body verbatim if doc lookup failed for any reason.
+        refs_label = "".join(f"[{r}]" for r in new_refs)
+        citation_lines.append(f"{refs_label} {body}")
+
+    if not citation_lines:
+        return stripped
 
     new_block = "Citations:\n" + "\n".join(citation_lines)
-
     return f"{stripped}\n\n{new_block}"
 
 
@@ -385,14 +445,21 @@ async def _generate_response(
                     idx = int(ref_str) - 1
                     if 0 <= idx < len(events):
                         doc = events[idx]
-                        source_url = doc.get("source_url", "")
+                        source_url = (doc.get("source_url") or "").strip()
                         if "MENABusinessEnablementChatbot" in source_url:
                             source_url = ""
-                        if source_url:
-                            citation_map[ref_str] = {
-                                "url": source_url,
-                                "content_snippet": (doc.get("content", ""))[:200],
-                            }
+                        file_name = (doc.get("file_name") or "").strip()
+                        # Skip entries with no usable provenance.
+                        if not source_url and not file_name:
+                            continue
+                        citation_map[ref_str] = {
+                            "url": source_url,
+                            "content_snippet": (doc.get("content", ""))[:200],
+                            # Provenance for type-aware rendering on follow-up turns.
+                            "source_type": (doc.get("_source_type") or ""),
+                            "file_name": file_name,
+                            "page_number": doc.get("page_number", ""),
+                        }
 
         return ai_content, prompt_used, citation_map, response
 

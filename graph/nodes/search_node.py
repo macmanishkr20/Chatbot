@@ -152,6 +152,11 @@ async def search_node(state: RAGState) -> dict:
                     rewritten_query, embedded_query, odata_filter=odata_filter
                 )
                 if all_results:
+                    # Tag with provenance (same field the dual-search branch
+                    # sets) so downstream citation rendering can format
+                    # type-appropriately even in sequential mode.
+                    for r in all_results:
+                        r.setdefault("_source_type", ct)
                     break
 
         if not all_results:
