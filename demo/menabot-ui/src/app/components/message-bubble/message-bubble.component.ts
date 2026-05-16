@@ -159,4 +159,13 @@ export class MessageBubbleComponent {
   toggleCitations(): void {
     this.citationsExpanded.update(v => !v);
   }
+
+  getCitationUrl(source: string): string | null {
+    const match = source.match(/https?:\/\/\S+/);
+    return match ? match[0] : null;
+  }
+
+  getCitationLabel(source: string): string {
+    return source.replace(/\s*—\s*https?:\/\/\S+/, '');
+  }
 }

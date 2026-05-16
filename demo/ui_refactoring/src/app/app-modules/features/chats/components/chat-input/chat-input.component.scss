@@ -18,34 +18,28 @@
   gap: 0.75rem;
   padding: 0.5rem 0.75rem;
   border-radius: 40px;
-  background: rgba(30, 30, 44, 0.5);
+  background: rgba(30, 18, 44, 0.55);
   border: none;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.15), inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  box-shadow: none;
   justify-content: space-between;
-  transition: box-shadow 0.25s ease;
   z-index: 1;
+}
 
-  // Gradient border — always visible
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: 40px;
-    padding: 1px;
-    opacity: 0.35;
-    background: linear-gradient(135deg, #ffe600 0% 40%, #ff32ff 79%, #ff3c00);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
-  }
+:host-context(.welcome-content) .chat-input-box {
+  padding: 3rem 1.5rem 0.75rem;
+  border-radius: 24px;
+  align-items: flex-end;
+  --gb-radius: 24px;
+  --gb-opacity: 0.7;
+}
 
-  &:focus-within {
-    box-shadow: 0 0 12px rgba(249, 115, 22, 0.15), 0 4px 24px rgba(0, 0, 0, 0.15);
-  }
+:host-context(.welcome-content) .input-textarea {
+  min-height: 24px;
+  max-height: 85px;
+  padding: 0;
+  overflow-y: auto;
 }
 
 .input-avatar {
@@ -85,8 +79,11 @@
     box-shadow: none;
   }
 
-  &::placeholder {
-    color: rgba(255, 255, 255, 0.5);
+  &::placeholder:not(.stream-placeholder) {
+    color: #fff !important;
+  }
+  .stream-placeholder {
+    color: rgba(255, 255, 255, 0.6) !important;
   }
 
   /* Custom scrollbar */
@@ -145,17 +142,17 @@
     opacity: 0;
   }
 
-  &:hover:not(:disabled),
-  &:focus-visible:not(:disabled) {
+  &:hover,
+  &:focus-visible {
     background: rgba(255, 255, 255, 0.14);
     ::ng-deep .send-icon--outline { opacity: 0; }
     ::ng-deep .send-icon--filled { opacity: 1; }
   }
 
-  &:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  // &:disabled {
+  //   opacity: 0.4;
+  //   cursor: not-allowed;
+  // }
 
   &:focus {
     outline: none;
@@ -163,46 +160,45 @@
   }
 }
 
-/* Selected MENA function pill (above the input) */
+/* Selected MENA function pill (inline, inside the input box) */
 .selected-fn-pill {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  flex-shrink: 0;
   padding: 4px 10px;
-  margin: 0 0 8px 8px;
-  border-radius: 999px;
+  border-radius: 5px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.35);
   color: #fff;
   font-size: 0.7rem;
 
-  .dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: #ffffff;
-    box-shadow: 0 0 6px rgba(255, 255, 255, 0.5);
+  // Match chat-gradient-border pseudo to pill shape; hidden by default.
+  --gb-radius: 5px;
+  --gb-opacity: 0;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    --gb-opacity: 1;
+    border-color: transparent;
   }
 
   .code {
-    font-weight: 700;
-  }
-
-  .full {
-    color: rgba(255, 255, 255, 0.75);
-    font-size: 0.65rem;
+    font-weight: 400;
   }
 
   .clear-btn {
-    margin-left: 4px;
+    margin-left: 2px;
     border: 0;
     background: transparent;
     color: rgba(255, 255, 255, 0.7);
     font-size: 14px;
     line-height: 1;
     cursor: pointer;
+    padding: 0;
 
     &:hover { color: #fff; }
+    &:disabled { cursor: not-allowed; opacity: 0.5; }
   }
 }
 

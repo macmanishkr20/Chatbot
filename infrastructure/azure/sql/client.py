@@ -1,0 +1,681 @@
+"""
+SQL Server persistence layer for conversations and messages.
+"""
+import asyncio
+import json
+import logging
+from datetime import datetime, timezone
+import os
+from typing import List, Optional, Tuple
+import uuid
+
+import pyodbc
+
+logger = logging.getLogger(__name__)
+
+# from azure.identity import ClientSecretCredential, DefaultAzureCredential
+from azure.identity import DefaultAzureCredential
+
+from core.config import (
+    AZURE_SQL_CHECKPOINT_TABLE,
+    AZURE_SQL_DATABASE,
+    AZURE_SQL_DRIVER,
+    AZURE_SQL_MANAGED_IDENTITY_CLIENT_ID,
+    AZURE_SQL_SERVER,
+    AZURE_SQL_USE_MANAGED_IDENTITY,
+    MSSQL_CONNECTION_STRING,
+    ENVIRONMENT,
+    ENVIRONMENT_FOR_SQL
+)
+
+from api.schemas import (
+    ApplicationChatQuery,
+    ConversationChatMessage,
+    ConversationType,
+    FeedbackRequest,
+    InputType,
+)
+
+USER_ACTOR = 0
+BOT_ACTOR = 1
+
+
+class SQLChatClient:
+    """Singleton SQL chat persistence client."""
+
+    _instance = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self):
+        self.environment = ENVIRONMENT
+        self.environment_for_sql = ENVIRONMENT_FOR_SQL
+        self.explicit_mi_flag = AZURE_SQL_USE_MANAGED_IDENTITY
+        self.server = AZURE_SQL_SERVER
+        self.database = AZURE_SQL_DATABASE
+        self.driver = AZURE_SQL_DRIVER
+        self.managed_identity_client_id = AZURE_SQL_MANAGED_IDENTITY_CLIENT_ID
+        self.checkpoint_table = AZURE_SQL_CHECKPOINT_TABLE
+
+        self._credential: Optional[object] = None
+
+        # Auto-detect auth mode:
+        has_connection_string = bool(MSSQL_CONNECTION_STRING)
+        is_local = (self.environment_for_sql or "").upper() == "LOCAL"
+
+
+        if self.explicit_mi_flag:
+            self.use_managed_identity = True
+        elif has_connection_string and is_local:
+            self.use_managed_identity = False
+        else:
+            self.use_managed_identity = False
+
+        if self.use_managed_identity:
+            logger.info("Using managed identity for Azure SQL authentication.")
+            self.connection_string = (
+                self._build_managed_identity_connection_string()  
+            )
+            self._credential = self._build_credential()
+        else:
+            self.connection_string = MSSQL_CONNECTION_STRING
+
+        if not self.connection_string:
+            raise ValueError(
+                "Azure SQL connection settings are missing. "
+                "Set MSSQL_CONNECTION_STRING or enable AZURE_SQL_USE_MANAGED_IDENTITY with "
+                "AZURE_SQL_SERVER and AZURE_SQL_DATABASE."
+            )
+
+
+    def _build_credential(self):
+        """Build Azure AD credential for SQL auth."""
+        # client_id = os.getenv("AZURE_CLIENT_ID", "").strip()
+        return DefaultAzureCredential()  
+    
+    def _build_managed_identity_connection_string(self) -> str:
+        if not self.server or not self.database:
+            raise ValueError(
+                "AZURE_SQL_SERVER and AZURE_SQL_DATABASE are required when "
+                "AZURE_SQL_USE_MANAGED_IDENTITY=true."
+            )
+
+        server = self.server
+        if not server.lower().startswith("tcp:"):
+            server = f"tcp:{server}"
+
+        return (
+            f"Driver={{{self.driver}}};"
+            f"Server={server};"
+            f"Database={self.database};"
+            "Authentication=ActiveDirectoryMsi;"
+            "Encrypt=yes;"
+            "TrustServerCertificate=no;"
+            "Connection Timeout=30;"
+        )
+
+    def get_connection_string(self) -> str:
+        """Return the configured Azure SQL connection string."""
+        return self.connection_string
+
+    def _get_connection(self) -> pyodbc.Connection:
+        return pyodbc.connect(self.connection_string)
+
+    def _check_connection(self):
+        conn = self._get_connection()
+        conn.close()
+
+    async def connect(self):
+        await asyncio.to_thread(self._check_connection)
+
+    async def ensure(self):
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='Conversations' AND xtype='U')
+                    CREATE TABLE Conversations (
+                        Id               INT IDENTITY(1,1) PRIMARY KEY,
+                        UserId           NVARCHAR(256) NOT NULL,
+                        Title            NVARCHAR(1000) NULL,
+                        ChatSessionId    NVARCHAR(256) NULL,
+                        ChannelType      INT NOT NULL ,
+                        ConversationType NVARCHAR(50) NULL,
+                        IsActive         BIT NOT NULL DEFAULT 1,
+                        IsDeleted        BIT NOT NULL DEFAULT 0,
+                        CreatedAt        DATETIME2 NOT NULL,
+                        CreatedBy        NVARCHAR(256) NULL,
+                        ModifiedAt       DATETIME2 NOT NULL,
+                        ModifiedBy       NVARCHAR(256) NULL,
+                        IsPinned         BIT NOT NULL DEFAULT 0,
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    IF NOT EXISTS (SELECT * FROM sysobjects WHERE name='ChatMessages' AND xtype='U')
+                    CREATE TABLE ChatMessages (
+                        Id                    INT IDENTITY(1,1) PRIMARY KEY,
+                        ConversationSessionId INT NOT NULL,
+                        MessageId             NVARCHAR(256) NULL,
+                        UserId                NVARCHAR(256) NULL,
+                        UserPrompt            NVARCHAR(MAX) NULL,
+                        SourcePrompt          NVARCHAR(MAX) NULL,
+                        ConversationType      NVARCHAR(50) NULL,
+                        AiContentFreeForm     NVARCHAR(MAX) NULL,
+                        SummarizedContent     NVARCHAR(MAX) NULL,
+                        IsActive              BIT NOT NULL DEFAULT 1,
+                        IsDeleted             BIT NOT NULL DEFAULT 0,
+                        CreatedAt             DATETIME2 NOT NULL,
+                        CreatedBy             NVARCHAR(256) NULL,
+                        ModifiedAt            DATETIME2 NOT NULL,
+                        ModifiedBy            NVARCHAR(256) NULL
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    IF COL_LENGTH('ChatMessages', 'SourcePrompt') IS NULL
+                        ALTER TABLE ChatMessages ADD SourcePrompt NVARCHAR(MAX) NULL
+                    """
+                )
+                # Migration: add ChatSessionId to existing Conversations tables
+                cursor.execute(
+                    """
+                    IF COL_LENGTH('Conversations', 'ChatSessionId') IS NULL
+                        ALTER TABLE Conversations ADD ChatSessionId NVARCHAR(256) NULL
+                    """
+                )
+                conn.commit()
+            finally:
+                cursor.close()
+                conn.close()
+
+        await asyncio.to_thread(_run)
+
+    # ── Conversation CRUD ──
+
+    async def create_conversation(self, query: ApplicationChatQuery) -> dict:
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.utcnow()
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO Conversations
+                        (UserId, Title, ChatSessionId, ChannelType, ConversationType,
+                         IsActive, IsDeleted, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy)
+                    OUTPUT INSERTED.*
+                    VALUES (?, ?, ?, ?, ?, 1, 0, ?, ?, ?, ?)
+                    """,
+                    query.user_id,
+                    query.user_input,
+                    query.chat_session_id,
+                    query.channel_type,
+                    str(query.conversation_type.value),
+                    now,
+                    query.user_id,
+                    now,
+                    query.user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                row = cursor.fetchone()
+                conn.commit()
+                return dict(zip(columns, row)) if row else None
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def upsert_chat(self, chat: dict) -> dict:
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.utcnow()
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET Title = ?, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ?
+                    """,
+                    chat.get("title") or chat.get("Title"),
+                    now,
+                    chat.get("userId") or chat.get("UserId"),
+                    chat.get("id") or chat.get("Id"),
+                )
+                conn.commit()
+                return chat
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def get_or_create_chat(self, query: ApplicationChatQuery) -> Tuple[bool, dict]:
+        if query.chat_id:
+            def _run():
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                try:
+                    cursor.execute(
+                        "SELECT * FROM Conversations WHERE Id = ? AND UserId = ? AND IsDeleted = 0",
+                        query.chat_id,
+                        query.user_id,
+                    )
+                    columns = [col[0] for col in cursor.description]
+                    row = cursor.fetchone()
+                    return dict(zip(columns, row)) if row else None
+                finally:
+                    cursor.close()
+                    conn.close()
+
+            conversation = await asyncio.to_thread(_run)
+            if not conversation:
+                raise ValueError("Conversation not found")
+            return False, conversation
+        else:
+            conversation = await self.create_conversation(query)
+            return True, conversation
+
+    # ── Message CRUD ──
+
+    async def message_create(self, query: ApplicationChatQuery) -> ConversationChatMessage:
+        created_chat, chat = await self.get_or_create_chat(query)
+        if not created_chat:
+            await self.upsert_chat(chat)
+
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.utcnow()
+            message_id = str(uuid.uuid4())
+            try:
+                cursor.execute(
+                    """
+                    INSERT INTO ChatMessages
+                        (ConversationSessionId, MessageId, UserId, UserPrompt, SourcePrompt,
+                         ConversationType, AiContentFreeForm, SummarizedContent,
+                         IsActive, IsDeleted, CreatedAt, CreatedBy, ModifiedAt, ModifiedBy)
+                    OUTPUT INSERTED.*
+                    VALUES (?, ?, ?, ?, NULL, ?, NULL, NULL, 1, 0, ?, ?, ?, ?)
+                    """,
+                    chat["Id"],
+                    message_id,
+                    query.user_id,
+                    query.user_input,
+                    str(query.conversation_type.value),
+                    now,
+                    query.user_id,
+                    now,
+                    query.user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                row = cursor.fetchone()
+                conn.commit()
+                return dict(zip(columns, row)) if row else None
+            finally:
+                cursor.close()
+                conn.close()
+
+        row = await asyncio.to_thread(_run)
+        return ConversationChatMessage(**_row_to_message_dict(row, query)) if row else None
+
+    async def message_list(self, query: ApplicationChatQuery) -> List[ConversationChatMessage]:
+        if query.input_type == InputType.ASK and not query.chat_id:
+            return []
+
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            conv_type = str(query.conversation_type.value)
+            try:
+                if query.input_type == InputType.ASK:
+                    cursor.execute(
+                        """
+                        SELECT * FROM ChatMessages
+                        WHERE ConversationSessionId = ? AND ConversationType = ? AND IsDeleted = 0
+                        ORDER BY CreatedAt DESC
+                        """,
+                        query.chat_id,
+                        conv_type,
+                    )
+                else:
+                    raise NotImplementedError(f"Input type {query.input_type} not implemented")
+
+                columns = [col[0] for col in cursor.description]
+                return [dict(zip(columns, r)) for r in cursor.fetchall()]
+            finally:
+                cursor.close()
+                conn.close()
+
+        rows = await asyncio.to_thread(_run)
+        return [ConversationChatMessage(**_row_to_message_dict(r, query)) for r in rows]
+
+    async def message_list_update(
+        self, query: ApplicationChatQuery, history: List[ConversationChatMessage]
+    ) -> Tuple[ConversationChatMessage, List[ConversationChatMessage]]:
+        new_msg = await self.message_create(query)
+        return new_msg, [new_msg] + history
+
+    async def save_ai_content(self, app_query: ApplicationChatQuery):
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    UPDATE ChatMessages
+                    SET SummarizedContent =
+                            CASE
+                                WHEN NULLIF(SummarizedContent, '') IS NULL THEN ?
+                                ELSE CONCAT(SummarizedContent, CHAR(10), ?)
+                            END,
+                        SourcePrompt = ?
+                    WHERE Id = ?
+                    """,
+                    app_query.summurized_prompt,
+                    app_query.summurized_prompt,
+                    app_query.prompt or app_query.user_input,
+                    app_query.id,
+                )
+                conn.commit()
+            except Exception as e:
+                logger.error("Error saving AI content: %s", e, exc_info=True)
+            finally:
+                cursor.close()
+                conn.close()
+
+        await asyncio.to_thread(_run)
+
+    async def save_ai_content_free_form(self, app_query: ApplicationChatQuery):
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            print("[LOG]----app_query.ai_content_free_form: ", app_query.ai_content_free_form, flush=True)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE ChatMessages
+                    SET AiContentFreeForm = ?,
+                        SourcePrompt      = ?
+                    WHERE Id = ?
+                    """,
+                    json.dumps(app_query.ai_content_free_form),
+                    app_query.prompt or app_query.user_input,
+                    app_query.id,
+                )
+                conn.commit()
+            except Exception as e:
+                logger.error("Error saving free-form content: %s", e, exc_info=True)
+            finally:
+                cursor.close()
+                conn.close()
+
+        await asyncio.to_thread(_run)
+
+    # ── History APIs ──
+
+    async def get_conversations_by_user(self, user_id: str) -> list[dict]:
+        """Return all active conversations for a given user, newest first."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    SELECT Id, UserId, Title, ChatSessionId, ConversationType, CreatedAt, ModifiedAt, IsPinned
+                    FROM Conversations
+                    WHERE UserId = ? AND IsDeleted = 0
+                    ORDER BY ModifiedAt DESC
+                    """,
+                    user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                return [dict(zip(columns, r)) for r in cursor.fetchall()]
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def get_messages_by_conversation(self, conversation_id: int, user_id: str) -> list[dict]:
+        """Return all messages for a conversation, oldest first."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    SELECT cm.Id, cm.ConversationSessionId, cm.MessageId, cm.UserId,
+                           cm.UserPrompt, cm.SourcePrompt, cm.AiContentFreeForm,
+                           cm.SummarizedContent, cm.CreatedAt
+                    FROM ChatMessages cm
+                    INNER JOIN Conversations c ON c.Id = cm.ConversationSessionId
+                    WHERE cm.ConversationSessionId = ? AND c.UserId = ?
+                      AND cm.IsDeleted = 0 AND c.IsDeleted = 0
+                    ORDER BY cm.CreatedAt ASC
+                    """,
+                    conversation_id,
+                    user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                return [dict(zip(columns, r)) for r in cursor.fetchall()]
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    # ── Conversation Management (Claude-parity features) ──
+
+    async def soft_delete_conversation(self, conversation_id: int, user_id: str) -> bool:
+        """Soft-delete a conversation (sets IsDeleted=1). Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET IsDeleted = 1, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0
+                    """,
+                    now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def rename_conversation(self, conversation_id: int, user_id: str, new_title: str) -> bool:
+        """Rename a conversation. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET Title = ?, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0
+                    """,
+                    new_title, now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def soft_delete_message(self, message_id: str, user_id: str) -> bool:
+        """Soft-delete a single message. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE ChatMessages
+                    SET IsDeleted = 1, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE MessageId = ? AND UserId = ?
+                    """,
+                    now, user_id, message_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def get_last_user_message(self, conversation_id: int, user_id: str) -> dict | None:
+        """Return the most recent user message in a conversation (for regeneration)."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            try:
+                cursor.execute(
+                    """
+                    SELECT TOP 1 cm.Id, cm.ConversationSessionId, cm.MessageId,
+                           cm.UserId, cm.UserPrompt, cm.CreatedAt
+                    FROM ChatMessages cm
+                    INNER JOIN Conversations c ON c.Id = cm.ConversationSessionId
+                    WHERE cm.ConversationSessionId = ? AND c.UserId = ?
+                      AND cm.IsDeleted = 0 AND c.IsDeleted = 0
+                    ORDER BY cm.CreatedAt DESC
+                    """,
+                    conversation_id, user_id,
+                )
+                columns = [col[0] for col in cursor.description]
+                row = cursor.fetchone()
+                return dict(zip(columns, row)) if row else None
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def save_feedback(self, payload: FeedbackRequest):
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    IF NOT EXISTS (
+                        SELECT * FROM sysobjects WHERE name='MessageFeedback' AND xtype='U'
+                    )
+                    CREATE TABLE dbo.MessageFeedback (
+                        Id            INT IDENTITY(1,1) PRIMARY KEY,
+                        UserId        NVARCHAR(256) NOT NULL,
+                        MessageId     NVARCHAR(256) NOT NULL,
+                        Rating        INT NOT NULL,
+                        Comments      NVARCHAR(MAX) NULL,
+                        IsActive      BIT NOT NULL,
+                        IsDeleted     BIT NOT NULL,
+                        CreatedAt     DATETIMEOFFSET NULL,
+                        CreatedBy     NVARCHAR(255) NULL,
+                        ModifiedAt    DATETIMEOFFSET NULL,
+                        ModifiedBy    NVARCHAR(255) NULL,
+                        FunctionId    INT NULL,
+                        SubFunctionId INT NULL,
+                        ServiceId     INT NULL,
+                        Category      NVARCHAR(255) NULL
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO dbo.MessageFeedback
+                    (UserId, MessageId, Rating, Comments, IsActive, IsDeleted,
+                     CreatedAt, CreatedBy, ModifiedAt, ModifiedBy,
+                     FunctionId, SubFunctionId, ServiceId, Category)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    payload.user_id,
+                    payload.message_id,
+                    payload.rating,
+                    payload.comments,
+                    True,
+                    False,
+                    now,
+                    payload.created_by,
+                    now,
+                    payload.modified_by,
+                    payload.function_id,
+                    payload.sub_function_id,
+                    payload.service_id,
+                    payload.category,
+                )
+                conn.commit()
+            finally:
+                cursor.close()
+                conn.close()
+
+        await asyncio.to_thread(_run)
+
+    async def toggle_pin_conversation(self, conversation_id: int, user_id: str, is_pinned: bool) -> bool:
+        """Toggle the pin status of a conversation. Returns True on success."""
+        def _run():
+                conn = self._get_connection()
+                cursor = conn.cursor()
+                now = datetime.now(timezone.utc)   
+                try:
+                    cursor.execute(
+                            """
+                            UPDATE Conversations
+                            SET IsPinned = ?, ModifiedAt = ?, ModifiedBy = ?
+                            WHERE Id = ? AND UserId = ? AND IsDeleted = 0 AND IsActive = 1
+                            """,
+                            is_pinned, now, user_id, conversation_id, user_id,
+                        )
+                    affected = cursor.rowcount
+                    conn.commit()
+                    return affected > 0
+                finally:
+                        cursor.close()
+                        conn.close()
+
+        return await asyncio.to_thread(_run)
+
+def _row_to_message_dict(row: dict, query=None) -> dict:
+    """Map a SQL row to the fields expected by ConversationChatMessage."""
+    return {
+        "id": str(row.get("Id") or ""),
+        "chat_id": str(row.get("ConversationSessionId", "")),
+        "user_id": row.get("UserId") or (query.user_id if query else ""),
+        "user_input": row.get("UserPrompt") or "",
+        "input_type": (query.input_type if query else InputType.ASK),
+        "is_free_form": (query.is_free_form if query else False),
+        "conversation_type": row.get("ConversationType") or "events",
+        "timestamp": int(row["CreatedAt"].timestamp()) if row.get("CreatedAt") else 0,
+        "user_prompt": row.get("UserPrompt") or "",
+        "source_prompt": row.get("SourcePrompt") or "",
+        "ai_content_free_form": row.get("AiContentFreeForm") or "",
+        "message_id": row.get("MessageId") or "",
+    }
+
+
+
+        

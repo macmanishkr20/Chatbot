@@ -186,8 +186,9 @@ export class AuthUser {
           try {
             const val = (this as any)[key];
             jsonObj[key] = val;
-          } catch (error) {
-            console.error(`Error calling getter ${key}`, error);
+          } catch {
+            // Silently ignore getter failures — details intentionally
+            // suppressed to avoid leaking sensitive information.
           }
         }
       });

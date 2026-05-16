@@ -14,7 +14,7 @@
         <app-no-menu [title]="title"></app-no-menu>
       </div>
     }
-    <div class="flex-grow-1 overflow-hidden" style="min-height: 0">
+    <div class="flex-grow-1 overflow-hidden app-min-height">
       @if (!isIframe) {
         <router-outlet></router-outlet>
       }

@@ -80,44 +80,43 @@
       </li>
       <li>
         <p><b>Who can access your personal data?</b></p>
-        <p style="text-align: justify;">Your personal data is accessed in the Tool by the 
+        <p class="text-justify">Your personal data is accessed in the Tool by the 
           following persons/teams:</p>
-        <div style="width: 100%; overflow-x: auto;">
-          <table class="table table-bordered font-family" 
-          style="width: 100%; table-layout: fixed; margin-top: 10px;">
+        <div class="table-wrapper">
+          <table class="table table-bordered font-family privacy-table">
             <thead>
-              <tr style="background-color: #FFC000;">
-                <th style="font-size: 11px; width: 15%; padding: 8px; word-wrap: break-word;"><b>USER GROUP</b></th>
-                <th style="font-size: 11px; width: 12%; padding: 8px; word-wrap: break-word;"><b>LOCATION</b></th>
-                <th style="font-size: 11px; width: 35%; padding: 8px; word-wrap: break-word;"><b>PURPOSE</b></th>
-                <th style="font-size: 11px; width: 25%; padding: 8px; word-wrap: break-word;"><b>ACCESS</b></th>
-                <th style="font-size: 11px; width: 13%; padding: 8px; word-wrap: break-word;"><b>AMOUNT</b></th>
+              <tr class="privacy-table-header">
+                <th class="privacy-table-th privacy-table-th-user-group"><b>USER GROUP</b></th>
+                <th class="privacy-table-th privacy-table-th-location"><b>LOCATION</b></th>
+                <th class="privacy-table-th privacy-table-th-purpose"><b>PURPOSE</b></th>
+                <th class="privacy-table-th privacy-table-th-access"><b>ACCESS</b></th>
+                <th class="privacy-table-th privacy-table-th-amount"><b>AMOUNT</b></th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">EY Internal End users</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">MENA</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">
+                <td class="privacy-table-td">EY Internal End users</td>
+                <td class="privacy-table-td">MENA</td>
+                <td class="privacy-table-td">
                   Interact with the chatbot to submit queries and receive business enablement information</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Read / Query (own interactions only)</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Approx. 5000</td>
+                <td class="privacy-table-td">Read / Query (own interactions only)</td>
+                <td class="privacy-table-td">Approx. 5000</td>
               </tr>
               <tr>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">
+                <td class="privacy-table-td">
                   Business Content Owners / SMEs</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">MENA / Global</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Maintain and validate approved knowledge content (via source system SharePoint,)</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Update / Add (content sources only)</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Approx. 10-20</td>
+                <td class="privacy-table-td">MENA / Global</td>
+                <td class="privacy-table-td">Maintain and validate approved knowledge content (via source system SharePoint,)</td>
+                <td class="privacy-table-td">Update / Add (content sources only)</td>
+                <td class="privacy-table-td">Approx. 10-20</td>
               </tr>
               <tr>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Global IT</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Global</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">
+                <td class="privacy-table-td">Global IT</td>
+                <td class="privacy-table-td">Global</td>
+                <td class="privacy-table-td">
                   System configuration, monitoring, troubleshooting, and operational support</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Read / Update / Admin (system-level access, restricted)</td>
-                <td style="font-size: 11px; padding: 8px; word-wrap: break-word;">Approx 5-10</td>
+                <td class="privacy-table-td">Read / Update / Admin (system-level access, restricted)</td>
+                <td class="privacy-table-td">Approx 5-10</td>
               </tr>
             </tbody>
           </table>
@@ -236,7 +235,7 @@
       </li>
     </ol>
     <br />
-    <div style="text-align: center">
+    <div class="text-center-div">
       <hr class="separation" />
     </div>
     <div class="row my-4 mx-3">
@@ -257,13 +256,13 @@
 </div>
 <div class="modal-footer d-flex font-family">
   @if (!isUserClicked) {
-  <p style="color: #ffe600">
+  <p class="warning-text">
     You need to agree to the terms and conditions prior to clicking the Agree
     button.
   </p>
   }
   @if (isConfirmHide) {
-  <p style="color: #ffe600">
+  <p class="warning-text">
     If you do not agree to the terms and conditions then you will not be able to
     access the application.
   </p>

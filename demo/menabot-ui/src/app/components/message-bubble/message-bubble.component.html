@@ -94,7 +94,10 @@
                   </a>
                 } @else {
                   <span class="citation-doc">
-                    @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ cite.source }}
+                    @for (idx of cite.indexes; track idx) {<span>[{{ idx }}]</span> }&nbsp;{{ getCitationLabel(cite.source) }}
+                    @if (getCitationUrl(cite.source)) {
+                      &nbsp;—&nbsp;<a class="citation-url" [href]="getCitationUrl(cite.source)" target="_blank" rel="noopener noreferrer">{{ getCitationUrl(cite.source) }}</a>
+                    }
                   </span>
                 }
               }

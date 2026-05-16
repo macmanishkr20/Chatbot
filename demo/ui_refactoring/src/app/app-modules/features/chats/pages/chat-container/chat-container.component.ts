@@ -28,6 +28,7 @@ export class ChatContainerComponent {
 
   authUser = this.authService.user;
   homePrompts: HomePromptDTO[] = [];
+  showFunctionFilter = true;
 
   constructor() {
     this.loadHomePrompts();

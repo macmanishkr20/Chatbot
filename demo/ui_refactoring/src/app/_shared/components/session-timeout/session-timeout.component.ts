@@ -1,4 +1,4 @@
-import { Component, type OnInit } from '@angular/core';
+import { Component, Input, type OnInit } from '@angular/core';
 import { Router } from '@angular/router';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -9,6 +9,8 @@ import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
   styleUrls: ['./session-timeout.component.scss'],
 })
 export class SessionTimeoutComponent implements OnInit {
+  @Input() message: string = 'Your session has expired. Please log in again.';
+  @Input() messageHeader: string = 'Session Expired';
   constructor(public activeModal: NgbActiveModal, private router: Router) {}
 
   ngOnInit(): void {}

@@ -2,13 +2,13 @@ from typing import Optional, Union
 import aiosqlite
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from services.azure_sql_config import get_azure_sql_checkpoint_saver
+from infrastructure.azure.sql.connection import get_azure_sql_checkpoint_saver
 
 
 async def get_azure_sql_store():
     """Get a configured AzureSQLStore instance for LangGraph cross-session memory."""
-    from services.sql_store import AzureSQLStore
-    from services.sql_client import SQLChatClient
+    from infrastructure.azure.sql.store import AzureSQLStore
+    from infrastructure.azure.sql.client import SQLChatClient
 
     sql_config = SQLChatClient()
     store = AzureSQLStore(connection_string=sql_config.get_connection_string())

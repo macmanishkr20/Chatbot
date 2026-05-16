@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from services.openai_client import create_async_client, get_llm_model
+from infrastructure.openai.client import create_async_client, get_llm_model
 
 logger = logging.getLogger(__name__)
 

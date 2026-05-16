@@ -21,10 +21,10 @@ from dataclasses import dataclass, field
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from config import AZURE_SEARCH_SCORE_THRESHOLD, DISCOVERY_TOP_K, TOP_K
-from graph.nodes.search_node import _generate_embeddings, _strip_internal_fields
-from services.openai_client import create_sync_client, get_embedding_model
-from services.search_client import SearchService
+from core.config import AZURE_SEARCH_SCORE_THRESHOLD, DISCOVERY_TOP_K, TOP_K
+from agents.rag.nodes.search import _generate_embeddings, _strip_internal_fields
+from infrastructure.openai.client import create_sync_client, get_embedding_model
+from infrastructure.azure.search.client import SearchService
 from tests.eval.eval_retrieval import evaluate_single_query, RetrievalReport, print_report as print_retrieval_report
 from tests.eval.eval_generation import (
     evaluate_single_generation,
@@ -64,8 +64,8 @@ class E2EReport:
 
 async def _generate_answer(query: str, events: list) -> str:
     """Generate an answer using the same logic as generate_node (non-streaming)."""
-    from graph.nodes.generate_node import _generate_response
-    from graph.state import RAGState
+    from agents.rag.nodes.generate import _generate_response
+    from agents.rag.state import RAGState
 
     # Build minimal state for generation
     state: RAGState = {
@@ -86,7 +86,7 @@ async def _generate_answer(query: str, events: list) -> str:
 async def _embed_query(query: str) -> list | None:
     """Generate embeddings for a query."""
     try:
-        from config import AZURE_OPENAI_EMBED_API_KEY, AZURE_OPENAI_EMBED_ENDPOINT
+        from core.config import AZURE_OPENAI_EMBED_API_KEY, AZURE_OPENAI_EMBED_ENDPOINT
         embedding_model = get_embedding_model("embedding")
         client = create_sync_client(
             azure_endpoint=AZURE_OPENAI_EMBED_ENDPOINT,

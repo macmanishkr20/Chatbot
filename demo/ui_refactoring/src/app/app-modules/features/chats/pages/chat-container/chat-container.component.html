@@ -1,5 +1,5 @@
 <div class="chat-layout">
-    <div class="chat-main">
+    <div class="chat-main mt-2">
         @if(!chatStore.selectedConversationId() && !this.chatStore.messages()?.length){
         <div class="welcome-block">
             <div class="welcome-content">
@@ -8,7 +8,14 @@
                     <h4 class="mt-4 mb-0">Hi {{this.authUser?.firstName}}, How can I assist you today?</h4>
                 </div>
 
-                <span class="welcome-subtitle d-block mt-3">Have a specific topic in mind, Let me know so that I can support you better</span>
+                <div class="chat-input">
+                    <app-chat-input [placeholder]="'Type your question'" (send)="onSend()"
+                        [disabled]="chatStore.loading()" [showFunctionChips]="showFunctionFilter">
+                    </app-chat-input>
+                </div>
+
+                <span class="welcome-subtitle d-block mt-4">Have a specific topic in mind, Let me know so that I can
+                    support you better</span>
 
                 <div class="prompt-cards mt-3">
                     @for(prompt of (homePrompts || []); track prompt.id) {
@@ -37,14 +44,17 @@
         } @else {
         <app-chat-header></app-chat-header>
         }
-       
+
         <div class="chat-window" [class.d-none]="!chatStore.selectedConversationId() && !chatStore.messages()?.length">
             <router-outlet></router-outlet>
         </div>
-
+        @if(chatStore.selectedConversationId() || this.chatStore.messages()?.length 
+        || this.chatStore.isStreaming()) {
         <div class="chat-input">
-            <app-chat-input [placeholder]="'Type your question'" (send)="onSend()"
-                [disabled]="chatStore.loading()"></app-chat-input>
+            <app-chat-input [placeholder]="'Type your question'" (send)="onSend()" [disabled]="chatStore.loading()"
+                [showFunctionChips]="showFunctionFilter">
+            </app-chat-input>
         </div>
+        }
     </div>
 </div>

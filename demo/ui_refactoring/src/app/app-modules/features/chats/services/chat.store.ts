@@ -21,6 +21,7 @@ import { ConversationsVM } from './../models/conversation';
 import { ChannelType } from '../../../../_shared/constants/channel-type';
 import { FeedbackDTO, FeedbackResultVM } from '../models/message-feedabck';
 import { ServiceHierarchyVM } from '../models/service-hierarchy';
+import { SafeLogger } from '../../../../_shared/_service/safe-logger';
 
 /**
  * Central chat state manager.
@@ -322,7 +323,8 @@ export class ChatStore {
       // FastAPI returns the full list — no further pages.
       this.hasMoreConversations.set(false);
     } catch (err) {
-      console.error('Failed to load conversations:', err);
+      if (this.handlePermissionDenied(err)) return;
+      SafeLogger.error('Failed to load conversations');
     } finally {
       this.loadingConversations.set(false);
       this.setIsAPILoading(false);
@@ -411,7 +413,8 @@ export class ChatStore {
       this.messages.set(msgs);
       this.hasMoreMessages.set(false);
     } catch (err) {
-      console.error('Failed to load messages:', err);
+      if (this.handlePermissionDenied(err)) return;
+      SafeLogger.error('Failed to load messages');
       this.error.set('Failed to load conversation');
       this.clearMessages();
     } finally {
@@ -434,7 +437,10 @@ export class ChatStore {
           this.router.navigate(['/features/page/chats']);
         }
       },
-      error: (err) => console.error('Failed to delete conversation:', err),
+      error: (err) => {
+        if (this.handlePermissionDenied(err)) return;
+        SafeLogger.error('Failed to delete conversation');
+      },
     });
   }
 
@@ -449,7 +455,25 @@ export class ChatStore {
           this.conversationTitle.set(newTitle);
         }
       },
-      error: (err) => console.error('Failed to rename conversation:', err),
+      error: (err) => {
+        if (this.handlePermissionDenied(err)) return;
+        SafeLogger.error('Failed to rename conversation');
+      },
+    });
+  }
+
+  /** Pin or unpin a conversation. */
+  togglePinConversation(conv: ConversationsVM, isPinned: boolean): void {
+    this.chatService.togglePinConversation(this.userId(), conv.id, isPinned).subscribe({
+      next: () => {
+        this.chatConversations.update(list =>
+          list.map(c => (c.id === conv.id ? { ...c, isPinned } : c)),
+        );
+      },
+      error: (err) => {
+        if (this.handlePermissionDenied(err)) return;
+        SafeLogger.error('Failed to pin/unpin conversation');
+      },
     });
   }
 
@@ -464,8 +488,8 @@ export class ChatStore {
         this.serviceHierarchies.set(response.result);
         this.hierarchiesLoaded = true;
       }
-    } catch (error) {
-      console.error('Failed to load service hierarchies', error);
+    } catch (_error) {
+      SafeLogger.error('Failed to load service hierarchies');
     }
   }
 
@@ -484,24 +508,29 @@ export class ChatStore {
       feedback.rating === FeedbackRating.Positive ? 1 :
       feedback.rating === FeedbackRating.Negative ? -1 : 0;
 
-    const extras: string[] = [];
-    if (feedback.category) extras.push(`category=${feedback.category}`);
-    if (feedback.functionId) extras.push(`functionId=${feedback.functionId}`);
-    if (feedback.subFunctionId) extras.push(`subFunctionId=${feedback.subFunctionId}`);
-    if (feedback.serviceId) extras.push(`serviceId=${feedback.serviceId}`);
+    // Commented out for now to avoid confusion — the backend doesn't parse these yet and it's more intuitive to keep them separate in the UI anyway. Can re-enable if we add backend support to parse out and store these fields separately.
+    // const extras: string[] = [];
+    // if (feedback.category) extras.push(`category=${feedback.category}`);
+    // if (feedback.functionId) extras.push(`functionId=${feedback.functionId}`);
+    // if (feedback.subFunctionId) extras.push(`subFunctionId=${feedback.subFunctionId}`);
+    // if (feedback.serviceId) extras.push(`serviceId=${feedback.serviceId}`);
 
     const baseComment = (feedback.comments ?? '').trim();
-    const tail = extras.length ? ` [${extras.join(', ')}]` : '';
-    const combinedComment = (baseComment + tail).trim();
+    // const tail = extras.length ? ` [${extras.join(', ')}]` : '';
+    // const combinedComment = (baseComment + tail).trim();
 
     try {
       const res = await firstValueFrom(this.chatService.submitFeedback({
         user_id: email,
         message_id: feedback.messageId,
         rating: ratingNumeric,
-        comments: combinedComment || undefined,
+        comments: baseComment || undefined,
         created_by: email,
         modified_by: email,
+        function_id: feedback.functionId,
+        sub_function_id: feedback.subFunctionId,
+        service_id: feedback.serviceId,
+        category: feedback.category,
       }));
       const ok = !!res && res.status !== 'error';
       if (ok) {
@@ -524,8 +553,8 @@ export class ChatStore {
         );
         this.feedbackResult.set({ success: true, message: 'Thank you for your feedback!' });
       }
-    } catch (err) {
-      console.error('Failed to post feedback', err);
+    } catch (_err) {
+      SafeLogger.error('Failed to post feedback');
       this.feedbackResult.set({ success: false, message: 'Failed to submit feedback. Please try again.' });
     }
   }
@@ -581,8 +610,8 @@ export class ChatStore {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         // user cancelled — expected
-      } else {
-        console.error('Stream error:', err);
+      } else if (!this.handlePermissionDenied(err)) {
+        SafeLogger.error('Stream error');
         this.error.set('Failed to get response. Please try again.');
       }
     } finally {
@@ -730,7 +759,7 @@ export class ChatStore {
           msgs.map(m => {
             if (m.trackId !== assistantTrackId) return m;
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
-            let content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
+            let content = (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
 
             const hasNoAnswer =
               (content ?? '').trim().startsWith('[NO_ANSWER]') ||
@@ -827,6 +856,15 @@ export class ChatStore {
     this.pendingApiRequests.update(count => isLoading ? count + 1 : Math.max(0, count - 1));
   }
 
+  private handlePermissionDenied(err: unknown): boolean {
+    const status = (err as { status?: number })?.status;
+    if (status === 401 || status === 403) {
+      void this.router.navigate(['/unauthorised']);
+      return true;
+    }
+    return false;
+  }
+
   private clearMessages(): void {
     this.messages.set([]);
     this.hasMoreMessages.set(false);
@@ -849,6 +887,7 @@ export class ChatStore {
       createdAt: stored.CreatedAt,
       modifiedAt: stored.ModifiedAt,
       chatSessionId: stored.ChatSessionId ?? null,
+      isPinned: stored.IsPinned ?? false,
     };
   }
 
@@ -909,8 +948,25 @@ export class ChatStore {
       }
 
       if (indexes.length > 0) {
-        const isUrl = /^https?:\/\//.test(rawSource);
-        citations.push({ indexes, source: rawSource, isUrl });
+        // Backend emits two line shapes:
+        //   1. "<url>"                                  (qa_pair)
+        //   2. "<file> (page N,M) — <url>"              (document with url)
+        //   3. "<file> (page N)"                        (document, no url)
+        // Split on em dash (or " - ") to separate label from URL.
+        let source = rawSource;
+        let label: string | undefined;
+        let isUrl = /^https?:\/\//.test(rawSource);
+
+        if (!isUrl) {
+          const sepMatch = rawSource.match(/^(.*?)\s+(?:—|–|-{1,2})\s+(https?:\/\/\S+)$/);
+          if (sepMatch) {
+            label = sepMatch[1].trim();
+            source = sepMatch[2].trim();
+            isUrl = true;
+          }
+        }
+
+        citations.push({ indexes, source, isUrl, label });
       }
     }
     return citations;

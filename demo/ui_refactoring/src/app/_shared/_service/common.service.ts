@@ -54,7 +54,8 @@ export class CommonService {
       const message = `Please correct the validations in ${tabName}`;
       if (showToast) this.toast.showError(message); // Show the common message in the toast
     }
-    console.log('Invalid controls: ', invalid);
+    // Invalid control details intentionally not logged — form values
+    // may contain sensitive user input.
     this.loader.hide();
   }
 

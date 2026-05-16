@@ -56,3 +56,61 @@
 .pia-rb {
   accent-color: #ffe600;
 }
+.text-justify {
+  text-align: justify;
+}
+
+.table-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.privacy-table {
+  width: 100%;
+  table-layout: fixed;
+  margin-top: 10px;
+}
+
+.privacy-table-header {
+  background-color: #FFC000;
+}
+
+.privacy-table-th {
+  font-size: 11px;
+  padding: 8px;
+  word-wrap: break-word;
+}
+
+.privacy-table-th-user-group {
+  width: 15%;
+}
+
+.privacy-table-th-location {
+  width: 12%;
+}
+
+.privacy-table-th-purpose {
+  width: 35%;
+}
+
+.privacy-table-th-access {
+  width: 25%;
+}
+
+.privacy-table-th-amount {
+  width: 13%;
+}
+
+.privacy-table-td {
+  font-size: 11px;
+  padding: 8px;
+  word-wrap: break-word;
+}
+
+.text-center-div {
+  text-align: center;
+}
+
+.warning-text {
+  color: #ffe600;
+}

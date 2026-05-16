@@ -32,8 +32,6 @@ export class BeforeLoginComponent implements OnInit {
     }
 
     this.loginService.ssoCompleted().subscribe((p) => {
-      console.log('SSO completed');
-
       this.loggedIn = p;
     });
     //if auto authenitcation required, enable below code

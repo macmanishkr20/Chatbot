@@ -77,7 +77,7 @@
                                             <img src="assets/edit-pencil.png" alt="Rename" class="conv-menu-icon">
                                             <span>Rename</span>
                                         </button>
-                                        <button ngbDropdownItem class="conv-dropdown-item btn-delete" (click)="onDeleteConversation(conv)">
+                                        <button ngbDropdownItem class="conv-dropdown-item" (click)="onDeleteConversation(conv)">
                                             <img src="assets/trash.png" alt="Delete" class="conv-menu-icon">
                                             <span>Delete</span>
                                         </button>
@@ -140,7 +140,7 @@
                                                 <img src="assets/edit-pencil.png" alt="Rename" class="conv-menu-icon">
                                                 <span>Rename</span>
                                             </button>
-                                            <button ngbDropdownItem class="conv-dropdown-item btn-delete" (click)="onDeleteConversation(conv)">
+                                            <button ngbDropdownItem class="conv-dropdown-item" (click)="onDeleteConversation(conv)">
                                                 <img src="assets/trash.png" alt="Delete" class="conv-menu-icon">
                                                 <span>Delete</span>
                                             </button>
@@ -193,7 +193,9 @@
 <ng-template #deleteConfirmModal let-modal>
   <div class="delete-modal-content">
     <div class="delete-modal-header">
-      <i class="bi bi-exclamation-triangle-fill delete-modal-icon"></i>
+      <!-- <app-svg-icon name="alert-warning-outline" cssClass="delete-modal-icon"
+                ariaLabel="Delete"></app-svg-icon> -->
+        <i class="bi bi-exclamation-triangle-fill delete-modal-icon"></i>
       <h5 class="delete-modal-title">Delete Conversation</h5>
     </div>
     <div class="delete-modal-body">

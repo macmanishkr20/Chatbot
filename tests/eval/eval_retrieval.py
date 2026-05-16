@@ -22,10 +22,10 @@ from dataclasses import dataclass, field
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from config import AZURE_SEARCH_SCORE_THRESHOLD, DISCOVERY_TOP_K, TOP_K
-from graph.nodes.search_node import _generate_embeddings, _group_by_function
-from services.openai_client import create_sync_client, get_embedding_model
-from services.search_client import SearchService
+from core.config import AZURE_SEARCH_SCORE_THRESHOLD, DISCOVERY_TOP_K, TOP_K
+from agents.rag.nodes.search import _generate_embeddings, _group_by_function
+from infrastructure.openai.client import create_sync_client, get_embedding_model
+from infrastructure.azure.search.client import SearchService
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +78,7 @@ def _compute_keyword_relevance(content: str, keywords: list[str]) -> bool:
 async def _embed_query(query: str) -> list | None:
     """Generate embeddings for a query."""
     try:
-        from config import AZURE_OPENAI_EMBED_API_KEY, AZURE_OPENAI_EMBED_ENDPOINT
+        from core.config import AZURE_OPENAI_EMBED_API_KEY, AZURE_OPENAI_EMBED_ENDPOINT
         embedding_model = get_embedding_model("embedding")
         client = create_sync_client(
             azure_endpoint=AZURE_OPENAI_EMBED_ENDPOINT,
