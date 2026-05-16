@@ -151,7 +151,8 @@ class SQLChatClient:
                         CreatedAt        DATETIME2 NOT NULL,
                         CreatedBy        NVARCHAR(256) NULL,
                         ModifiedAt       DATETIME2 NOT NULL,
-                        ModifiedBy       NVARCHAR(256) NULL
+                        ModifiedBy       NVARCHAR(256) NULL,
+                        IsPinned         BIT NOT NULL DEFAULT 0
                     )
                     """
                 )
@@ -430,7 +431,7 @@ class SQLChatClient:
             try:
                 cursor.execute(
                     """
-                    SELECT Id, UserId, Title, ChatSessionId, ConversationType, CreatedAt, ModifiedAt
+                    SELECT Id, UserId, Title, ChatSessionId, ConversationType, CreatedAt, ModifiedAt, IsPinned
                     FROM Conversations
                     WHERE UserId = ? AND IsDeleted = 0
                     ORDER BY ModifiedAt DESC
@@ -513,6 +514,30 @@ class SQLChatClient:
                     WHERE Id = ? AND UserId = ? AND IsDeleted = 0
                     """,
                     new_title, now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
+    async def toggle_pin_conversation(self, conversation_id: int, user_id: str, is_pinned: bool) -> bool:
+        """Toggle the pin status of a conversation. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET IsPinned = ?, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0 AND IsActive = 1
+                    """,
+                    is_pinned, now, user_id, conversation_id, user_id,
                 )
                 affected = cursor.rowcount
                 conn.commit()

@@ -159,6 +159,26 @@ class SupervisorGraph:
             from langchain_core.messages import SystemMessage as _SM
             trimmed_messages.append(_SM(content="\n".join(citation_lines)))
 
+        # ── Inject selected-function constraint for suggestive_actions ──
+        # When the user has selected one or more MENA function chips,
+        # ALL 3 suggestive_actions must be scoped to those functions only.
+        # When no chip is selected, suggestion generation continues with its
+        # default (topic-relevant or mixed-function fallback) behaviour.
+        selected_functions = state.get("function") or []
+        if selected_functions:
+            fn_list = ", ".join(selected_functions)
+            from langchain_core.messages import SystemMessage as _SM
+            trimmed_messages.append(_SM(content=(
+                f"The user has selected MENA function chip(s): {fn_list}. "
+                "ALL 3 `suggestive_actions` MUST be focused exclusively on "
+                "these function(s)' policies, processes, tools, and topics. "
+                "Do NOT suggest topics from any other MENA function. "
+                "If multiple functions are selected, distribute the 3 "
+                "suggestions across only those selected functions. "
+                "This constraint applies to suggestive_actions only — it "
+                "does NOT change routing decisions or the direct response."
+            )))
+
         # Replace messages in state copy for this LLM call only
         trimmed_state = {**state, "messages": trimmed_messages, "summary": updated_summary}
 
