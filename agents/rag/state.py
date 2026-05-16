@@ -97,3 +97,17 @@ class RAGState(TypedDict, total=False):
     plan_type: str | None          # "simple" | "complex"
     sub_queries: list | None       # [{"function": str, "query": str}] from planner
     parallel_results: list | None  # [{"function": str, "events": list}] from parallel search
+
+    # ── Multi-agent orchestration (LMS / Expense / Scorecard) ──
+    # All fields are optional; absence means "this agent did not run".
+    # Each agent stores its raw tool result here for the format node and
+    # for downstream observability. The shape is agent-specific dict.
+    lms_result: dict | None
+    lms_sub_intent: str | None     # "balance" | "applications" | "approvals" | "unknown"
+    expense_result: dict | None    # reserved for Phase 2
+    scorecard_result: dict | None  # reserved for Phase 2
+
+    # ── RBAC denial UX ──
+    # Set by supervisor._get_next when a route is gated and falls back to
+    # RESPOND, so the next supervisor turn can compose a polite denial.
+    access_denied_reason: str | None

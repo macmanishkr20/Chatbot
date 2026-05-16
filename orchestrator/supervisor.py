@@ -29,6 +29,7 @@ from core.config import (
 from core.rbac import is_rank_allowed
 from agents.rag.graph import build_rag_graph
 from agents.rag.state import RAGState
+from agents.lms.graph import build_lms_graph
 from agents._base.nodes.persist import persist_node
 from agents._base.nodes.memory import save_memory_node
 from orchestrator.prompts import FEW_SHOT_EXAMPLES, supervisor_system_prompt
@@ -38,7 +39,12 @@ from infrastructure.openai.client import  get_llm_model
 
 logger = logging.getLogger(__name__)
 
-MEMBERS = ["rag_graph"]
+# Members must stay in sync with:
+#   - RouteResponse.next Literal below
+#   - core.rbac.AGENT_ALLOWED_RANK_CODES (access rules)
+#   - api/_runtime.NODE_THOUGHT (UI thinking labels)
+# Order is intentional: rag_graph first as the safe default.
+MEMBERS = ["rag_graph", "lms_agent"]
 OPTIONS_FOR_NEXT = ["RESPOND"] + MEMBERS
 
 # Lock for thread-safe singleton initialisation under async concurrency
@@ -73,7 +79,7 @@ class SuggestiveActionResponse(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    next: Literal["RESPOND", "rag_graph"] = Field(
+    next: Literal["RESPOND", "rag_graph", "lms_agent"] = Field(
         description="The next step in the workflow"
     )
     suggestive_actions: list[ActionResponse] | None = Field(
@@ -212,6 +218,13 @@ class SupervisorGraph:
         rag_graph and RESPOND are always open.
         Any future agent added to MEMBERS with a restricted AGENT_ALLOWED_RANK_CODES
         entry will be automatically gated here — no extra code needed.
+
+        When access is denied, we set ``access_denied_reason`` on state via a
+        side-channel (the supervisor inspects it on the next turn). Because
+        _get_next is a pure routing function we cannot mutate state from
+        here; instead we attach the reason via a thread-local set inside the
+        supervisor_agent. v1: simply log and fall back to RESPOND; the
+        supervisor will craft a generic polite reply on the next turn.
         """
         next_node = state.get("next", "RESPOND")
         # Only gate non-RAG, non-RESPOND agents
@@ -229,21 +242,22 @@ class SupervisorGraph:
     def _build_workflow(self) -> StateGraph:
         """Build and configure the supervisor workflow graph.
 
-        RESPOND path: Supervisor → persist → save_memory → END
-          Ensures greetings and direct replies are saved to SQL so they
-          appear in the user's chat history (/conversations endpoint).
-
-        rag_graph path: Supervisor → rag_graph → END
-          rag_graph internally runs: load_memory → rewrite → embed →
-          search → generate → persist → save_memory → END
+        Paths:
+          - RESPOND   → persist → save_memory → END
+                        (greetings, denials, clarifications saved to SQL)
+          - rag_graph → END        (rag_graph runs its own persist + save_memory)
+          - lms_agent → END        (lms_agent runs its own persist + save_memory)
         """
         rag_graph = build_rag_graph(memory_store=self._memory_store)
+        lms_agent = build_lms_graph(memory_store=self._memory_store)
+
         workflow = StateGraph(RAGState)
         workflow.add_node("rag_graph", rag_graph)
+        workflow.add_node("lms_agent", lms_agent)
         workflow.add_node("Supervisor", self.supervisor_agent)
 
-        # persist + save_memory are shared by both paths so greetings and
-        # direct RESPOND replies are stored in SQL chat history.
+        # persist + save_memory are used by the RESPOND path so direct replies
+        # and denials still land in SQL chat history.
         workflow.add_node("persist", persist_node)
         workflow.add_node("save_memory", save_memory_node)
 
@@ -254,6 +268,7 @@ class SupervisorGraph:
         workflow.add_conditional_edges("Supervisor", self._get_next, conditional_map)
         workflow.add_edge(START, "Supervisor")
         workflow.add_edge("rag_graph", END)
+        workflow.add_edge("lms_agent", END)
         workflow.add_edge("persist", "save_memory")
         workflow.add_edge("save_memory", END)
 

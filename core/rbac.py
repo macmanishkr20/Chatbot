@@ -51,9 +51,9 @@ for _r in RANKS:
 # add its entry here before wiring it in — the gate in _get_next will
 # activate automatically.
 AGENT_ALLOWED_RANK_CODES: dict[str, list[int] | None] = {
-    "rag_graph":       None,          # All ranks — no gate
-    "lms_agent":       None,          # Placeholder — set before enabling
-    "expense_agent":   None,          # Placeholder — set before enabling
+    "rag_graph":       None,          # All ranks — knowledge base is open
+    "lms_agent":       None,          # All ranks — every employee owns their leave data
+    "expense_agent":   None,          # Placeholder — set before Phase 2 enable
     "scorecard_agent": [11, 13],      # Partners (11), Principals (11), EMs (13) only
 }
 

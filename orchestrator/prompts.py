@@ -37,9 +37,13 @@ policies, procedures, and services.
 </company_background>
 
 <available_workers>
-- **rag_graph** — Handles all information retrieval tasks: question
-  answering, policy lookups, process guidance, and any query that
-  requires searching the internal knowledge base.
+- **rag_graph** — Knowledge retrieval. Use for policy lookups, process
+  guidance, definitions, eligibility rules, and any query answerable
+  from the internal knowledge base.
+- **lms_agent** — Live Leave Management System (LMS) data for the
+  CURRENT user: leave balance, the user's own leave applications, and
+  pending leave approvals when the user is a manager. NOT for policy
+  questions about leave — those go to rag_graph.
 </available_workers>
 
 <routing_guidelines>
@@ -49,32 +53,63 @@ policies, procedures, and services.
 - The user asks a general question about how this assistant works.
 - Clarification is required before a request can be routed (ambiguous
   intent).
-- The question can be answered without searching any documents.
+- The question can be answered without searching any documents or
+  calling any backend system.
 </respond_directly_when>
 
 <route_to_rag_graph_when>
-- The user asks ANY question that requires information from the
-  knowledge base (policies, approvals, submission rules, role
-  responsibilities, compliance, function-specific guidance, etc.).
-- The user asks a follow-up that expands on a previous rag_graph
-  response.
-- The user requests a recommendation that depends on retrieved
-  information.
+- The user asks ANY policy / definition / process question that requires
+  information from the knowledge base — including leave POLICIES,
+  eligibility rules, entitlement formulas, and approval workflows in
+  the abstract (e.g. "what is the paternity leave policy?", "how is
+  annual leave accrued?").
+- The user asks a follow-up that expands on a previous rag_graph response.
+- The user requests a recommendation that depends on retrieved information.
 </route_to_rag_graph_when>
+
+<route_to_lms_agent_when>
+- The user wants to see THEIR OWN leave balance, application status,
+  or pending approvals (when they are a manager). Specifically:
+  * Personal balance: "what is my leave balance?", "how many sick
+    leaves do I have left?", "annual leave remaining?"
+  * Own applications: "show my leave applications", "any pending
+    leaves I submitted?", "list my approved leaves this year"
+  * Manager approvals: "who is waiting for my approval?", "pending
+    leave approvals", "any leave requests to review?"
+- The query implies a live data look-up about the CURRENT user — never
+  someone else's data.
+</route_to_lms_agent_when>
+
+<critical_disambiguation>
+LEAVE queries split between rag_graph and lms_agent. Decide by intent:
+  - "What is my leave balance?"          → lms_agent  (live user data)
+  - "What is the paternity leave policy?"→ rag_graph  (policy / knowledge)
+  - "How many annual leaves am I entitled to per year?" → rag_graph
+  - "How many annual leaves do I have left?" → lms_agent
+  - "Show my pending leave applications"  → lms_agent
+  - "What is the leave approval workflow?" → rag_graph
+
+Rule of thumb: if the answer requires the user's PERSONAL HRIS record →
+lms_agent. If the answer is the same for every employee at this rank →
+rag_graph.
+</critical_disambiguation>
 
 <handling_ambiguity>
 - If a request lacks enough detail to route confidently, ask one focused
   clarifying question before routing.
 - If a worker returns no results, tell the user and offer to rephrase.
+- When in doubt between rag_graph and lms_agent, PREFER rag_graph — it
+  is the safer default and never reads personal data.
 </handling_ambiguity>
 
 </routing_guidelines>
 
 <decision_process>
 For each user message:
-1. Assess  — can this be answered directly without document retrieval? → RESPOND
-2. Identify — does this require a knowledge base search? → rag_graph
-3. Route    — dispatch to the chosen worker with a brief acknowledgement.
+1. Assess — can this be answered directly without retrieval or a live system call? → RESPOND
+2. Identify — does this need PERSONAL leave data? → lms_agent
+3. Identify — does this need knowledge-base information? → rag_graph
+4. Route — dispatch to the chosen worker with a brief acknowledgement.
 </decision_process>
 
 <suggestive_actions>
@@ -177,6 +212,60 @@ FEW_SHOT_EXAMPLES = """\
 <user>What Finance policies changed last month?</user>
 <decision>rag_graph</decision>
 <reasoning>Time-sensitive policy query — requires knowledge base search. Resolve "last month" using today's date ({{current_date}}) before routing.</reasoning>
+</example>
+
+<example>
+<user>What is my leave balance?</user>
+<decision>lms_agent</decision>
+<reasoning>Personal leave data — requires live HRIS look-up for the current user.</reasoning>
+</example>
+
+<example>
+<user>How many annual leaves do I have left?</user>
+<decision>lms_agent</decision>
+<reasoning>Personal balance with type filter — lms_agent will retrieve via HRIS.</reasoning>
+</example>
+
+<example>
+<user>What is the paternity leave policy at EY MENA?</user>
+<decision>rag_graph</decision>
+<reasoning>Policy question — same answer for every eligible employee. Knowledge base search, NOT lms_agent.</reasoning>
+</example>
+
+<example>
+<user>How is annual leave accrued each year?</user>
+<decision>rag_graph</decision>
+<reasoning>Policy / process question, not personal data.</reasoning>
+</example>
+
+<example>
+<user>Show me my pending leave applications</user>
+<decision>lms_agent</decision>
+<reasoning>User's own application list — live system call.</reasoning>
+</example>
+
+<example>
+<user>Who is waiting for my approval?</user>
+<decision>lms_agent</decision>
+<reasoning>Manager-side pending approvals — live system call.</reasoning>
+</example>
+
+<example>
+<user>What is the approval workflow for paternity leave?</user>
+<decision>rag_graph</decision>
+<reasoning>Workflow / process description — knowledge base, not live data.</reasoning>
+</example>
+
+<example>
+<user>How many sick leaves am I entitled to per year?</user>
+<decision>rag_graph</decision>
+<reasoning>Entitlement is a policy rule that is the same for every employee at this rank — knowledge base.</reasoning>
+</example>
+
+<example>
+<user>How many sick leaves do I have left this year?</user>
+<decision>lms_agent</decision>
+<reasoning>Personal remaining balance — live HRIS look-up.</reasoning>
 </example>
 
 </few_shot_examples>

@@ -34,7 +34,8 @@ callback_handler = (
 # ── Streaming constants ──
 # Nodes whose LLM token output is meaningful prose for the end user.
 # Supervisor is intentionally excluded — its tokens are JSON fragments.
-STREAMABLE_NODES: frozenset[str] = frozenset({"generate"})
+# lms_format streams the LMS agent's final answer to the user.
+STREAMABLE_NODES: frozenset[str] = frozenset({"generate", "lms_format"})
 
 # Chain-of-thought step labels shown in the UI
 NODE_THOUGHT: dict[str, dict[str, str]] = {
@@ -115,5 +116,24 @@ NODE_THOUGHT: dict[str, dict[str, str]] = {
         "message": "Condensing conversation…",
         "group": "response",
         "icon": "compress",
+    },
+    # ── LMS agent ──
+    "lms_classify": {
+        "display": "Leave Intent",
+        "message": "Identifying your leave request…",
+        "group": "understanding",
+        "icon": "route",
+    },
+    "lms_fetch": {
+        "display": "HRIS Lookup",
+        "message": "Fetching your leave data…",
+        "group": "retrieval",
+        "icon": "cloud_download",
+    },
+    "lms_format": {
+        "display": "Response",
+        "message": "Preparing your answer…",
+        "group": "response",
+        "icon": "auto_fix_high",
     },
 }
