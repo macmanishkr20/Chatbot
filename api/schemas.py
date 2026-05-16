@@ -52,6 +52,10 @@ class UserChatQuery(BaseModel):
     message_id: str | None = None
     channel_type: int = 0  # 0 or 1
 
+    # User rank — resolved to full RankInfo in _build_initial_state.
+    # Optional: existing clients that omit this field receive no rank context.
+    rank_code: Optional[int] = None
+
     # Filters
     function: List[str] = []
     sub_function: List[str] = []

@@ -35,6 +35,13 @@ class RAGState(TypedDict, total=False):
     preferred_language: str | None
     content_type: str  # "document" (default) | "qa_pair" — search index content_type filter
 
+    # ── RBAC / Rank personalisation ──
+    # rank_code: raw int from the request (e.g. 32 for Manager).
+    # rank_info: resolved dict {rank_code, rank_name, rank_hierarchy} or None.
+    # Stored as plain dict so LangGraph's JSON checkpointer serialises it without adapters.
+    rank_code: int | None
+    rank_info: dict | None
+
     # ── Document → QA fallback (graph-level retry) ──
     needs_doc_fallback: bool       # trigger retry with qa_pair after no-answer generation
     doc_fallback_attempted: bool   # prevent infinite fallback loop

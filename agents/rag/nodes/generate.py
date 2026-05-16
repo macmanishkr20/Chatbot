@@ -410,6 +410,26 @@ async def _generate_response(
             events, is_free_form, rewritten_query, sub_function
         )
 
+        # ── Rank-aware personalisation ──
+        # Append a <user_context> block to the system prompt so the LLM can
+        # tailor tone, policy limits, and responsibilities to the user's role.
+        # Only injected for free-form responses (structured JSON responses are
+        # consumed by the frontend renderer and must not have extra prose).
+        rank_info = state.get("rank_info")
+        if rank_info and is_free_form:
+            rank_name = rank_info.get("rank_name", "")
+            if rank_name:
+                system_template = system_template + (
+                    f"\n\n<user_context>\n"
+                    f"The user's organisational role is: {rank_name}. "
+                    f"Where it is relevant to the question, frame your answer "
+                    f"appropriately for someone at the {rank_name} level — for example, "
+                    f"referencing policy limits, approval thresholds, or responsibilities "
+                    f"that apply to their grade. Do not over-emphasise rank when it is "
+                    f"not relevant to the question.\n"
+                    f"</user_context>"
+                )
+
         messages = _create_message_structure(
             system_template, user_template, llm_model,
             summary=summary,

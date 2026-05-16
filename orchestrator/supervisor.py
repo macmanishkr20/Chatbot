@@ -26,6 +26,7 @@ from core.config import (
     AZURE_OPENAI_ENDPOINT,
     AZURE_OPENAI_KEY,
 )
+from core.rbac import is_rank_allowed
 from agents.rag.graph import build_rag_graph
 from agents.rag.state import RAGState
 from agents._base.nodes.persist import persist_node
@@ -206,7 +207,24 @@ class SupervisorGraph:
 
     @staticmethod
     def _get_next(state: RAGState) -> str:
-        return state["next"]
+        """Route to the next node, enforcing rank-based access control.
+
+        rag_graph and RESPOND are always open.
+        Any future agent added to MEMBERS with a restricted AGENT_ALLOWED_RANK_CODES
+        entry will be automatically gated here — no extra code needed.
+        """
+        next_node = state.get("next", "RESPOND")
+        # Only gate non-RAG, non-RESPOND agents
+        if next_node not in ("RESPOND", "rag_graph"):
+            rank_code = state.get("rank_code")
+            if not is_rank_allowed(next_node, rank_code):
+                logger.warning(
+                    "supervisor._get_next: rank_code=%s denied access to %s → falling back to RESPOND",
+                    rank_code,
+                    next_node,
+                )
+                return "RESPOND"
+        return next_node
 
     def _build_workflow(self) -> StateGraph:
         """Build and configure the supervisor workflow graph.

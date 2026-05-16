@@ -12,6 +12,7 @@ from agents.rag.prompts.functions import SEARCH_TO_CHIP
 from api import _runtime
 from api.schemas import UserChatQuery
 from core.config import MAX_INPUT_LENGTH
+from core.rbac import resolve_rank
 
 # Accept any EY regional subdomain: name@{region}.ey.com (gds, ae, bh, sa, …) or name@ey.com
 _EY_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)?ey\.com$")
@@ -73,6 +74,9 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "preferred_language": query.preferred_language,
         "content_type": query.content_type or "qa_pair",
         "requires_function_selection": False,
+        # ── RBAC / Rank personalisation ──
+        "rank_code": query.rank_code,
+        "rank_info": resolve_rank(query.rank_code),
     }
 
 
