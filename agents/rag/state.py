@@ -36,10 +36,12 @@ class RAGState(TypedDict, total=False):
     content_type: str  # "document" (default) | "qa_pair" — search index content_type filter
 
     # ── RBAC / Rank personalisation ──
-    # rank_code: raw int from the request (e.g. 32 for Manager).
-    # rank_info: resolved dict {rank_code, rank_name, rank_hierarchy} or None.
-    # Stored as plain dict so LangGraph's JSON checkpointer serialises it without adapters.
+    # rank_code & rank_name come directly from the (now mandatory) request fields.
+    # rank_info is the canonical dict resolved via core.rbac.resolve_rank_strict —
+    # used by the generate node to personalise the system prompt and by the
+    # supervisor's _get_next to gate access to non-RAG agents.
     rank_code: int | None
+    rank_name: str | None
     rank_info: dict | None
 
     # ── Document → QA fallback (graph-level retry) ──

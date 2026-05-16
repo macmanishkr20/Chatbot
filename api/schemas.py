@@ -52,9 +52,12 @@ class UserChatQuery(BaseModel):
     message_id: str | None = None
     channel_type: int = 0  # 0 or 1
 
-    # User rank — resolved to full RankInfo in _build_initial_state.
-    # Optional: existing clients that omit this field receive no rank context.
-    rank_code: Optional[int] = None
+    # User rank — MANDATORY. Both code and name are sent by the frontend.
+    # rank_code drives access-control decisions (see core/rbac.AGENT_ALLOWED_RANK_CODES).
+    # rank_name is used for personalisation in the system prompt and disambiguates
+    # rank_codes that map to multiple roles (e.g. 11 → Partner & Principal).
+    rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
+    rank_name: str = Field(..., min_length=1, max_length=64, description="User's role display name")
 
     # Filters
     function: List[str] = []
@@ -164,6 +167,9 @@ class EditMessageRequest(BaseModel):
     end_date: str = ""
     preferred_language: Optional[str] = None
     content_type: str = "qna_pair"
+    # Rank context (mandatory, same as chat request)
+    rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
+    rank_name: str = Field(..., min_length=1, max_length=64)
 
 
 

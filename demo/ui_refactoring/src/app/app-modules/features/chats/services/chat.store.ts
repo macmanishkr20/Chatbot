@@ -19,6 +19,7 @@ import {
 } from '../models/chat.model';
 import { ConversationsVM } from './../models/conversation';
 import { ChannelType } from '../../../../_shared/constants/channel-type';
+import { DEFAULT_RANK, RankInfo, RANKS } from '../../../../_shared/constants/rank';
 import { FeedbackDTO, FeedbackResultVM } from '../models/message-feedabck';
 import { ServiceHierarchyVM } from '../models/service-hierarchy';
 
@@ -103,6 +104,33 @@ export class ChatStore {
     const user = this.authService.user;
     return (user && user.email) ? user.email : 'demo.user@gds.ey.com';
   });
+
+  /**
+   * Mandatory rank fields — sent on every chat request.
+   *
+   * For a real deployment, populate from an SSO claim or HRIS lookup and
+   * surface via AuthUser. In demo mode we expose mutators below so the UI
+   * (or dev tools) can pick a rank.
+   */
+  readonly userRankCode = signal<number>(DEFAULT_RANK.rank_code);
+  readonly userRankName = signal<string>(DEFAULT_RANK.rank_name);
+
+  /** Full RankInfo resolved from current code+name, with safe fallbacks. */
+  readonly userRank = computed<RankInfo>(() => {
+    const code = this.userRankCode();
+    const name = this.userRankName();
+    return (
+      RANKS.find(r => r.rank_code === code && r.rank_name === name) ??
+      RANKS.find(r => r.rank_code === code) ??
+      DEFAULT_RANK
+    );
+  });
+
+  /** Update the active rank (demo helper — for UI rank-switcher). */
+  setUserRank(rank: RankInfo): void {
+    this.userRankCode.set(rank.rank_code);
+    this.userRankName.set(rank.rank_name);
+  }
 
   /** Number of user messages (for edit indexing). */
   readonly userMessageCount = computed(() =>
@@ -212,6 +240,9 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
+      // Mandatory rank context — backend rejects requests without these
+      rank_code: this.userRankCode(),
+      rank_name: this.userRankName(),
     });
   }
 
@@ -253,6 +284,9 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
+      // Mandatory rank context — backend rejects requests without these
+      rank_code: this.userRankCode(),
+      rank_name: this.userRankName(),
     });
   }
 

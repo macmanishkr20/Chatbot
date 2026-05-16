@@ -29,6 +29,21 @@
         }
       </div>
 
+      <div class="form-group">
+        <label class="form-label" for="rank">Role / Rank</label>
+        <select
+          id="rank"
+          class="form-input"
+          name="rank"
+          [ngModel]="rankKey()"
+          (ngModelChange)="rankKey.set($event)"
+        >
+          @for (r of ranks; track makeKey(r)) {
+            <option [value]="makeKey(r)">{{ r.rank_name }} (code {{ r.rank_code }})</option>
+          }
+        </select>
+      </div>
+
       <button type="submit" class="login-btn">
         <span>Sign in</span>
         <span class="mat-icon" style="font-size: 18px;">arrow_forward</span>

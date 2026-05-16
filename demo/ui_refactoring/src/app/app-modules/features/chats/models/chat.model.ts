@@ -251,6 +251,9 @@ export interface ChatRequest {
   end_date: string;
   preferred_language?: string;
   content_type?: 'document' | 'qa_pair';
+  /** User rank — mandatory. Drives backend personalisation and RBAC. */
+  rank_code: number;
+  rank_name: string;
 }
 
 export interface EditRequest {
@@ -265,6 +268,9 @@ export interface EditRequest {
   start_date: string;
   end_date: string;
   content_type?: 'document' | 'qa_pair';
+  /** User rank — mandatory. */
+  rank_code: number;
+  rank_name: string;
 }
 
 export interface RegenerateRequest {

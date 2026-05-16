@@ -12,7 +12,7 @@ from agents.rag.prompts.functions import SEARCH_TO_CHIP
 from api import _runtime
 from api.schemas import UserChatQuery
 from core.config import MAX_INPUT_LENGTH
-from core.rbac import resolve_rank
+from core.rbac import resolve_rank_strict
 
 # Accept any EY regional subdomain: name@{region}.ey.com (gds, ae, bh, sa, …) or name@ey.com
 _EY_EMAIL_RE = re.compile(r"^[A-Za-z0-9._%+-]+@(?:[A-Za-z0-9-]+\.)?ey\.com$")
@@ -56,7 +56,17 @@ def _to_chip_code(value: str | None) -> str | None:
 
 
 async def _build_initial_state(query: UserChatQuery) -> dict:
-    """Convert a UserChatQuery into the initial RAGState dict."""
+    """Convert a UserChatQuery into the initial RAGState dict.
+
+    Validates and resolves the mandatory (rank_code, rank_name) pair against
+    the rank registry. Raises HTTPException 400 on an unknown rank_code.
+    """
+    # ── Validate rank early so requests with bad ranks fail fast ──
+    try:
+        rank_info = resolve_rank_strict(query.rank_code, query.rank_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     return {
         "messages": [HumanMessage(content=query.user_input)],
         "input_type": query.input_type.value,
@@ -76,7 +86,8 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "requires_function_selection": False,
         # ── RBAC / Rank personalisation ──
         "rank_code": query.rank_code,
-        "rank_info": resolve_rank(query.rank_code),
+        "rank_name": query.rank_name,
+        "rank_info": rank_info,
     }
 
 

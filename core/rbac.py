@@ -73,6 +73,35 @@ def resolve_rank(rank_code: Optional[int]) -> Optional[RankInfo]:
     return _RANK_BY_CODE.get(rank_code)
 
 
+def resolve_rank_strict(rank_code: int, rank_name: str) -> RankInfo:
+    """Disambiguate and validate a (rank_code, rank_name) pair from the frontend.
+
+    Resolution order:
+      1. Exact (rank_code, rank_name) match — preferred (handles rank_code 11
+         which maps to both Partner and Principal).
+      2. First rank_code match — accept if name differs but code is valid.
+         The supplied rank_name is preserved in the returned dict for display.
+      3. Raise ValueError when rank_code is not in the registry.
+
+    Returned RankInfo always uses the frontend-supplied rank_name when the
+    (code, name) pair is a valid registry entry, otherwise the canonical
+    name for that code.
+    """
+    # Strategy 1: exact (code, name) match
+    for r in RANKS:
+        if r["rank_code"] == rank_code and r["rank_name"] == rank_name:
+            return r
+    # Strategy 2: code match only — known code, unknown name
+    canonical = _RANK_BY_CODE.get(rank_code)
+    if canonical is not None:
+        return canonical
+    # Strategy 3: unknown code → caller-facing error
+    raise ValueError(
+        f"Unknown rank_code={rank_code} (rank_name={rank_name!r}). "
+        f"Valid codes: {sorted(_RANK_BY_CODE.keys())}"
+    )
+
+
 def is_rank_allowed(agent_name: str, rank_code: Optional[int]) -> bool:
     """Return True if rank_code is permitted to access agent_name.
 

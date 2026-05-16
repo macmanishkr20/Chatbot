@@ -26,6 +26,7 @@ from api.schemas import (
     UserChatQuery,
 )
 from api.streaming import _stream_graph
+from core.rbac import resolve_rank_strict
 from infrastructure.azure.sql.client import SQLChatClient
 from infrastructure.cancel_signals.backend import set_cancel
 
@@ -241,6 +242,12 @@ async def edit_message(
     _validate_user(body.user_id)
     new_input = _sanitize_input(body.new_input)
 
+    # Validate rank early — reject before any graph work
+    try:
+        edit_rank_info = resolve_rank_strict(body.rank_code, body.rank_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     await _init_graph()
 
     thread_id, config = _build_stream_config(body.user_id, body.chat_session_id)
@@ -273,6 +280,10 @@ async def edit_message(
             "end_date": body.end_date,
             "preferred_language": body.preferred_language,
             "content_type": body.content_type or "qa_pair",
+            # Rank context (mandatory)
+            "rank_code": body.rank_code,
+            "rank_name": body.rank_name,
+            "rank_info": edit_rank_info,
             # Ensure transient fields are reset just like a normal graph entry.
             "events": [],
             "error_info": None,
@@ -357,6 +368,10 @@ async def edit_message(
         "preferred_language": body.preferred_language,
         "content_type": body.content_type or "qa_pair",
         "input_type": "ask",
+        # Rank context (mandatory)
+        "rank_code": body.rank_code,
+        "rank_name": body.rank_name,
+        "rank_info": edit_rank_info,
         # Reset all transient fields
         "events": [],
         "error_info": None,
