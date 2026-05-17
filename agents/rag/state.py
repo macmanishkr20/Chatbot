@@ -104,8 +104,18 @@ class RAGState(TypedDict, total=False):
     # for downstream observability. The shape is agent-specific dict.
     lms_result: dict | None
     lms_sub_intent: str | None     # "balance" | "applications" | "approvals" | "unknown"
-    expense_result: dict | None    # reserved for Phase 2
-    scorecard_result: dict | None  # reserved for Phase 2
+
+    # ── Expense & Scorecard (predicate-planner agents) ──
+    # User's GUI (Employee ID); from frontend, mandatory.
+    # Drives row-level security: non-admin ranks see only their own GUI.
+    gui: str | None
+
+    # Each agent stashes its compiled SQL, params, rowcount + raw rows for
+    # the format node + audit telemetry.
+    expense_result: dict | None
+    expense_plan: dict | None       # serialised QueryPlan
+    scorecard_result: dict | None
+    scorecard_plan: dict | None     # serialised QueryPlan
 
     # ── RBAC denial UX ──
     # Set by supervisor._get_next when a route is gated and falls back to

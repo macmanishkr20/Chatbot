@@ -126,10 +126,22 @@ export class ChatStore {
     );
   });
 
+  /**
+   * Mandatory GUI / Employee ID — sent on every chat request.
+   * Drives row-level security on Expense and Scorecard agents.
+   * For a real deployment, populate from an SSO claim or HRIS lookup.
+   */
+  readonly userGui = signal<string>('1016409');
+
   /** Update the active rank (demo helper — for UI rank-switcher). */
   setUserRank(rank: RankInfo): void {
     this.userRankCode.set(rank.rank_code);
     this.userRankName.set(rank.rank_name);
+  }
+
+  /** Update the active GUI. */
+  setUserGui(gui: string): void {
+    this.userGui.set(gui);
   }
 
   /** Number of user messages (for edit indexing). */
@@ -240,9 +252,10 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
-      // Mandatory rank context — backend rejects requests without these
+      // Mandatory rank + GUI context — backend rejects requests without these
       rank_code: this.userRankCode(),
       rank_name: this.userRankName(),
+      gui: this.userGui(),
     });
   }
 
@@ -284,9 +297,10 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
-      // Mandatory rank context — backend rejects requests without these
+      // Mandatory rank + GUI context — backend rejects requests without these
       rank_code: this.userRankCode(),
       rank_name: this.userRankName(),
+      gui: this.userGui(),
     });
   }
 

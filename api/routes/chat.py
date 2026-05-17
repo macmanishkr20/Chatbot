@@ -284,6 +284,7 @@ async def edit_message(
             "rank_code": body.rank_code,
             "rank_name": body.rank_name,
             "rank_info": edit_rank_info,
+            "gui": body.gui,
             # Ensure transient fields are reset just like a normal graph entry.
             "events": [],
             "error_info": None,

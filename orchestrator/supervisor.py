@@ -30,6 +30,8 @@ from core.rbac import is_rank_allowed
 from agents.rag.graph import build_rag_graph
 from agents.rag.state import RAGState
 from agents.lms.graph import build_lms_graph
+from agents.expense.graph import build_expense_graph
+from agents.scorecard.graph import build_scorecard_graph
 from agents._base.nodes.persist import persist_node
 from agents._base.nodes.memory import save_memory_node
 from orchestrator.prompts import FEW_SHOT_EXAMPLES, supervisor_system_prompt
@@ -44,7 +46,7 @@ logger = logging.getLogger(__name__)
 #   - core.rbac.AGENT_ALLOWED_RANK_CODES (access rules)
 #   - api/_runtime.NODE_THOUGHT (UI thinking labels)
 # Order is intentional: rag_graph first as the safe default.
-MEMBERS = ["rag_graph", "lms_agent"]
+MEMBERS = ["rag_graph", "lms_agent", "expense_agent", "scorecard_agent"]
 OPTIONS_FOR_NEXT = ["RESPOND"] + MEMBERS
 
 # Lock for thread-safe singleton initialisation under async concurrency
@@ -79,7 +81,7 @@ class SuggestiveActionResponse(BaseModel):
 
 
 class RouteResponse(BaseModel):
-    next: Literal["RESPOND", "rag_graph", "lms_agent"] = Field(
+    next: Literal["RESPOND", "rag_graph", "lms_agent", "expense_agent", "scorecard_agent"] = Field(
         description="The next step in the workflow"
     )
     suggestive_actions: list[ActionResponse] | None = Field(
@@ -250,10 +252,14 @@ class SupervisorGraph:
         """
         rag_graph = build_rag_graph(memory_store=self._memory_store)
         lms_agent = build_lms_graph(memory_store=self._memory_store)
+        expense_agent = build_expense_graph(memory_store=self._memory_store)
+        scorecard_agent = build_scorecard_graph(memory_store=self._memory_store)
 
         workflow = StateGraph(RAGState)
         workflow.add_node("rag_graph", rag_graph)
         workflow.add_node("lms_agent", lms_agent)
+        workflow.add_node("expense_agent", expense_agent)
+        workflow.add_node("scorecard_agent", scorecard_agent)
         workflow.add_node("Supervisor", self.supervisor_agent)
 
         # persist + save_memory are used by the RESPOND path so direct replies
@@ -269,6 +275,8 @@ class SupervisorGraph:
         workflow.add_edge(START, "Supervisor")
         workflow.add_edge("rag_graph", END)
         workflow.add_edge("lms_agent", END)
+        workflow.add_edge("expense_agent", END)
+        workflow.add_edge("scorecard_agent", END)
         workflow.add_edge("persist", "save_memory")
         workflow.add_edge("save_memory", END)
 

@@ -53,9 +53,27 @@ for _r in RANKS:
 AGENT_ALLOWED_RANK_CODES: dict[str, list[int] | None] = {
     "rag_graph":       None,          # All ranks — knowledge base is open
     "lms_agent":       None,          # All ranks — every employee owns their leave data
-    "expense_agent":   None,          # Placeholder — set before Phase 2 enable
-    "scorecard_agent": [11, 13],      # Partners (11), Principals (11), EMs (13) only
+    "expense_agent":   None,          # All ranks — RLS clamps non-admins to own GUI
+    "scorecard_agent": None,          # All ranks — RLS clamps non-admins to own GUI
 }
+
+
+# Ranks with cross-GUI / aggregate-across-employees privileges on
+# the Expense and Scorecard agents. All other ranks are scoped to their
+# own GUI by row-level security in the SQL compiler.
+FULL_DATA_ACCESS_RANK_CODES: frozenset[int] = frozenset({11, 13})
+
+
+def can_query_other_gui(rank_code: Optional[int]) -> bool:
+    """Return True when the rank is allowed to read another employee's data.
+
+    Partners (11) / Principals (11) / Executive Managers (13) can run
+    aggregate / cross-employee analytics. Everyone else is automatically
+    restricted to their own GUI at SQL-compile time.
+    """
+    if rank_code is None:
+        return False
+    return rank_code in FULL_DATA_ACCESS_RANK_CODES
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

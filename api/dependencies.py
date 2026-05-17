@@ -88,6 +88,8 @@ async def _build_initial_state(query: UserChatQuery) -> dict:
         "rank_code": query.rank_code,
         "rank_name": query.rank_name,
         "rank_info": rank_info,
+        # ── User GUI (Employee ID) — drives Expense/Scorecard row-level security ──
+        "gui": query.gui,
     }
 
 

@@ -44,6 +44,16 @@ policies, procedures, and services.
   CURRENT user: leave balance, the user's own leave applications, and
   pending leave approvals when the user is a manager. NOT for policy
   questions about leave — those go to rag_graph.
+- **expense_agent** — Live expense-claim data from UserExpenses (Concur
+  feed). Use for personal / aggregate questions about expense amounts,
+  approval status, claim listings, top expenses, totals by period or
+  category. NOT for expense POLICY questions (per-diem rates, eligible
+  categories, accommodation caps) — those go to rag_graph.
+- **scorecard_agent** — Live performance KPIs from UserScoreboard
+  (GTER, TER, ANSR, Eng Margin, Utilisation, Backlog, AR, NUI, etc.).
+  Use for personal scorecard views, KPI lookups, employee rankings,
+  team aggregates. NOT for KPI DEFINITION questions ("what is GTER",
+  "how is utilisation calculated") — those go to rag_graph.
 </available_workers>
 
 <routing_guidelines>
@@ -80,17 +90,58 @@ policies, procedures, and services.
   someone else's data.
 </route_to_lms_agent_when>
 
+<route_to_expense_agent_when>
+- The user wants live expense data (amounts, counts, listings, totals).
+  Specifically:
+  * "what was my highest expense in FY26?", "biggest expense claim"
+  * "show my expense claims", "list pending expenses"
+  * "total reimbursement for FY26", "sum spent on flights this year"
+  * "top 5 expenses by amount", "who has highest expense"
+- DO NOT route here for policy questions (per-diem rates, eligible
+  categories, accommodation cap, who needs approval) — those are rag_graph.
+</route_to_expense_agent_when>
+
+<route_to_scorecard_agent_when>
+- The user wants live KPI / scorecard data. Specifically:
+  * "show my scorecard", "my scorecard summary"
+  * "what is my GTER", "my utilisation %", "my backlog"
+  * "highest GTER", "top 5 by ANSR", "lowest utilisation"
+  * "average utilisation in FY26", "how much data in scorecard"
+- DO NOT route here for KPI DEFINITIONS:
+  * "what does GTER stand for", "how is utilisation calculated",
+    "explain ANSR/GTER ratio" — these are rag_graph (knowledge).
+</route_to_scorecard_agent_when>
+
 <critical_disambiguation>
-LEAVE queries split between rag_graph and lms_agent. Decide by intent:
-  - "What is my leave balance?"          → lms_agent  (live user data)
-  - "What is the paternity leave policy?"→ rag_graph  (policy / knowledge)
-  - "How many annual leaves am I entitled to per year?" → rag_graph
-  - "How many annual leaves do I have left?" → lms_agent
-  - "Show my pending leave applications"  → lms_agent
+Three domains (leave / expense / scorecard) each split between
+rag_graph (knowledge / policy / definitions) and a specialist agent
+(personal data / live aggregates). Decide by intent:
+
+LEAVE:
+  - "What is my leave balance?"          → lms_agent
+  - "What is the paternity leave policy?"→ rag_graph
+  - "How many sick leaves am I entitled to per year?" → rag_graph
+  - "How many sick leaves do I have left?" → lms_agent
   - "What is the leave approval workflow?" → rag_graph
 
-Rule of thumb: if the answer requires the user's PERSONAL HRIS record →
-lms_agent. If the answer is the same for every employee at this rank →
+EXPENSE:
+  - "Who has the highest expense in FY26?" → expense_agent
+  - "What is the accommodation cap policy?" → rag_graph
+  - "Total reimbursement for Saudi Arabia FY26" → expense_agent
+  - "What is the per-diem rate for Riyadh?" → rag_graph
+  - "Show my last 10 expense claims" → expense_agent
+
+SCORECARD:
+  - "Which employee has highest GTER?" → scorecard_agent
+  - "What is GTER?" / "Define GTER" → rag_graph
+  - "How much data is in scorecard?" → scorecard_agent
+  - "How is utilisation calculated?" → rag_graph
+  - "Show me my scorecard" → scorecard_agent
+  - "Top 5 by ANSR/GTER ratio" → scorecard_agent
+
+Rule of thumb: if the answer requires reading a live PERSONAL or
+TRANSACTIONAL record → specialist agent. If the answer is a
+DEFINITION / POLICY / PROCESS (same for every employee at this rank) →
 rag_graph.
 </critical_disambiguation>
 
@@ -266,6 +317,66 @@ FEW_SHOT_EXAMPLES = """\
 <user>How many sick leaves do I have left this year?</user>
 <decision>lms_agent</decision>
 <reasoning>Personal remaining balance — live HRIS look-up.</reasoning>
+</example>
+
+<example>
+<user>Who has the highest expense in FY26?</user>
+<decision>expense_agent</decision>
+<reasoning>Live expense aggregate ranking — UserExpenses table look-up.</reasoning>
+</example>
+
+<example>
+<user>What is the accommodation cap policy?</user>
+<decision>rag_graph</decision>
+<reasoning>Expense POLICY — knowledge base, not live data.</reasoning>
+</example>
+
+<example>
+<user>Show me my last 10 expense claims</user>
+<decision>expense_agent</decision>
+<reasoning>Personal expense listing — live data scoped to user's GUI.</reasoning>
+</example>
+
+<example>
+<user>Total reimbursement for Saudi Arabia in FY26</user>
+<decision>expense_agent</decision>
+<reasoning>Aggregate over UserExpenses with country + period filter.</reasoning>
+</example>
+
+<example>
+<user>Which employee has the highest GTER?</user>
+<decision>scorecard_agent</decision>
+<reasoning>Rank by KPI — live UserScoreboard query.</reasoning>
+</example>
+
+<example>
+<user>What does GTER stand for?</user>
+<decision>rag_graph</decision>
+<reasoning>KPI DEFINITION — knowledge base, NOT scorecard_agent.</reasoning>
+</example>
+
+<example>
+<user>Show me my scorecard</user>
+<decision>scorecard_agent</decision>
+<reasoning>Personal default scorecard view — scoped to user's GUI.</reasoning>
+</example>
+
+<example>
+<user>How much data is there in scorecard?</user>
+<decision>scorecard_agent</decision>
+<reasoning>Row count over UserScoreboard — live data.</reasoning>
+</example>
+
+<example>
+<user>How is utilisation % calculated?</user>
+<decision>rag_graph</decision>
+<reasoning>Methodology / calculation explanation — knowledge base.</reasoning>
+</example>
+
+<example>
+<user>Top 5 employees by ANSR/GTER ratio</user>
+<decision>scorecard_agent</decision>
+<reasoning>Rank by KPI — live UserScoreboard query.</reasoning>
 </example>
 
 </few_shot_examples>

@@ -59,6 +59,12 @@ class UserChatQuery(BaseModel):
     rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
     rank_name: str = Field(..., min_length=1, max_length=64, description="User's role display name")
 
+    # User's GUI (Global Unique Identifier / Employee ID). MANDATORY.
+    # Used by the Expense and Scorecard agents for row-level security:
+    #   rank_code in {11, 13} → may query any GUI (full access)
+    #   otherwise              → may only query their own GUI (auto-injected)
+    gui: str = Field(..., min_length=1, max_length=64, description="User's GUI / Employee ID")
+
     # Filters
     function: List[str] = []
     sub_function: List[str] = []
@@ -170,6 +176,7 @@ class EditMessageRequest(BaseModel):
     # Rank context (mandatory, same as chat request)
     rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
     rank_name: str = Field(..., min_length=1, max_length=64)
+    gui: str = Field(..., min_length=1, max_length=64, description="User's GUI / Employee ID")
 
 
 

@@ -175,6 +175,8 @@ export interface ChatRequest {
   /** User rank — mandatory. Drives backend personalisation and RBAC. */
   rank_code: number;
   rank_name: string;
+  /** User GUI / Employee ID — mandatory. Drives Expense / Scorecard RLS. */
+  gui: string;
 }
 
 /** Request body for POST /chat/edit. */
@@ -193,6 +195,8 @@ export interface EditRequest {
   /** User rank — mandatory. */
   rank_code: number;
   rank_name: string;
+  /** User GUI / Employee ID — mandatory. */
+  gui: string;
 }
 
 /** Request body for POST /chat/regenerate. */

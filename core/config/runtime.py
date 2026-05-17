@@ -35,3 +35,13 @@ CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
 LMS_DATA_SOURCE_KIND = os.getenv("LMS_DATA_SOURCE_KIND", "http").lower()
 LMS_HTTP_BASE_URL = os.getenv("LMS_HTTP_BASE_URL", "http://10.151.110.162:8087")
 LMS_HTTP_TIMEOUT_SECONDS = float(os.getenv("LMS_HTTP_TIMEOUT_SECONDS", "10"))
+
+# Expense / Scorecard predicate-planner agents:
+#   "stub" — SQLite :memory: loaded from tests/{report,output}.xlsx
+#   "sql"  — pyodbc → Azure SQL (UserExpenses / UserScoreboard tables)
+EXPENSE_DATA_SOURCE_KIND   = os.getenv("EXPENSE_DATA_SOURCE_KIND",   "stub").lower()
+SCORECARD_DATA_SOURCE_KIND = os.getenv("SCORECARD_DATA_SOURCE_KIND", "stub").lower()
+
+# Planner thresholds (shared across analytical agents).
+PLANNER_CONFIDENCE_THRESHOLD = float(os.getenv("PLANNER_CONFIDENCE_THRESHOLD", "0.6"))
+PLANNER_ROW_CAP = int(os.getenv("PLANNER_ROW_CAP", "200"))

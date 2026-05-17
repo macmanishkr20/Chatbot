@@ -18,6 +18,7 @@ export class LoginComponent {
   private readonly router = inject(Router);
 
   email = signal('');
+  gui = signal('1016409');  // demo default — overrides via login form
   error = signal('');
 
   /** Rank selector — defaults to Manager (DEFAULT_RANK). */
@@ -39,8 +40,13 @@ export class LoginComponent {
       this.error.set('Please use your @gds.ey.com email address.');
       return;
     }
+    const gui = this.gui().trim();
+    if (!gui) {
+      this.error.set('Please enter your GUI (Employee ID).');
+      return;
+    }
     const selected = this.ranks.find(r => this.makeKey(r) === this.rankKey()) ?? DEFAULT_RANK;
-    if (this.auth.login(email, selected)) {
+    if (this.auth.login(email, selected, gui)) {
       this.router.navigate(['/chat']);
     }
   }

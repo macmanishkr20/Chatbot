@@ -5,6 +5,8 @@ import { DEFAULT_RANK, RankInfo, RANKS } from '../models/rank.models';
 const AUTH_KEY = 'menabot_user_email';
 const RANK_CODE_KEY = 'menabot_user_rank_code';
 const RANK_NAME_KEY = 'menabot_user_rank_name';
+const GUI_KEY = 'menabot_user_gui';
+const DEFAULT_GUI = '1016409';  // demo user GUI present in tests/output.xlsx
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
@@ -19,6 +21,12 @@ export class AuthService {
    */
   readonly userRankCode = signal<number>(DEFAULT_RANK.rank_code);
   readonly userRankName = signal<string>(DEFAULT_RANK.rank_name);
+
+  /**
+   * Mandatory GUI (Employee ID) — sent on every chat request.
+   * Used by the Expense and Scorecard agents for row-level security.
+   */
+  readonly userGui = signal<string>(DEFAULT_GUI);
 
   /** Full rank entry resolved from current code+name. */
   readonly userRank = computed<RankInfo>(() => {
@@ -50,7 +58,7 @@ export class AuthService {
     this.checkAuth();
   }
 
-  login(email: string, rank?: RankInfo): boolean {
+  login(email: string, rank?: RankInfo, gui?: string): boolean {
     if (!email.endsWith('@gds.ey.com')) return false;
     localStorage.setItem(AUTH_KEY, email);
     this.userEmail.set(email);
@@ -58,6 +66,8 @@ export class AuthService {
     // Persist rank too (defaults to DEFAULT_RANK when caller passes nothing).
     const r = rank ?? DEFAULT_RANK;
     this.setRank(r);
+    // Persist GUI (defaults to DEFAULT_GUI when caller passes nothing).
+    this.setGui((gui ?? DEFAULT_GUI).trim() || DEFAULT_GUI);
     return true;
   }
 
@@ -69,14 +79,22 @@ export class AuthService {
     localStorage.setItem(RANK_NAME_KEY, rank.rank_name);
   }
 
+  /** Update the active GUI and persist it to localStorage. */
+  setGui(gui: string): void {
+    this.userGui.set(gui);
+    localStorage.setItem(GUI_KEY, gui);
+  }
+
   logout(): void {
     localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(RANK_CODE_KEY);
     localStorage.removeItem(RANK_NAME_KEY);
+    localStorage.removeItem(GUI_KEY);
     this.userEmail.set('');
     this.isLoggedIn.set(false);
     this.userRankCode.set(DEFAULT_RANK.rank_code);
     this.userRankName.set(DEFAULT_RANK.rank_name);
+    this.userGui.set(DEFAULT_GUI);
     this.router.navigate(['/login']);
   }
 
@@ -86,7 +104,6 @@ export class AuthService {
       this.userEmail.set(email);
       this.isLoggedIn.set(true);
     }
-    // Hydrate rank from storage if available; otherwise keep DEFAULT_RANK.
     const storedCode = localStorage.getItem(RANK_CODE_KEY);
     const storedName = localStorage.getItem(RANK_NAME_KEY);
     if (storedCode && storedName) {
@@ -95,6 +112,10 @@ export class AuthService {
         this.userRankCode.set(code);
         this.userRankName.set(storedName);
       }
+    }
+    const storedGui = localStorage.getItem(GUI_KEY);
+    if (storedGui) {
+      this.userGui.set(storedGui);
     }
   }
 }
