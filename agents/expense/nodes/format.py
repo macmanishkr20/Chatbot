@@ -127,6 +127,6 @@ async def expense_format_node(state: RAGState) -> dict:
         return {
             "ai_content": ai_content,
             "is_free_form": True,
-            "messages": [AIMessage(content=ai_content)],
+            "messages": [response],
             "events": [],
         }

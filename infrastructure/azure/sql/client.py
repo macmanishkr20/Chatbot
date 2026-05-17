@@ -677,4 +677,5 @@ def _row_to_message_dict(row: dict, query=None) -> dict:
         "message_id": row.get("MessageId") or "",
         "rank_code": (query.rank_code if query else 0),
         "rank_name": (query.rank_name if query else "unknown"),
+        "gui": (query.gui if query else "UNKNOWN"),
     }

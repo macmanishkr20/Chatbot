@@ -183,6 +183,20 @@ async def _stream_graph(state: dict, config: dict, thread_id: str):
                             "node": "generate",
                         })
 
+                # ── Agent format node completion (LMS, Expense, Scorecard) ──
+                # These nodes stream tokens via messages mode (they are in
+                # STREAMABLE_NODES). On completion, send content_final so the
+                # frontend replaces streamed tokens with the final version,
+                # preventing duplication with the ai_content in the final event.
+                if node in ("lms_format", "expense_format", "scorecard_format"):
+                    fmt_content = node_data.get("ai_content")
+                    if fmt_content:
+                        yield sse_format({
+                            "type": "content_final",
+                            "content": fmt_content,
+                            "node": node,
+                        })
+
                 # ── Multi-function search: thought event for deep search ──
                 # Status messages are delivered in real-time via the
                 # asyncio.Queue side-channel (drained at the top of this loop).

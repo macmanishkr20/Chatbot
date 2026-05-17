@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from agents._base.context_manager import trim_messages_to_budget
 from api import _runtime
@@ -89,6 +89,9 @@ async def chat_api(
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
         current_state["content_type"] = query.content_type or "qa_pair"
+        current_state["rank_code"] = query.rank_code
+        current_state["rank_name"] = query.rank_name
+        current_state["gui"] = query.gui
 
         # If the previous turn failed to find an answer (error_info set or
         # AI responded with "select the specific function"), clear the stale
@@ -331,14 +334,14 @@ async def edit_message(
         )
 
     if body.message_index < 0 or body.message_index >= len(user_msg_positions):
-        raise HTTPException(
-            status_code=400,
-            detail=f"message_index {body.message_index} out of range "
-                   f"(conversation has {len(user_msg_positions)} user messages)",
-        )
+        # Checkpoint may have been pruned — clamp to the last user message
+        # so the user can still edit their most recent turn.
+        edit_index = len(user_msg_positions) - 1
+    else:
+        edit_index = body.message_index
 
     # The absolute position in the messages list of the message being edited
-    edit_pos = user_msg_positions[body.message_index]
+    edit_pos = user_msg_positions[edit_index]
 
     # ── Branch: keep messages BEFORE the edit point, discard the rest ──
     # Use RemoveMessage to tell the add_messages reducer to drop them.

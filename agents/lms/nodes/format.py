@@ -116,7 +116,7 @@ async def lms_format_node(state: RAGState) -> dict:
         return {
             "ai_content": ai_content,
             "is_free_form": True,
-            "messages": [AIMessage(content=ai_content)],
+            "messages": [response],
             # Clear events so the response renders without a citations block
             # (LMS provenance is in the answer text itself).
             "events": [],

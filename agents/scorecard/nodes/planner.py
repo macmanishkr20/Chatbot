@@ -63,8 +63,9 @@ def _low_confidence_plan() -> QueryPlan:
         select_columns=[],
         confidence=0.0,
         clarification_question=(
-            "I can show your scorecard KPIs, rank employees by a metric, "
-            "or summarise totals. What would you like to see?"
+            "That doesn't seem like a scorecard question. I can show your "
+            "scorecard KPIs, rank employees by a metric, or summarise "
+            "totals — would you like one of those?"
         ),
     )
 
@@ -102,15 +103,13 @@ async def scorecard_planner_node(state: RAGState) -> dict[str, Any]:
             plan = _low_confidence_plan()
         else:
             try:
-                system_prompt = SCORECARD_PLANNER_SYSTEM_PROMPT.format(
-                    schema_block=SCORECARD_SCHEMA.render_for_prompt(),
-                )
+                schema_block = SCORECARD_SCHEMA.render_for_prompt()
                 prompt = ChatPromptTemplate.from_messages([
-                    ("system", system_prompt),
+                    ("system", SCORECARD_PLANNER_SYSTEM_PROMPT),
                     ("human", scorecard_planner_user_template(user_input)),
                 ])
                 chain = prompt | _get_planner_llm().with_structured_output(QueryPlan)
-                plan = await chain.ainvoke({})
+                plan = await chain.ainvoke({"schema_block": schema_block})
             except Exception as exc:
                 logger.warning("scorecard planner LLM failed: %s — clarifying", exc)
                 plan = _low_confidence_plan()
