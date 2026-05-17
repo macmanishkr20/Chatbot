@@ -45,6 +45,8 @@ def _build_app_query(state: RAGState) -> ApplicationChatQuery:
         source_url=state.get("source_url", []),
         start_date=state.get("start_date", ""),
         end_date=state.get("end_date", ""),
+        rank_code=state.get("rank_code"),
+        rank_name=state.get("rank_name"),
     )
 
 

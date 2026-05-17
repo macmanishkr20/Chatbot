@@ -32,6 +32,6 @@ CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
 #   "sql"  — direct SQL queries (when downstream is a DB)
 #
 # Adding a new backend = adding one file under agents/<agent>/data_sources/.
-LMS_DATA_SOURCE_KIND = os.getenv("LMS_DATA_SOURCE_KIND", "stub").lower()
-LMS_HTTP_BASE_URL = os.getenv("LMS_HTTP_BASE_URL", "")
+LMS_DATA_SOURCE_KIND = os.getenv("LMS_DATA_SOURCE_KIND", "http").lower()
+LMS_HTTP_BASE_URL = os.getenv("LMS_HTTP_BASE_URL", "http://10.151.110.162:8087")
 LMS_HTTP_TIMEOUT_SECONDS = float(os.getenv("LMS_HTTP_TIMEOUT_SECONDS", "10"))
