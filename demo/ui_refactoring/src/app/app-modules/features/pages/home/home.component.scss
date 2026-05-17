@@ -39,18 +39,20 @@ h1 {
     background-color: #fff;
     color: #212529;
     transition: color 0.2s ease, background 0.2s ease;
-    --gb-opacity: 0;
-    --gb-radius: 999px;
+
     &:hover,
     &:focus,
     &:focus-visible,
     &:active {
         color: #fff !important;
-        --gb-opacity: 0.55;
-        --gb-radius: 5px;
         border: 1px solid transparent !important;
         background:
-            linear-gradient(#1a1a24, #1a1a24) padding-box;
+            linear-gradient(#1a1a24, #1a1a24) padding-box,
+            linear-gradient(135deg,
+                rgba(255, 230, 0, 0.35) 0%,
+                rgba(255, 230, 0, 0.35) 33%,
+                rgba(180, 0, 255, 0.35) 66%,
+                rgba(70, 150, 255, 0.35) 100%) border-box !important;
         box-shadow: none !important;
     }
 }

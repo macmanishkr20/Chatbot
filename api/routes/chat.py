@@ -8,7 +8,7 @@ import logging
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
 from agents._base.context_manager import trim_messages_to_budget
 from api import _runtime
@@ -26,6 +26,7 @@ from api.schemas import (
     UserChatQuery,
 )
 from api.streaming import _stream_graph
+from core.rbac import resolve_rank_strict
 from infrastructure.azure.sql.client import SQLChatClient
 from infrastructure.cancel_signals.backend import set_cancel
 
@@ -88,6 +89,9 @@ async def chat_api(
         current_state["is_free_form"] = query.is_free_form
         current_state["input_type"] = query.input_type.value
         current_state["content_type"] = query.content_type or "qa_pair"
+        current_state["rank_code"] = query.rank_code
+        current_state["rank_name"] = query.rank_name
+        current_state["gui"] = query.gui
 
         # If the previous turn failed to find an answer (error_info set or
         # AI responded with "select the specific function"), clear the stale
@@ -241,6 +245,12 @@ async def edit_message(
     _validate_user(body.user_id)
     new_input = _sanitize_input(body.new_input)
 
+    # Validate rank early — reject before any graph work
+    try:
+        edit_rank_info = resolve_rank_strict(body.rank_code, body.rank_name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     await _init_graph()
 
     thread_id, config = _build_stream_config(body.user_id, body.chat_session_id)
@@ -273,6 +283,11 @@ async def edit_message(
             "end_date": body.end_date,
             "preferred_language": body.preferred_language,
             "content_type": body.content_type or "qa_pair",
+            # Rank context (mandatory)
+            "rank_code": body.rank_code,
+            "rank_name": body.rank_name,
+            "rank_info": edit_rank_info,
+            "gui": body.gui,
             # Ensure transient fields are reset just like a normal graph entry.
             "events": [],
             "error_info": None,
@@ -319,14 +334,14 @@ async def edit_message(
         )
 
     if body.message_index < 0 or body.message_index >= len(user_msg_positions):
-        raise HTTPException(
-            status_code=400,
-            detail=f"message_index {body.message_index} out of range "
-                   f"(conversation has {len(user_msg_positions)} user messages)",
-        )
+        # Checkpoint may have been pruned — clamp to the last user message
+        # so the user can still edit their most recent turn.
+        edit_index = len(user_msg_positions) - 1
+    else:
+        edit_index = body.message_index
 
     # The absolute position in the messages list of the message being edited
-    edit_pos = user_msg_positions[body.message_index]
+    edit_pos = user_msg_positions[edit_index]
 
     # ── Branch: keep messages BEFORE the edit point, discard the rest ──
     # Use RemoveMessage to tell the add_messages reducer to drop them.
@@ -357,6 +372,10 @@ async def edit_message(
         "preferred_language": body.preferred_language,
         "content_type": body.content_type or "qa_pair",
         "input_type": "ask",
+        # Rank context (mandatory)
+        "rank_code": body.rank_code,
+        "rank_name": body.rank_name,
+        "rank_info": edit_rank_info,
         # Reset all transient fields
         "events": [],
         "error_info": None,

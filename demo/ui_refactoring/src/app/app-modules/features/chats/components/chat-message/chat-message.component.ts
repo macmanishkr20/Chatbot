@@ -222,8 +222,7 @@ export class ChatMessageComponent implements OnInit {
 
   copyContent() {
     const text = this.message.content ?? this.message.answer ?? '';
-    const replacedText = text.replace(/Citations:/gi, 'Sources:');
-    navigator.clipboard.writeText(replacedText);
+    navigator.clipboard.writeText(text);
     this.showCopyTooltip = true;
     setTimeout(() => (this.showCopyTooltip = false), 2000);
     this.copy.emit(this.message);

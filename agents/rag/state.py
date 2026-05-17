@@ -35,6 +35,15 @@ class RAGState(TypedDict, total=False):
     preferred_language: str | None
     content_type: str  # "document" (default) | "qa_pair" — search index content_type filter
 
+    # ── RBAC / Rank personalisation ──
+    # rank_code & rank_name come directly from the (now mandatory) request fields.
+    # rank_info is the canonical dict resolved via core.rbac.resolve_rank_strict —
+    # used by the generate node to personalise the system prompt and by the
+    # supervisor's _get_next to gate access to non-RAG agents.
+    rank_code: int | None
+    rank_name: str | None
+    rank_info: dict | None
+
     # ── Document → QA fallback (graph-level retry) ──
     needs_doc_fallback: bool       # trigger retry with qa_pair after no-answer generation
     doc_fallback_attempted: bool   # prevent infinite fallback loop
@@ -88,3 +97,27 @@ class RAGState(TypedDict, total=False):
     plan_type: str | None          # "simple" | "complex"
     sub_queries: list | None       # [{"function": str, "query": str}] from planner
     parallel_results: list | None  # [{"function": str, "events": list}] from parallel search
+
+    # ── Multi-agent orchestration (LMS / Expense / Scorecard) ──
+    # All fields are optional; absence means "this agent did not run".
+    # Each agent stores its raw tool result here for the format node and
+    # for downstream observability. The shape is agent-specific dict.
+    lms_result: dict | None
+    lms_sub_intent: str | None     # "balance" | "applications" | "approvals" | "unknown"
+
+    # ── Expense & Scorecard (predicate-planner agents) ──
+    # User's GUI (Employee ID); from frontend, mandatory.
+    # Drives row-level security: non-admin ranks see only their own GUI.
+    gui: str | None
+
+    # Each agent stashes its compiled SQL, params, rowcount + raw rows for
+    # the format node + audit telemetry.
+    expense_result: dict | None
+    expense_plan: dict | None       # serialised QueryPlan
+    scorecard_result: dict | None
+    scorecard_plan: dict | None     # serialised QueryPlan
+
+    # ── RBAC denial UX ──
+    # Set by supervisor._get_next when a route is gated and falls back to
+    # RESPOND, so the next supervisor turn can compose a polite denial.
+    access_denied_reason: str | None

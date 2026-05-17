@@ -3,22 +3,21 @@
 .chips-reason {
   margin: 0 0 6px 4px;
   font-size: 0.7rem;
-  // color: rgba(255, 230, 0, 0.85);
+  color: rgba(255, 230, 0, 0.85);
 }
 
 .chips-row {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
   gap: 6px;
   padding: 4px 0;
   transition: filter 0.25s ease;
 
-  // &.highlighted {
-  //   .chip {
-  //     animation: chip-shimmer 2s ease-in-out infinite;
-  //   }
-  // }
+  &.highlighted {
+    .chip {
+      animation: chip-shimmer 2s ease-in-out infinite;
+    }
+  }
 }
 
 .chip {
@@ -26,53 +25,36 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 5px;
+  border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
-  background: transparent;
+  background: rgba(46, 46, 56, 0.6);
   color: $app-font-color;
   font-size: 0.7rem;
   cursor: pointer;
-  // Match the chat-gradient-border pseudo to the pill shape and hide it by default.
-  --gb-radius: 5px;
-  --gb-opacity: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s, --gb-opacity 0.15s;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 
   .chip-icon i {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.7);
   }
 
-  &.disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
   &:hover {
-    --gb-opacity: 0.85;
-    border-color: transparent;
+    background: rgba(255, 230, 0, 0.1);
+    border-color: rgba(255, 230, 0, 0.5);
 
     .chip-icon i {
-      color: $app-font-color;
+      color: $primary-color;
     }
   }
 
   &.selected {
-    --gb-opacity: 1;
-    border-color: transparent;
-    color: $app-font-color;
+    background: $primary-color;
+    color: #1a1a24;
+    border-color: $primary-color;
 
     .chip-icon i {
-      color: $app-font-color;
+      color: #1a1a24;
     }
-  }
-  // Suppress browser/native focus & active backgrounds.
-  &:focus,
-  &:focus-visible,
-  &:active {
-    outline: none;
-    background: transparent;
-    border-color: transparent;
-    box-shadow: none;
   }
 }
 

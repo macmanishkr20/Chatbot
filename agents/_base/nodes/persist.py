@@ -45,6 +45,9 @@ def _build_app_query(state: RAGState) -> ApplicationChatQuery:
         source_url=state.get("source_url", []),
         start_date=state.get("start_date", ""),
         end_date=state.get("end_date", ""),
+        rank_code=state.get("rank_code") or 0,
+        rank_name=state.get("rank_name") or "Staff",
+        gui=state.get("gui") or "UNKNOWN",
     )
 
 
@@ -204,7 +207,13 @@ async def persist_node(state: RAGState) -> dict:
         # Save AI content to SQL
         ai_content = state.get("ai_content") or ""
         if ai_content:
-            await _save_ai_content(ai_content, app_query, scc)
+            try:
+                await _save_ai_content(ai_content, app_query, scc)
+            except Exception as e:
+                logger.error(
+                    "persist_node: _save_ai_content failed (id=%s): %s",
+                    app_query.id, e, exc_info=True,
+                )
 
         # ── Fire-and-forget title generation for new conversations ──
         conversation_title = None

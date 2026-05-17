@@ -1,7 +1,7 @@
 export enum FeedbackRating {
     None = 0,
     Positive = 1,
-    Negative = -1,
+    Negative = 2,
     Neutral = 3
 }
 

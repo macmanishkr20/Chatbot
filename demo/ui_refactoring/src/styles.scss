@@ -15,34 +15,6 @@ html, body {
   margin: 0;
 }
 
-// ---------------------------------------------------------------------------
-// Reusable gradient border (pink → magenta → orange).
-// Apply `.chat-gradient-border` to any element to get a thin, soft gradient outline.
-// Customize per element via CSS vars:
-//   --gb-radius   : border-radius (default 40px)
-//   --gb-thickness: border thickness (default 0.5px)
-//   --gb-opacity  : opacity (default 0.55)
-//   --gb-gradient : gradient (default pink→magenta→orange)
-// ---------------------------------------------------------------------------
-.chat-gradient-border {
-  position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    border-radius: var(--gb-radius, 40px);
-    padding: var(--gb-thickness, 0.5px);
-    opacity: var(--gb-opacity, 0.55);
-    background: var(--gb-gradient, linear-gradient(90deg, #ff3cac 0%, #c850c0 50%, #ffb347 100%));
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    mask-composite: exclude;
-    pointer-events: none;
-  }
-}
-
 
 // ---------------------------------------------------------------------------
 // Font-weight enforcement — overrides Bootstrap defaults app-wide.

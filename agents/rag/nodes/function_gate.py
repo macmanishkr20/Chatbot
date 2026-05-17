@@ -51,6 +51,13 @@ _KNOWN_TERMS: dict[str, str] = {
     "dnata": "TME",
     # Talent — named system
     "successfactors": "Talent",
+    "paternity": "Talent",
+    "maternity": "Talent",
+    "parental": "Talent",
+    "family leave": "Talent",
+    "learning badge": "Talent",
+    "Leave policy": "Talent",
+    "Leave": "Talent",
 }
 
 

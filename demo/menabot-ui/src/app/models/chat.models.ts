@@ -172,6 +172,11 @@ export interface ChatRequest {
   end_date: string;
   preferred_language?: string;
   content_type?: 'qa_pair' | 'document';
+  /** User rank — mandatory. Drives backend personalisation and RBAC. */
+  rank_code: number;
+  rank_name: string;
+  /** User GUI / Employee ID — mandatory. Drives Expense / Scorecard RLS. */
+  gui: string;
 }
 
 /** Request body for POST /chat/edit. */
@@ -187,6 +192,11 @@ export interface EditRequest {
   start_date: string;
   end_date: string;
   content_type?: 'qa_pair' | 'document';
+  /** User rank — mandatory. */
+  rank_code: number;
+  rank_name: string;
+  /** User GUI / Employee ID — mandatory. */
+  gui: string;
 }
 
 /** Request body for POST /chat/regenerate. */

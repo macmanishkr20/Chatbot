@@ -19,9 +19,9 @@ import {
 } from '../models/chat.model';
 import { ConversationsVM } from './../models/conversation';
 import { ChannelType } from '../../../../_shared/constants/channel-type';
+import { DEFAULT_RANK, RankInfo, RANKS } from '../../../../_shared/constants/rank';
 import { FeedbackDTO, FeedbackResultVM } from '../models/message-feedabck';
 import { ServiceHierarchyVM } from '../models/service-hierarchy';
-import { SafeLogger } from '../../../../_shared/_service/safe-logger';
 
 /**
  * Central chat state manager.
@@ -104,6 +104,45 @@ export class ChatStore {
     const user = this.authService.user;
     return (user && user.email) ? user.email : 'demo.user@gds.ey.com';
   });
+
+  /**
+   * Mandatory rank fields — sent on every chat request.
+   *
+   * For a real deployment, populate from an SSO claim or HRIS lookup and
+   * surface via AuthUser. In demo mode we expose mutators below so the UI
+   * (or dev tools) can pick a rank.
+   */
+  readonly userRankCode = signal<number>(DEFAULT_RANK.rank_code);
+  readonly userRankName = signal<string>(DEFAULT_RANK.rank_name);
+
+  /** Full RankInfo resolved from current code+name, with safe fallbacks. */
+  readonly userRank = computed<RankInfo>(() => {
+    const code = this.userRankCode();
+    const name = this.userRankName();
+    return (
+      RANKS.find(r => r.rank_code === code && r.rank_name === name) ??
+      RANKS.find(r => r.rank_code === code) ??
+      DEFAULT_RANK
+    );
+  });
+
+  /**
+   * Mandatory GUI / Employee ID — sent on every chat request.
+   * Drives row-level security on Expense and Scorecard agents.
+   * For a real deployment, populate from an SSO claim or HRIS lookup.
+   */
+  readonly userGui = signal<string>('1016409');
+
+  /** Update the active rank (demo helper — for UI rank-switcher). */
+  setUserRank(rank: RankInfo): void {
+    this.userRankCode.set(rank.rank_code);
+    this.userRankName.set(rank.rank_name);
+  }
+
+  /** Update the active GUI. */
+  setUserGui(gui: string): void {
+    this.userGui.set(gui);
+  }
 
   /** Number of user messages (for edit indexing). */
   readonly userMessageCount = computed(() =>
@@ -213,6 +252,10 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
+      // Mandatory rank + GUI context — backend rejects requests without these
+      rank_code: this.userRankCode(),
+      rank_name: this.userRankName(),
+      gui: this.userGui(),
     });
   }
 
@@ -254,6 +297,10 @@ export class ChatStore {
       start_date: '',
       end_date: '',
       content_type: 'document',
+      // Mandatory rank + GUI context — backend rejects requests without these
+      rank_code: this.userRankCode(),
+      rank_name: this.userRankName(),
+      gui: this.userGui(),
     });
   }
 
@@ -323,8 +370,7 @@ export class ChatStore {
       // FastAPI returns the full list — no further pages.
       this.hasMoreConversations.set(false);
     } catch (err) {
-      if (this.handlePermissionDenied(err)) return;
-      SafeLogger.error('Failed to load conversations');
+      console.error('Failed to load conversations:', err);
     } finally {
       this.loadingConversations.set(false);
       this.setIsAPILoading(false);
@@ -413,8 +459,7 @@ export class ChatStore {
       this.messages.set(msgs);
       this.hasMoreMessages.set(false);
     } catch (err) {
-      if (this.handlePermissionDenied(err)) return;
-      SafeLogger.error('Failed to load messages');
+      console.error('Failed to load messages:', err);
       this.error.set('Failed to load conversation');
       this.clearMessages();
     } finally {
@@ -437,10 +482,7 @@ export class ChatStore {
           this.router.navigate(['/features/page/chats']);
         }
       },
-      error: (err) => {
-        if (this.handlePermissionDenied(err)) return;
-        SafeLogger.error('Failed to delete conversation');
-      },
+      error: (err) => console.error('Failed to delete conversation:', err),
     });
   }
 
@@ -455,25 +497,7 @@ export class ChatStore {
           this.conversationTitle.set(newTitle);
         }
       },
-      error: (err) => {
-        if (this.handlePermissionDenied(err)) return;
-        SafeLogger.error('Failed to rename conversation');
-      },
-    });
-  }
-
-  /** Pin or unpin a conversation. */
-  togglePinConversation(conv: ConversationsVM, isPinned: boolean): void {
-    this.chatService.togglePinConversation(this.userId(), conv.id, isPinned).subscribe({
-      next: () => {
-        this.chatConversations.update(list =>
-          list.map(c => (c.id === conv.id ? { ...c, isPinned } : c)),
-        );
-      },
-      error: (err) => {
-        if (this.handlePermissionDenied(err)) return;
-        SafeLogger.error('Failed to pin/unpin conversation');
-      },
+      error: (err) => console.error('Failed to rename conversation:', err),
     });
   }
 
@@ -488,8 +512,8 @@ export class ChatStore {
         this.serviceHierarchies.set(response.result);
         this.hierarchiesLoaded = true;
       }
-    } catch (_error) {
-      SafeLogger.error('Failed to load service hierarchies');
+    } catch (error) {
+      console.error('Failed to load service hierarchies', error);
     }
   }
 
@@ -508,29 +532,24 @@ export class ChatStore {
       feedback.rating === FeedbackRating.Positive ? 1 :
       feedback.rating === FeedbackRating.Negative ? -1 : 0;
 
-    // Commented out for now to avoid confusion — the backend doesn't parse these yet and it's more intuitive to keep them separate in the UI anyway. Can re-enable if we add backend support to parse out and store these fields separately.
-    // const extras: string[] = [];
-    // if (feedback.category) extras.push(`category=${feedback.category}`);
-    // if (feedback.functionId) extras.push(`functionId=${feedback.functionId}`);
-    // if (feedback.subFunctionId) extras.push(`subFunctionId=${feedback.subFunctionId}`);
-    // if (feedback.serviceId) extras.push(`serviceId=${feedback.serviceId}`);
+    const extras: string[] = [];
+    if (feedback.category) extras.push(`category=${feedback.category}`);
+    if (feedback.functionId) extras.push(`functionId=${feedback.functionId}`);
+    if (feedback.subFunctionId) extras.push(`subFunctionId=${feedback.subFunctionId}`);
+    if (feedback.serviceId) extras.push(`serviceId=${feedback.serviceId}`);
 
     const baseComment = (feedback.comments ?? '').trim();
-    // const tail = extras.length ? ` [${extras.join(', ')}]` : '';
-    // const combinedComment = (baseComment + tail).trim();
+    const tail = extras.length ? ` [${extras.join(', ')}]` : '';
+    const combinedComment = (baseComment + tail).trim();
 
     try {
       const res = await firstValueFrom(this.chatService.submitFeedback({
         user_id: email,
         message_id: feedback.messageId,
         rating: ratingNumeric,
-        comments: baseComment || undefined,
+        comments: combinedComment || undefined,
         created_by: email,
         modified_by: email,
-        function_id: feedback.functionId,
-        sub_function_id: feedback.subFunctionId,
-        service_id: feedback.serviceId,
-        category: feedback.category,
       }));
       const ok = !!res && res.status !== 'error';
       if (ok) {
@@ -553,8 +572,8 @@ export class ChatStore {
         );
         this.feedbackResult.set({ success: true, message: 'Thank you for your feedback!' });
       }
-    } catch (_err) {
-      SafeLogger.error('Failed to post feedback');
+    } catch (err) {
+      console.error('Failed to post feedback', err);
       this.feedbackResult.set({ success: false, message: 'Failed to submit feedback. Please try again.' });
     }
   }
@@ -610,8 +629,8 @@ export class ChatStore {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         // user cancelled — expected
-      } else if (!this.handlePermissionDenied(err)) {
-        SafeLogger.error('Stream error');
+      } else {
+        console.error('Stream error:', err);
         this.error.set('Failed to get response. Please try again.');
       }
     } finally {
@@ -759,7 +778,7 @@ export class ChatStore {
           msgs.map(m => {
             if (m.trackId !== assistantTrackId) return m;
             const steps = (m.thinkingSteps ?? []).map(s => ({ ...s, state: 'done' as const }));
-            let content = (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
+            let content = m.content || (typeof final.ai_content === 'string' ? final.ai_content : (m.content ?? ''));
 
             const hasNoAnswer =
               (content ?? '').trim().startsWith('[NO_ANSWER]') ||
@@ -856,15 +875,6 @@ export class ChatStore {
     this.pendingApiRequests.update(count => isLoading ? count + 1 : Math.max(0, count - 1));
   }
 
-  private handlePermissionDenied(err: unknown): boolean {
-    const status = (err as { status?: number })?.status;
-    if (status === 401 || status === 403) {
-      void this.router.navigate(['/unauthorised']);
-      return true;
-    }
-    return false;
-  }
-
   private clearMessages(): void {
     this.messages.set([]);
     this.hasMoreMessages.set(false);
@@ -887,7 +897,6 @@ export class ChatStore {
       createdAt: stored.CreatedAt,
       modifiedAt: stored.ModifiedAt,
       chatSessionId: stored.ChatSessionId ?? null,
-      isPinned: stored.IsPinned ?? false,
     };
   }
 
@@ -948,25 +957,8 @@ export class ChatStore {
       }
 
       if (indexes.length > 0) {
-        // Backend emits two line shapes:
-        //   1. "<url>"                                  (qa_pair)
-        //   2. "<file> (page N,M) — <url>"              (document with url)
-        //   3. "<file> (page N)"                        (document, no url)
-        // Split on em dash (or " - ") to separate label from URL.
-        let source = rawSource;
-        let label: string | undefined;
-        let isUrl = /^https?:\/\//.test(rawSource);
-
-        if (!isUrl) {
-          const sepMatch = rawSource.match(/^(.*?)\s+(?:—|–|-{1,2})\s+(https?:\/\/\S+)$/);
-          if (sepMatch) {
-            label = sepMatch[1].trim();
-            source = sepMatch[2].trim();
-            isUrl = true;
-          }
-        }
-
-        citations.push({ indexes, source, isUrl, label });
+        const isUrl = /^https?:\/\//.test(rawSource);
+        citations.push({ indexes, source: rawSource, isUrl });
       }
     }
     return citations;

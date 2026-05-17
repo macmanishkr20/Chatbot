@@ -7,7 +7,6 @@ import { AuthUser, Claim } from '../messaging-service/auth-user';
 import { environment } from '../../../environments/environment';
 import { ServiceResult } from '../models/service-result';
 import { MenuItem } from '../models/menu-item';
-import { SafeLogger } from './safe-logger';
 
 const readFile = (blob: Blob, reader: FileReader = new FileReader()) =>
   new Observable((obs) => {
@@ -41,14 +40,14 @@ export class LoginService {
 
   validate(): Observable<LoginResult> {
     return this.authService.aadPic().pipe(
-      catchError((_err) => {
-        SafeLogger.error('Failed to fetch AAD profile picture');
+      catchError((err) => {
+        console.error(err);
         return of(new Blob());
       }),
       mergeMap((aadMe) => {
         return readFile(aadMe).pipe(
-          catchError((_err) => {
-            SafeLogger.error('Failed to read AAD profile picture');
+          catchError((err) => {
+            console.error(err);
             return of(undefined);
           }),
           mergeMap((u) => {

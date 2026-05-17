@@ -2,7 +2,6 @@ import { Routes } from '@angular/router';
 import { SigninOidcComponent } from './_shared/components/signin-oidc/signin-oidc.component';
 import { PermissionDeniedComponent } from './_shared/components/permission-denied/permission-denied.component';
 import { NotFoundComponent } from './_shared/components/not-found/not-found.component';
-import { UnAuthorisedComponent } from './_shared/components/un-authorised/un-authorised.component';
 import { BeforeLoginComponent } from './app-layout/before-login/before-login.component';
 export const routes: Routes = [
   { path: '', component: SigninOidcComponent },
@@ -19,7 +18,6 @@ export const routes: Routes = [
       .then(m => m.FEATURE_ROUTES)
   },
   { path: 'denied', component: PermissionDeniedComponent },
-  { path: 'unauthorised', component: UnAuthorisedComponent },
   { path: 'notfound', component: NotFoundComponent },
   { path: '**', redirectTo: 'notfound' },
 ];

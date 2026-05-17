@@ -21,3 +21,27 @@ MAX_INPUT_LENGTH = int(os.getenv("MAX_INPUT_LENGTH", "10000"))
 CANCEL_SIGNAL_BACKEND = os.getenv("CANCEL_SIGNAL_BACKEND", "memory").lower()
 CANCEL_SIGNAL_REDIS_URL = os.getenv("CANCEL_SIGNAL_REDIS_URL", "")
 CANCEL_SIGNAL_TTL_SECONDS = int(os.getenv("CANCEL_SIGNAL_TTL_SECONDS", "300"))
+
+# ── Per-agent data-source selection ─────────────────────────────────────────
+# Each data agent (LMS, future Expense, Scorecard) talks to a downstream
+# system through a pluggable DataSource. The same agent code works for any
+# backend — choosing one is a config decision.
+#
+#   "stub" — canned in-memory responses (default; safe for dev / CI)
+#   "http" — HTTP REST API client (production)
+#   "sql"  — direct SQL queries (when downstream is a DB)
+#
+# Adding a new backend = adding one file under agents/<agent>/data_sources/.
+LMS_DATA_SOURCE_KIND = os.getenv("LMS_DATA_SOURCE_KIND", "http").lower()
+LMS_HTTP_BASE_URL = os.getenv("LMS_HTTP_BASE_URL", "http://10.151.110.162:8087")
+LMS_HTTP_TIMEOUT_SECONDS = float(os.getenv("LMS_HTTP_TIMEOUT_SECONDS", "10"))
+
+# Expense / Scorecard predicate-planner agents:
+#   "stub" — SQLite :memory: loaded from tests/{report,output}.xlsx
+#   "sql"  — pyodbc → Azure SQL (UserExpenses / UserScoreboard tables)
+EXPENSE_DATA_SOURCE_KIND   = os.getenv("EXPENSE_DATA_SOURCE_KIND",   "stub").lower()
+SCORECARD_DATA_SOURCE_KIND = os.getenv("SCORECARD_DATA_SOURCE_KIND", "stub").lower()
+
+# Planner thresholds (shared across analytical agents).
+PLANNER_CONFIDENCE_THRESHOLD = float(os.getenv("PLANNER_CONFIDENCE_THRESHOLD", "0.6"))
+PLANNER_ROW_CAP = int(os.getenv("PLANNER_ROW_CAP", "200"))

@@ -18,8 +18,6 @@ import {
 } from '../models/chat.model';
 import { AuthService } from '../../../../_shared/messaging-service/auth.service';
 import { AuthUser } from '../../../../_shared/messaging-service/auth-user';
-import { NgbModal } from '@ng-bootstrap/ng-bootstrap';
-import { SessionTimeoutComponent } from '../../../../_shared/components/session-timeout/session-timeout.component';
 
 /**
  * Low-level chat API service.
@@ -34,7 +32,6 @@ import { SessionTimeoutComponent } from '../../../../_shared/components/session-
  *   - DELETE /api/Chat/conversations/{chatId}
  *   - PATCH  /api/Chat/conversations/{chatId}/rename
  *   - POST /api/Feedback/post-feedback
- *   - PATCH /api/Chat/conversations/{chatId}/toggle-pin
  */
 @Injectable({ providedIn: 'root' })
 export class ChatService {
@@ -44,8 +41,6 @@ export class ChatService {
   private readonly baseUrl = `${environment.apiUrl}api/Chat`;
   private readonly feedbackUrl = `${environment.apiUrl}api/Feedback`;
   private readonly hierarchyUrl = `${environment.apiUrl}api/hierarchy`;
-
-  private readonly modalService = inject(NgbModal);
 
   // ── SSE Streaming (POST /api/Chat/stream, /api/Chat/edit, /api/Chat/regenerate) ──
 
@@ -100,13 +95,6 @@ export class ChatService {
     return this.http.get<{ status: string; engine: string }>(`${this.baseUrl}/health`);
   }
 
-  togglePinConversation(_userId: string, chatId: number, isPinned: boolean): Observable<{ status: string }> {
-    return this.http.patch<{ status: string }>(
-      `${this.baseUrl}/conversations/${chatId}/toggle-pin`,
-      { user_id: _userId, chat_id: chatId, is_pinned: isPinned }
-    );
-  }
-
   // ── Existing ui_refactoring extension: feedback service hierarchy lookup ──
 
   getServiceHierarchies(): Observable<ServiceResult<ServiceHierarchyVM[]>> {
@@ -136,10 +124,7 @@ export class ChatService {
     });
 
     if (!response.ok) {
-      const error = new Error(`HTTP ${response.status}: ${response.statusText}`) as Error & { status?: number };
-      error.status = response.status;
-      this.checkSessionStatus(response);
-      throw error;
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     const reader = response.body?.getReader();
@@ -184,18 +169,6 @@ export class ChatService {
       }
     } finally {
       reader.releaseLock();
-    }
-  }
-
-  private checkSessionStatus(response: Response) {
-    if (response.status === 423) {
-      const modalRef = this.modalService.open(SessionTimeoutComponent,
-        { ariaLabelledBy: 'modal-basic-title', backdrop: 'static' });
-
-      modalRef.componentInstance.messageHeader = 'Session Locked';
-      modalRef.componentInstance.message = 'Multiple sessions are active, please relogin.';
-
-      throw new Error('Session locked due to multiple active sessions.');
     }
   }
 

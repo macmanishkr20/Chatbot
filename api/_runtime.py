@@ -34,7 +34,10 @@ callback_handler = (
 # ── Streaming constants ──
 # Nodes whose LLM token output is meaningful prose for the end user.
 # Supervisor is intentionally excluded — its tokens are JSON fragments.
-STREAMABLE_NODES: frozenset[str] = frozenset({"generate"})
+# lms_format streams the LMS agent's final answer to the user.
+STREAMABLE_NODES: frozenset[str] = frozenset({
+    "generate", "lms_format", "expense_format", "scorecard_format",
+})
 
 # Chain-of-thought step labels shown in the UI
 NODE_THOUGHT: dict[str, dict[str, str]] = {
@@ -115,5 +118,62 @@ NODE_THOUGHT: dict[str, dict[str, str]] = {
         "message": "Condensing conversation…",
         "group": "response",
         "icon": "compress",
+    },
+    # ── LMS agent ──
+    "lms_classify": {
+        "display": "Leave Intent",
+        "message": "Identifying your leave request…",
+        "group": "understanding",
+        "icon": "route",
+    },
+    "lms_fetch": {
+        "display": "HRIS Lookup",
+        "message": "Fetching your leave data…",
+        "group": "retrieval",
+        "icon": "cloud_download",
+    },
+    "lms_format": {
+        "display": "Response",
+        "message": "Preparing your answer…",
+        "group": "response",
+        "icon": "auto_fix_high",
+    },
+    # ── Expense agent ──
+    "expense_planner": {
+        "display": "Expense Plan",
+        "message": "Planning your expense query…",
+        "group": "understanding",
+        "icon": "edit_note",
+    },
+    "expense_executor": {
+        "display": "Expense DB",
+        "message": "Fetching expense data…",
+        "group": "retrieval",
+        "icon": "database",
+    },
+    "expense_format": {
+        "display": "Response",
+        "message": "Preparing your answer…",
+        "group": "response",
+        "icon": "auto_fix_high",
+    },
+    # ── Scorecard agent ──
+    "scorecard_planner": {
+        "display": "Scorecard Plan",
+        "message": "Planning your scorecard query…",
+        "group": "understanding",
+        "icon": "edit_note",
+    },
+    "scorecard_executor": {
+        "display": "Scorecard DB",
+        "message": "Fetching scorecard KPIs…",
+        "group": "retrieval",
+        "icon": "database",
+    },
+    "scorecard_format": {
+        "display": "Response",
+        "message": "Preparing your answer…",
+        "group": "response",
+        "icon": "auto_fix_high",
     },
 }

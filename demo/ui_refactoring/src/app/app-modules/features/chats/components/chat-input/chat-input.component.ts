@@ -1,11 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { ChangeDetectionStrategy, Component, computed, effect, ElementRef, EventEmitter, inject, Input, Output, ViewChild, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, ElementRef, EventEmitter, inject, Input, Output, ViewChild, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ChatQueryDTO } from '../../models/chat.model';
 import { ChatStore } from '../../services/chat.store';
 import { SvgIconComponent } from '../../../../../_shared/components/svg-icon/svg-icon.component';
-import { FunctionChipsComponent } from '../function-chips/function-chips.component';
-import { MENA_FUNCTIONS } from '../../../../../_shared/constants/mena-function';
+import { FunctionChipsComponent, MENA_FUNCTIONS } from '../function-chips/function-chips.component';
 
 /**
  * Chat composer.
@@ -57,29 +56,13 @@ export class ChatInputComponent {
     return code ? MENA_FUNCTIONS.find(c => c.code === code) ?? null : null;
   });
 
-readonly effectivePlaceholder = computed(() => {
-    if(this.isStreaming()) {
-      return 'Putting together your response...';
-    }
-    return this.placeholder;
-    //return this.selectedChip() ? `Ask about ${this.selectedChip()?.full}…` : (this.placeholder || 'Ask me anything on MENA...');
+  readonly effectivePlaceholder = computed(() => {
+    const chip = this.selectedChip();
+    return chip ? `Ask about ${chip.full}…` : (this.placeholder || 'Ask me anything on MENA...');
   });
-  
+
   /** Stream state. */
   readonly isStreaming = this.chat.isStreaming;
-
-  constructor() {
-    effect(() => {
-      const ctrl = this.userQueryForm.controls.message;
-      if (this.isStreaming()) {
-        if (ctrl.enabled) {
-          ctrl.disable({ emitEvent: false });
-        }
-      } else if (ctrl.disabled) {
-        ctrl.enable({ emitEvent: false });
-      }
-    });
-  }
 
   get form() {
     return this.userQueryForm.controls;

@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, effect, inject, OnInit, signal, TemplateRef, ViewChild } from '@angular/core';
+import { Component, computed, inject, OnInit, signal, TemplateRef, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { NgbDropdownModule, NgbModal } from '@ng-bootstrap/ng-bootstrap';
 import { ChatStore } from '../../services/chat.store';
@@ -68,18 +68,9 @@ export class ChatSidebarComponent implements OnInit {
   /** Admin sidebar items (kept unchanged) */
   adminItems: NavItem[] = [];
 
-  
-  constructor() {
-    // Load pinned conversation IDs backend state. 
-    effect(() => {
-      const convs = this.chatStore.chatConversations();
-      const pinned = convs?.filter(c => c.isPinned).map(c => c.id) ?? [];
-      this.pinnedIds.set(new Set(pinned));
-    });
-  }
-
   ngOnInit(): void {
     this.chatStore.loadConversations(true);
+    this.loadPinnedIds();
 
     const isSuperAdmin = this.chatStore.authUser()?.isSuperAdmin || false;
     this.adminItems = [
@@ -143,7 +134,7 @@ export class ChatSidebarComponent implements OnInit {
       }
       return updated;
     });
-    this.chatStore.togglePinConversation(conv, this.isPinned(conv.id));
+    this.savePinnedIds();
   }
 
   isPinned(convId: number): boolean {
@@ -192,7 +183,23 @@ export class ChatSidebarComponent implements OnInit {
         updated.delete(conv.id);
         return updated;
       });
+      this.savePinnedIds();
     }
     this.pendingDeleteConv = null;
+  }
+
+  // ── LocalStorage helpers for pins ──
+  private loadPinnedIds(): void {
+    try {
+      const stored = localStorage.getItem('chat_pinned_ids');
+      if (stored) {
+        const arr = JSON.parse(stored) as number[];
+        this.pinnedIds.set(new Set(arr));
+      }
+    } catch { /* ignore */ }
+  }
+
+  private savePinnedIds(): void {
+    localStorage.setItem('chat_pinned_ids', JSON.stringify([...this.pinnedIds()]));
   }
 }

@@ -12,7 +12,7 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException
 
 from api.dependencies import _validate_user
-from api.schemas import RenameConversationRequest, TogglePinRequest
+from api.schemas import RenameConversationRequest
 from infrastructure.azure.sql.client import SQLChatClient
 
 logger = logging.getLogger(__name__)
@@ -102,22 +102,3 @@ async def rename_conversation(user_id: str, chat_id: int, body: RenameConversati
     except Exception as e:
         logger.error("rename_conversation failed for user=%s chat=%s: %s", user_id, chat_id, e, exc_info=True)
         raise HTTPException(status_code=500, detail="Failed to rename conversation")
-
-
-@router.patch("/conversations/{user_id}/{chat_id}/toggle-pin")
-async def toggle_pin_conversation(user_id: str, chat_id: int, payload: TogglePinRequest):
-    """Toggle the pin status of a conversation (pin/unpin)."""
-    _validate_user(user_id)
-
-    try:
-        scc = SQLChatClient()
-        await scc.connect()
-        success = await scc.toggle_pin_conversation(chat_id, user_id, payload.is_pinned)
-        if not success:
-            raise HTTPException(status_code=404, detail="Conversation not found")
-        return {"status": "success"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error("toggle_pin_conversation failed for user=%s conversation=%s: %s", user_id, chat_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Failed to toggle pin status")

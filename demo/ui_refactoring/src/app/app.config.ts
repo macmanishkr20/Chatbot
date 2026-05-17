@@ -1,10 +1,8 @@
 import {
   ApplicationConfig,
-  ErrorHandler,
   importProvidersFrom,
   provideZoneChangeDetection,
 } from '@angular/core';
-import { SilentErrorHandler } from './_shared/_service/safe-logger';
 import { provideRouter } from '@angular/router';
 import { BrowserModule } from '@angular/platform-browser';
 import {
@@ -40,11 +38,8 @@ import { NgxPermissionsModule } from 'ngx-permissions';
 import { LoaderInterceptor } from './_shared/interceptors/loader.interceptor';
 import { sessionCheckInterceptor } from './_shared/interceptors/session.check.interceptor';
 
-export function loggerCallback(_logLevel: LogLevel, _message: string): void {
-  // Intentionally a no-op. MSAL log payloads can contain sensitive
-  // information (tokens, account ids, etc.) and must never be written
-  // to the browser console. Errors are handled internally by MSAL
-  // and surfaced to the user via generic UI messages only.
+export function loggerCallback(logLevel: LogLevel, message: string) {
+  console.log(message);
 }
 
 export function MSALInstanceFactory(): IPublicClientApplication {
@@ -139,9 +134,5 @@ export const appConfig: ApplicationConfig = {
     MsalGuard,
     MsalBroadcastService,
     provideCharts(withDefaultRegisterables()),
-    // Global error handler — silences uncaught errors in production
-    // so no sensitive details (stack traces, payloads) leak to the
-    // browser console. Errors are still handled internally.
-    { provide: ErrorHandler, useClass: SilentErrorHandler },
   ],
 };

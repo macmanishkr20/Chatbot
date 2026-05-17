@@ -205,10 +205,6 @@ export interface Citation {
   indexes: number[];
   source: string;
   isUrl: boolean;
-  /** Optional display label (e.g. "file.pdf (page 1,2)") shown in place of
-   *  the raw URL when present. Set when the backend emits the format
-   *  `[N] file (page N) — <url>`. */
-  label?: string;
 }
 
 export interface ThinkingStep {
@@ -226,7 +222,6 @@ export interface StoredConversation {
   ConversationType: string;
   CreatedAt: string;
   ModifiedAt: string;
-  IsPinned?: boolean;
 }
 
 /** Stored message row from /conversations/{user_id}/{chat_id}/messages. */
@@ -256,6 +251,11 @@ export interface ChatRequest {
   end_date: string;
   preferred_language?: string;
   content_type?: 'document' | 'qa_pair';
+  /** User rank — mandatory. Drives backend personalisation and RBAC. */
+  rank_code: number;
+  rank_name: string;
+  /** User GUI / Employee ID — mandatory. Drives Expense / Scorecard RLS. */
+  gui: string;
 }
 
 export interface EditRequest {
@@ -270,6 +270,11 @@ export interface EditRequest {
   start_date: string;
   end_date: string;
   content_type?: 'document' | 'qa_pair';
+  /** User rank — mandatory. */
+  rank_code: number;
+  rank_name: string;
+  /** User GUI / Employee ID — mandatory. */
+  gui: string;
 }
 
 export interface RegenerateRequest {
@@ -294,14 +299,4 @@ export interface FeedbackRequest {
   comments?: string;
   created_by?: string;
   modified_by?: string;
-  function_id?: number;
-  sub_function_id?: number;
-  service_id?: number;
-  category?: string;
-}
-
-export interface PinOrUnpinRequest {
-  user_id: string;
-  chat_id: string;
-  is_pinned: boolean;
 }

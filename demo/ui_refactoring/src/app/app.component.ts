@@ -106,15 +106,15 @@ export class AppComponent implements OnInit, OnDestroy {
     this.authService.handleRedirectObservable().subscribe({
       next: (result) => {
         if (result !== null && result.account !== null) {
+          console.log('result from', result);
           this.authService.instance.setActiveAccount(result.account);
           this.setLoginDisplay();
           this.loginEvent.ssoComplete();
           this.loadAppUser();
         }
       },
-      error: () => {
-        // Authentication errors are handled internally. Details are
-        // intentionally not logged or surfaced to the user.
+      error: (error) => {
+        console.error('error from', error);
       },
     });
 
@@ -196,15 +196,13 @@ export class AppComponent implements OnInit, OnDestroy {
         finalize(() => {
           this.toastService.remove(t);
         }),
-        catchError((_err) => {
+        catchError((err) => {
           sessionStorage.clear();
           this.loginMessageService.remove();
 
           this.toastService.showError('Failed to validate the user');
           this.router.navigate(['/denied']);
-          // Re-throw a generic error — the original error may contain
-          // sensitive information and is intentionally discarded.
-          return throwError(() => new Error('User validation failed'));
+          return throwError(() => new Error(err));
         })
       )
       .subscribe((p) => {

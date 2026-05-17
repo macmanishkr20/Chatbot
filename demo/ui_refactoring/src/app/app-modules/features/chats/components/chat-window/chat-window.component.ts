@@ -229,11 +229,11 @@ export class ChatWindowComponent implements OnInit, OnDestroy {
     this.chatStore.cancelEdit(m.messageId);
   }
 
-  onMore(_m: ChatResponse) {
-    // No-op placeholder. Message contents are intentionally not logged.
+  onMore(m: ChatResponse) {
+    console.log('More actions for message', m);
   }
 
-  onCopy(_m: ChatResponse) {
-    // No-op placeholder. Message contents are intentionally not logged.
+  onCopy(m: ChatResponse) {
+    console.log('Copied message', m);
   }
 }

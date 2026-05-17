@@ -152,7 +152,7 @@ class SQLChatClient:
                         CreatedBy        NVARCHAR(256) NULL,
                         ModifiedAt       DATETIME2 NOT NULL,
                         ModifiedBy       NVARCHAR(256) NULL,
-                        IsPinned         BIT NOT NULL DEFAULT 0,
+                        IsPinned         BIT NOT NULL DEFAULT 0
                     )
                     """
                 )
@@ -524,6 +524,30 @@ class SQLChatClient:
 
         return await asyncio.to_thread(_run)
 
+    async def toggle_pin_conversation(self, conversation_id: int, user_id: str, is_pinned: bool) -> bool:
+        """Toggle the pin status of a conversation. Returns True on success."""
+        def _run():
+            conn = self._get_connection()
+            cursor = conn.cursor()
+            now = datetime.now(timezone.utc)
+            try:
+                cursor.execute(
+                    """
+                    UPDATE Conversations
+                    SET IsPinned = ?, ModifiedAt = ?, ModifiedBy = ?
+                    WHERE Id = ? AND UserId = ? AND IsDeleted = 0 AND IsActive = 1
+                    """,
+                    is_pinned, now, user_id, conversation_id, user_id,
+                )
+                affected = cursor.rowcount
+                conn.commit()
+                return affected > 0
+            finally:
+                cursor.close()
+                conn.close()
+
+        return await asyncio.to_thread(_run)
+
     async def soft_delete_message(self, message_id: str, user_id: str) -> bool:
         """Soft-delete a single message. Returns True on success."""
         def _run():
@@ -635,29 +659,6 @@ class SQLChatClient:
 
         await asyncio.to_thread(_run)
 
-    async def toggle_pin_conversation(self, conversation_id: int, user_id: str, is_pinned: bool) -> bool:
-        """Toggle the pin status of a conversation. Returns True on success."""
-        def _run():
-                conn = self._get_connection()
-                cursor = conn.cursor()
-                now = datetime.now(timezone.utc)   
-                try:
-                    cursor.execute(
-                            """
-                            UPDATE Conversations
-                            SET IsPinned = ?, ModifiedAt = ?, ModifiedBy = ?
-                            WHERE Id = ? AND UserId = ? AND IsDeleted = 0 AND IsActive = 1
-                            """,
-                            is_pinned, now, user_id, conversation_id, user_id,
-                        )
-                    affected = cursor.rowcount
-                    conn.commit()
-                    return affected > 0
-                finally:
-                        cursor.close()
-                        conn.close()
-
-        return await asyncio.to_thread(_run)
 
 def _row_to_message_dict(row: dict, query=None) -> dict:
     """Map a SQL row to the fields expected by ConversationChatMessage."""
@@ -674,8 +675,7 @@ def _row_to_message_dict(row: dict, query=None) -> dict:
         "source_prompt": row.get("SourcePrompt") or "",
         "ai_content_free_form": row.get("AiContentFreeForm") or "",
         "message_id": row.get("MessageId") or "",
+        "rank_code": (query.rank_code if query else 0),
+        "rank_name": (query.rank_name if query else "unknown"),
+        "gui": (query.gui if query else "UNKNOWN"),
     }
-
-
-
-        

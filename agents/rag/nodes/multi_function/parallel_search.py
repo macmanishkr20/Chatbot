@@ -64,12 +64,6 @@ async def _search_single_function(
                 query_override, embedded_query, odata_filter=odata_filter
             )
 
-        # Tag provenance for downstream citation rendering. Mirrors the
-        # sequential branch in search_node; metadata only — does not alter
-        # results, ordering, or fallback behavior.
-        for r in all_results:
-            r.setdefault("_source_type", content_type)
-
         # Fallback to qa_pair if document returned nothing
         if not all_results and content_type == "document":
             async with semaphore:
@@ -77,8 +71,6 @@ async def _search_single_function(
                 all_results = await search_service.unified_search(
                     query_override, embedded_query, odata_filter=qa_filter
                 )
-            for r in all_results:
-                r.setdefault("_source_type", "qa_pair")
 
         curated = _strip_internal_fields(all_results[:TOP_K])
         return {"function": fn, "events": curated, "query": sub_query}

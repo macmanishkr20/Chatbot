@@ -21,8 +21,17 @@
         border-radius: 0.75rem !important;
         background-color: #1a1a24 !important;
         background-clip: padding-box !important;
-        --gb-radius: 20px;
+
         &::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: calc(0.75rem + 1px);
+            background: linear-gradient(135deg,
+                rgba(255, 230, 0, 0.45) 0%,
+                rgba(255, 230, 0, 0.45) 33%,
+                rgba(180, 0, 255, 0.45) 66%,
+                rgba(70, 150, 255, 0.45) 100%);
             z-index: -1;
             pointer-events: none;
         }

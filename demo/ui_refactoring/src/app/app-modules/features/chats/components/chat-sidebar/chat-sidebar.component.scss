@@ -82,12 +82,11 @@
     -webkit-mask-composite: xor;
     mask-composite: exclude;
     pointer-events: none;
-    opacity: 0.5;
-    transition: opacity 0.2s;
   }
 
-  &:hover:not(:disabled)::before {
-    opacity: 1;
+  &:hover:not(:disabled) {
+    background: rgba(40, 40, 60, 0.7);
+    box-shadow: 0 0 16px rgba(168, 85, 247, 0.25);
   }
 
   &:disabled {
@@ -110,7 +109,7 @@
   user-select: none;
 
   .pin-icon {
-    // color: #ff6b6b;
+    color: #ff6b6b;
     font-size: 11px;
   }
 }
@@ -135,7 +134,7 @@
   }
 
   &.active {
-    background: rgba(255, 255, 255, 0.06);
+    background: rgba(56, 189, 248, 0.08);
     border: 1px solid rgba(56, 189, 248, 0.2);
 
     .conv-title {
@@ -526,6 +525,11 @@ details[open] > summary .chevron {
   margin-bottom: 16px;
 }
 
+.delete-modal-icon {
+  font-size: 20px;
+  color: #EA011D;
+}
+
 .delete-modal-title {
   margin: 0;
   font-size: 16px;
@@ -557,10 +561,6 @@ details[open] > summary .chevron {
   transition: background 0.15s, opacity 0.15s;
 }
 
-.delete-modal-icon {
-  font-size: 20px;
-  color: #EE8300;
-}
 .btn-modal-cancel {
   background: rgba(255, 255, 255, 0.1);
   color: rgba(255, 255, 255, 0.85);

@@ -1,38 +1,34 @@
 <div class="chat-input-container">
   <div class="chat-input-wrapper">
 
-    <!-- Selected function chip pill (now rendered inside the input box below) -->
+    <!-- Selected function chip pill hidden for now
+    @if (selectedChip(); as chip) {
+      <div class="selected-fn-pill" [attr.aria-label]="'Selected function: ' + chip.full">
+        <span class="dot" aria-hidden="true"></span>
+        <span class="code">{{ chip.code }}</span>
+        <span class="full">{{ chip.full }}</span>
+        <button type="button" class="clear-btn" title="Clear function" aria-label="Clear function" (click)="clearFunction()">×</button>
+      </div>
+    }
+    -->
 
     <form (ngSubmit)="onSend()" [formGroup]="userQueryForm">
-      <div class="chat-input-box chat-gradient-border">
-        @if (selectedChip(); as chip) {
-          <div class="selected-fn-pill chat-gradient-border" [attr.aria-label]="'Selected function: ' + chip.full">
-            <span class="code">{{ chip.code }}</span>
-            <button
-              type="button"
-              class="clear-btn"
-              title="Clear"
-              aria-label="Clear function"
-              [disabled]="isStreaming()"
-              (click)="clearFunction()">×</button>
-          </div>
-        }
+      <div class="chat-input-box">
         <textarea
           #msg
           class="px-2 input-textarea"
-          [class.stream-placeholder]="isStreaming()"
           [placeholder]="effectivePlaceholder()"
           formControlName="message"
           name="message"
           rows="1"
           (input)="autoResize(msg)"
           (keydown)="onKeyDown($event)"
+          [disabled]="isStreaming()"
           draggable="false"
           autocomplete="off"
           [attr.aria-label]="ariaLabel"></textarea>
 
-          <!-- Commented for now -->
-        <!-- @if (isStreaming()) {
+        @if (isStreaming()) {
           <button
             type="button"
             class="input-send-btn cancel-btn"
@@ -41,35 +37,29 @@
             (click)="onCancel()">
             <i class="bi bi-stop-circle-fill stop-icon"></i>
           </button>
-        }  -->
-        <!-- @if (!isStreaming()) { -->
+        } @else {
           <button
             class="input-send-btn"
             type="submit"
-            [disabled]="form['message'].invalid || disabled || isStreaming()"
+            [disabled]="form['message'].invalid || disabled"
             [attr.aria-label]="'Send message'">
-            @if (form['message'].invalid || disabled) {
-              <app-svg-icon name="send-initial-outline" cssClass="send-icon send-icon-initial--outline"
-                ariaLabel="Send"></app-svg-icon>
-            } @else {
             <app-svg-icon name="send-outline" cssClass="send-icon send-icon--outline"
               ariaLabel="Send"></app-svg-icon>
             <app-svg-icon name="send-filled" cssClass="send-icon send-icon--filled"
               ariaLabel="Send"></app-svg-icon>
-         }
           </button>
-        <!-- } -->
+        }
       </div>
     </form>
 
-    <!-- Function filter chips  -->
+    <!-- Function chips hidden for now
     @if (showFunctionChips) {
       <app-function-chips />
     }
-    <!-- Commented for now 
+    -->
+
     <div class="input-hint">
       Press <kbd>Enter</kbd> to send, <kbd>Shift+Enter</kbd> for new line
     </div>
-    -->
   </div>
 </div>

@@ -52,6 +52,19 @@ class UserChatQuery(BaseModel):
     message_id: str | None = None
     channel_type: int = 0  # 0 or 1
 
+    # User rank — MANDATORY. Both code and name are sent by the frontend.
+    # rank_code drives access-control decisions (see core/rbac.AGENT_ALLOWED_RANK_CODES).
+    # rank_name is used for personalisation in the system prompt and disambiguates
+    # rank_codes that map to multiple roles (e.g. 11 → Partner & Principal).
+    rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
+    rank_name: str = Field(..., min_length=1, max_length=64, description="User's role display name")
+
+    # User's GUI (Global Unique Identifier / Employee ID). MANDATORY.
+    # Used by the Expense and Scorecard agents for row-level security:
+    #   rank_code in {11, 13} → may query any GUI (full access)
+    #   otherwise              → may only query their own GUI (auto-injected)
+    gui: str = Field(..., min_length=1, max_length=64, description="User's GUI / Employee ID")
+
     # Filters
     function: List[str] = []
     sub_function: List[str] = []
@@ -160,13 +173,13 @@ class EditMessageRequest(BaseModel):
     end_date: str = ""
     preferred_language: Optional[str] = None
     content_type: str = "qna_pair"
+    # Rank context (mandatory, same as chat request)
+    rank_code: int = Field(..., description="User's rank code; must exist in core.rbac.RANKS")
+    rank_name: str = Field(..., min_length=1, max_length=64)
+    gui: str = Field(..., min_length=1, max_length=64, description="User's GUI / Employee ID")
 
 
-class TogglePinRequest(BaseModel):
-    """Request body for PATCH /conversations/{user_id}/{chat_id}/toggle-pin."""
-    user_id: str
-    chat_id: int
-    is_pinned: bool
+
 
 
 

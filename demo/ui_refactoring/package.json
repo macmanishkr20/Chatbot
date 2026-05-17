@@ -4,7 +4,7 @@
   "scripts": {
     "ng": "ng",
     "start": "run-script-os",
-    "build": "ng build --configuration production --base-href / --deploy-url /",
+    "build": "ng build --configuration production",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",
     "prestart": "node aspnetcore-https",

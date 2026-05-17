@@ -1,19 +1,16 @@
-<!-- Chips reason hidden for now
- @if (reason(); as r) {
+@if (reason(); as r) {
   <div class="chips-reason">{{ r }}</div>
-} -->
+}
 
-<div class="chips-row p-2 text-center" [class.highlighted]="highlighted()">
+<div class="chips-row" [class.highlighted]="highlighted()">
   @for (chip of chips; track trackByCode($index, chip)) {
     <button type="button"
-            class="chip chat-gradient-border"
+            class="chip"
             [class.selected]="selected() === chip.code"
-            [class.disabled]="isStreaming()"
-            [attr.title]="chip.title"
             [attr.aria-pressed]="selected() === chip.code"
+            [attr.title]="chip.full"
             (click)="onPick(chip)">
-      <!-- Icon hidden for now
-      <span class="chip-icon"><i class="bi" [ngClass]="chip.icon"></i></span> -->
+      <span class="chip-icon"><i class="bi" [ngClass]="chip.icon"></i></span>
       <span class="chip-label">{{ chip.label }}</span>
     </button>
   }

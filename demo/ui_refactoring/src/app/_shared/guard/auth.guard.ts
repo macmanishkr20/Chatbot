@@ -8,9 +8,9 @@ export const authGuard: CanActivateFn = (route, state) => {
 
   const url = state.url;
   const module = route.data['key'];
+  // console.log('module', url, '|', module);
   if (!module) {
-    // Misconfigured route — deny access. Details are not logged to
-    // avoid exposing internal route metadata.
+    console.warn('Module key is not defined in the route data');
     return false;
   }
 

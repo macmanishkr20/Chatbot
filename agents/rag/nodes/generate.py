@@ -276,8 +276,6 @@ def _format_citation_line(refs: list[str], doc: dict) -> str:
         source_url = ""
 
     if source_type == "document":
-        if not source_url:
-            return ""
         file_name = (doc.get("file_name") or "").strip()
         page_raw = doc.get("page_number")
         page_str = str(page_raw).strip() if page_raw not in (None, "") else ""
@@ -290,9 +288,13 @@ def _format_citation_line(refs: list[str], doc: dict) -> str:
         elif page_str:
             label_parts.append(f"page {page_str}")
 
-        if label_parts:
+        if label_parts and source_url:
             return f"{refs_label} {label_parts[0]} — {source_url}"
-        return f"{refs_label} {source_url}"
+        if label_parts:
+            return f"{refs_label} {label_parts[0]}"
+        if source_url:
+            return f"{refs_label} {source_url}"
+        return ""
 
     # qa_pair (default) — URL only. Skip when no real URL is available.
     if not source_url:
@@ -300,67 +302,19 @@ def _format_citation_line(refs: list[str], doc: dict) -> str:
     return f"{refs_label} {source_url}"
 
 
-def _sort_pages(pages: set[str]) -> list[str]:
-    """Sort page numbers numerically; non-numeric values appended alphabetically."""
-    numeric: list[tuple[int, str]] = []
-    non_numeric: list[str] = []
-    for p in pages:
-        p = (p or "").strip()
-        if not p:
-            continue
-        try:
-            numeric.append((int(p), p))
-        except ValueError:
-            non_numeric.append(p)
-    numeric.sort(key=lambda x: x[0])
-    non_numeric.sort()
-    return [p for _, p in numeric] + non_numeric
-
-
-def _format_grouped_citation_line(
-    refs: list[str],
-    file_name: str,
-    source_url: str,
-    pages: list[str],
-) -> str:
-    """Render one citation line for a grouped bucket.
-
-    Format:
-      * document with file_name → ``[refs] file_name (page p1,p2) — url``
-        (page section omitted when pages empty; url section omitted when empty).
-      * URL only (qa_pair / no file_name) → ``[refs] url``.
-      * Nothing usable → "".
-    """
-    refs_label = "".join(f"[{r}]" for r in refs)
-    # file_name = (file_name or "").strip()
-    source_url = (source_url or "").strip()
-
-    # if file_name and source_url:
-    #     page_str = ",".join(pages) if pages else ""
-    #     label = f"{file_name} (page {page_str})" if page_str else file_name
-    #     return f"{refs_label} {label} — {source_url}"
-
-    if source_url:
-        return f"{refs_label} {source_url}"
-
-    return ""
-
-
 def _rebuild_citations_block(ai_content: str, events: list) -> str:
     """Build the Citations block entirely in code from events source data.
 
     The LLM only outputs inline [N] references. This function:
       1. Extracts all [N] references from the LLM output.
-      2. Resolves each to its source document, dropping refs whose doc has
-         no usable provenance (e.g. internal chatbot URL with no file/page).
+      2. For each, formats a per-ref line via _format_citation_line() —
+         qa_pair gets ``[N] <url>``; document gets ``[N] file (page N) — <url>``.
+         Refs whose doc has no usable provenance (e.g. internal chatbot URL
+         with no file/page) are dropped.
       3. Renumbers the surviving refs sequentially starting from [1] and
          rewrites inline refs in the answer text to match.
-      4. Groups refs by ``(file_name, source_url)`` so multiple chunks of
-         the same document collapse into a single line with combined pages,
-         e.g. ``[1][2] doc.pdf (page 4,7) — url``.
-         URL-less buckets are merged into a sibling bucket sharing the same
-         file_name when one exists, so ``[2] file (no url)`` and
-         ``[3] file — url`` collapse to ``[2][3] file (page ...) — url``.
+      4. Groups consecutive refs that produce identical line bodies
+         (e.g. multiple chunks from the same doc → ``[1][2] doc.pdf (page 4) — url``).
       5. Strips any LLM-emitted Citations block (defense in depth).
     """
     if not events:
@@ -370,37 +324,28 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
     if not used_refs:
         return ai_content
 
-    # Per-ref metadata for refs whose doc has usable provenance.
-    ref_meta: "OrderedDict[str, dict]" = OrderedDict()
+    # Build (ref → renderable line body) for refs with usable provenance.
+    # body is the line with the leading "[r]" cluster stripped, used to
+    # group refs that resolve to identical content.
+    ref_to_body: "OrderedDict[str, str]" = OrderedDict()
+    ref_to_doc_idx: dict[str, int] = {}
     for ref_str in used_refs:
         idx = int(ref_str) - 1
-        if not (0 <= idx < len(events)):
-            continue
-        doc = events[idx]
-        source_url = (doc.get("source_url") or "").strip()
-        if "MENABusinessEnablementChatbot" in source_url:
-            source_url = ""
-        file_name = (doc.get("file_name") or "").strip()
-        page_raw = doc.get("page_number")
-        page = str(page_raw).strip() if page_raw not in (None, "") else ""
+        if 0 <= idx < len(events):
+            line = _format_citation_line([ref_str], events[idx])
+            if line:
+                body = re.sub(r"^(\[\d+\])+\s*", "", line)
+                ref_to_body[ref_str] = body
+                ref_to_doc_idx[ref_str] = idx
 
-        # Skip refs without a usable source URL — citations must be linkable.
-        if not source_url:
-            continue
-
-        ref_meta[ref_str] = {
-            "file_name": file_name,
-            "source_url": source_url,
-            "page": page,
-        }
-
-    if not ref_meta:
+    if not ref_to_body:
+        # Strip any LLM-generated citation block and inline refs with no valid provenance
         stripped = re.sub(r"(?i)\n*Citations:\s*\n.*", "", ai_content, flags=re.DOTALL).rstrip()
         stripped = re.sub(r"\[\d+\]", "", stripped)
         return stripped
 
     # Renumber surviving refs sequentially (preserves their original order).
-    valid_refs = list(ref_meta.keys())
+    valid_refs = list(ref_to_body.keys())
     old_to_new: dict[str, str] = {old: str(i + 1) for i, old in enumerate(valid_refs)}
 
     # Strip any LLM-emitted Citations block; rewrite inline refs with new numbers.
@@ -413,67 +358,26 @@ def _rebuild_citations_block(ai_content: str, events: list) -> str:
 
     stripped = re.sub(r"\[(\d+)\]", _replace_ref, stripped)
 
-    # Group by (file_name_lower, source_url) — preserves first-appearance order.
-    buckets: "OrderedDict[tuple[str, str], dict]" = OrderedDict()
+    # Group surviving refs by line body so multiple refs to the same doc
+    # render as e.g. [1][2] doc.pdf (page 5) — url.
+    body_to_new_refs: "OrderedDict[str, list[str]]" = OrderedDict()
+    body_to_doc_idx: dict[str, int] = {}
     for old_ref in valid_refs:
-        meta = ref_meta[old_ref]
-        key = (meta["file_name"].lower(), meta["source_url"])
-        bucket = buckets.get(key)
-        if bucket is None:
-            bucket = {
-                "refs": [],
-                "pages": set(),
-                "file_name": meta["file_name"],
-                "source_url": meta["source_url"],
-            }
-            buckets[key] = bucket
-        bucket["refs"].append(old_to_new[old_ref])
-        if meta["page"]:
-            bucket["pages"].add(meta["page"])
-
-    # Merge URL-less document buckets into a sibling sharing the same
-    # file_name and a non-empty URL (first match in insertion order).
-    merged_keys: list[tuple[str, str]] = []
-    for key in list(buckets.keys()):
-        fname_lower, url = key
-        if url or not fname_lower:
-            continue
-        sibling_key = next(
-            (k for k in buckets if k[0] == fname_lower and k[1]),
-            None,
-        )
-        if sibling_key is None:
-            continue
-        sib = buckets[sibling_key]
-        src = buckets[key]
-        sib["refs"].extend(src["refs"])
-        sib["pages"].update(src["pages"])
-        merged_keys.append(key)
-    for k in merged_keys:
-        del buckets[k]
+        body = ref_to_body[old_ref]
+        body_to_new_refs.setdefault(body, []).append(old_to_new[old_ref])
+        body_to_doc_idx.setdefault(body, ref_to_doc_idx[old_ref])
 
     citation_lines: list[str] = []
-    
-    seen_urls: set[str] = set()
-
-    for bucket in buckets.values():
-        
-        source_url = (bucket["source_url"] or "").strip()
-        if not source_url or source_url in seen_urls:
-            continue
-        seen_urls.add(source_url)
-        
-
-        refs_sorted = sorted(bucket["refs"], key=int)
-        pages_sorted = _sort_pages(bucket["pages"])
-        line = _format_grouped_citation_line(
-            refs_sorted,
-            bucket["file_name"],
-            bucket["source_url"],
-            pages_sorted,
-        )
-        if line:
-            citation_lines.append(line)
+    for body, new_refs in body_to_new_refs.items():
+        doc_idx = body_to_doc_idx.get(body, -1)
+        if 0 <= doc_idx < len(events):
+            line = _format_citation_line(new_refs, events[doc_idx])
+            if line:
+                citation_lines.append(line)
+                continue
+        # Fallback: use the body verbatim if doc lookup failed for any reason.
+        refs_label = "".join(f"[{r}]" for r in new_refs)
+        citation_lines.append(f"{refs_label} {body}")
 
     if not citation_lines:
         return stripped
@@ -505,6 +409,26 @@ async def _generate_response(
         tools, system_template, user_template = _get_tools_and_templates(
             events, is_free_form, rewritten_query, sub_function
         )
+
+        # ── Rank-aware personalisation ──
+        # Append a <user_context> block to the system prompt so the LLM can
+        # tailor tone, policy limits, and responsibilities to the user's role.
+        # Only injected for free-form responses (structured JSON responses are
+        # consumed by the frontend renderer and must not have extra prose).
+        rank_info = state.get("rank_info")
+        if rank_info and is_free_form:
+            rank_name = rank_info.get("rank_name", "")
+            if rank_name:
+                system_template = system_template + (
+                    f"\n\n<user_context>\n"
+                    f"The user's organisational role is: {rank_name}. "
+                    f"Where it is relevant to the question, frame your answer "
+                    f"appropriately for someone at the {rank_name} level — for example, "
+                    f"referencing policy limits, approval thresholds, or responsibilities "
+                    f"that apply to their grade. Do not over-emphasise rank when it is "
+                    f"not relevant to the question.\n"
+                    f"</user_context>"
+                )
 
         messages = _create_message_structure(
             system_template, user_template, llm_model,

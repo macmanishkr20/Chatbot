@@ -96,11 +96,6 @@
 	height: 20px;
 }
 
-.user-initials-avatar {
-	width: 32px;
-	height: 32px;
-}
-
 .pre-wrap {
 	white-space: pre-wrap;
 }
@@ -144,11 +139,11 @@
 
 // Assistant message bubble — glass styling
 :host([data-role="Assistant"]) .chat-bubble {
-	background: transparent; // rgba(30, 30, 44, 0.55);
-	// border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(30, 30, 44, 0.55);
+	border: 1px solid rgba(255, 255, 255, 0.08);
 	color: #fff;
 	border-radius: 14px;
-	// box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+	box-shadow: 0 4px 24px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 	backdrop-filter: blur(16px);
 	-webkit-backdrop-filter: blur(16px);
 	max-width: 680px;
@@ -160,15 +155,9 @@
 :host([data-role="Assistant"]) {
 	app-thinking-panel,
 	app-deep-search-panel,
-	.citations-bubble.expanded {
+	.citations-bubble {
 		width: 100%;
 		max-width: 680px;
-	}
-
-	.citations-bubble:not(.expanded) {
-		width: auto;
-		max-width: 680px;
-		align-self: flex-start;
 	}
 }
 

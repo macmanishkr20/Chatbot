@@ -53,6 +53,13 @@ export class ChatService {
   /** Current user ID derived from auth. */
   readonly userId = computed(() => this.auth.userEmail() || 'demo.user@gds.ey.com');
 
+  /** Current rank code — mandatory on every chat request. */
+  readonly rankCode = computed(() => this.auth.userRankCode());
+  /** Current rank name — mandatory on every chat request. */
+  readonly rankName = computed(() => this.auth.userRankName());
+  /** Current GUI / Employee ID — mandatory on every chat request. */
+  readonly gui = computed(() => this.auth.userGui());
+
   /** Loading state for conversation list. */
   readonly conversationsLoading = signal(false);
 
@@ -156,6 +163,10 @@ export class ChatService {
       start_date: '',
       end_date: '',
       content_type: 'qa_pair',
+      // Mandatory rank + GUI context — backend rejects requests without these
+      rank_code: this.rankCode(),
+      rank_name: this.rankName(),
+      gui: this.gui(),
     });
   }
 
@@ -202,6 +213,10 @@ export class ChatService {
       start_date: '',
       end_date: '',
       content_type: 'qa_pair',
+      // Mandatory rank + GUI context — backend rejects requests without these
+      rank_code: this.rankCode(),
+      rank_name: this.rankName(),
+      gui: this.gui(),
     });
   }
 
@@ -378,6 +393,9 @@ export class ChatService {
       start_date: string;
       end_date: string;
       content_type?: 'qa_pair' | 'document';
+      rank_code: number;
+      rank_name: string;
+      gui: string;
     },
     editBody?: {
       user_id: string;
@@ -391,6 +409,9 @@ export class ChatService {
       start_date: string;
       end_date: string;
       content_type?: 'qa_pair' | 'document';
+      rank_code: number;
+      rank_name: string;
+      gui: string;
     },
     regenBody?: {
       user_id: string;
